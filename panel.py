@@ -426,16 +426,27 @@ class VIEW3D_PT_ODCSplints(bpy.types.Panel):
         
         row = layout.row()
         row.label('Sulpt and Refinement')
-        row = layout.row()
-        row.operator("opendental.splint_start_sculpt", text = "Go to Sculpt")
+        
+        if context.mode == 'OBJECT':
+            row = layout.row()
+            row.operator("opendental.splint_start_sculpt", text = "Go to Sculpt")
         
         if context.mode == 'SCULPT': #TODO other checks for sculpt object and stuff
             
             paint_settings = sce.tool_settings.unified_paint_settings
-            other_settings = context.tool_settings.sculpt
+            sculpt_settings = context.tool_settings.sculpt
             row= layout.row()
             col = row.column()
-            col.template_ID_preview(other_settings, "brush", new="brush.add", rows=3, cols=8)
+            col.template_ID_preview(sculpt_settings, "brush", new="brush.add", rows=3, cols=8)
+            
+            
+            brush = sculpt_settings.brush
+            row = layout.row()
+            row.prop(brush, "stroke_method")
+        
+            
+            row = layout.row()
+            row.operator("object.mode_set", text = 'Finish Sculpt')
             
         #    row = layout.row()
         #    row.prop(paint_settings, "unprojected_radius")

@@ -2585,9 +2585,10 @@ class OPENDENTAL_OT_splint_finish_booleans(bpy.types.Operator):
         bool_mod.object = Base
         Base.hide = True 
         
-        bool_mod = Shell.modifiers.new('Trim Edge ', type = 'BOOLEAN')
+        bool_mod = Shell.modifiers.new('Passive Fit', type = 'BOOLEAN')
         bool_mod.operation = 'DIFFERENCE'
         bool_mod.object = Passive
+        bool_mod.solver = 'CARVE'
         Passive.hide = True 
         
         
@@ -2975,6 +2976,8 @@ class OPENDENTAL_OT_splint_go_sculpt(bpy.types.Operator):
         scene.tool_settings.sculpt.use_symmetry_z = False
         brush.strength = .6
         
+        for b in bpy.data.brushes:
+            b.use_frontface = True
         #brush.stroke_method = 'SPACE' 
 
         

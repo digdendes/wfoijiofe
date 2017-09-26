@@ -39,7 +39,9 @@ class OPENDENTAL_OT_paint_model(bpy.types.Operator):
         brush.strength = 1
         brush.stroke_method = 'SPACE'
         scene.tool_settings.sculpt.brush = brush
-        
+        scene.tool_settings.sculpt.use_symmetry_x = False
+        scene.tool_settings.sculpt.use_symmetry_y = False
+        scene.tool_settings.sculpt.use_symmetry_z = False
         bpy.ops.brush.curve_preset(shape = 'MAX')
         
         return {'FINISHED'}
