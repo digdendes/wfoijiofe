@@ -41,7 +41,7 @@ except Exception as e:
 # Must declare this before classes are loaded
 # otherwise the bl_idname's will not match and have errors.
 # Must be all lowercase and no spaces
-updater.addon = "addon_updater_demo"
+updater.addon = "d3guard"
 
 
 # -----------------------------------------------------------------------------
@@ -888,15 +888,15 @@ def register(bl_info):
 	# print("Running updater reg")
 
 	# choose your own username
-	updater.user = "cgcookie"
+	updater.user = "patmo141"
 
 	# choose your own repository, must match github name
-	updater.repo = "blender-addon-updater"
+	updater.repo = "d3guard"
 
 	#updater.addon = # define at top of module, MUST be done first
 
 	# Website for manual addon download, optional but reocmmended to set
-	updater.website = "https://github.com/CGCookie/blender-addon-updater/"
+	updater.website = "https://github.com/patmo141/d3guard"
 	
 	# used to check/compare versions
 	updater.current_version = bl_info["version"] 

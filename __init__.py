@@ -24,7 +24,7 @@
 bl_info = {
     'name': "D3T Occlusal Guards",
     'author': "Patrick R. Moore",
-    'version': (0,0,1),
+    'version': (0,0,0),
     'blender': (2, 7, 8),
     'api': "3c04373",
     'location': "3D View -> Tool Shelf",
@@ -41,22 +41,7 @@ import sys, os, platform, inspect, imp
 sys.path.append(os.path.join(os.path.dirname(__file__)))
 print(os.path.join(os.path.dirname(__file__)))
 
-''' 
-if "bpy" in locals():
-    import imp
-    
-    imp.reload(classes)
-    imp.reload(odcutils)
-    imp.reload(crown)
-    imp.reload(margin)
-    imp.reload(bridge)
-    imp.reload(panel)
-    print("Reloaded multifiles")
-    
-else:
-    from . import classes, odcutils, crown, margin, bridge, panel
-    print("Imported multifiles")
-''' 
+
 import bpy
 from bpy.types import Operator, AddonPreferences
 from bpy.props import StringProperty, IntProperty, BoolProperty, EnumProperty, FloatProperty
@@ -64,6 +49,8 @@ from bpy.app.handlers import persistent
 #from . 
 
 import odcutils
+
+from . import addon_updater_ops
 
 def update_brackets(self,context):
     settings = odcutils.get_settings()
@@ -240,6 +227,39 @@ class ODCAddonPreferences(AddonPreferences):
     heal_custom_text = bpy.props.StringProperty(
             name = "Custom Text",
             default = "Custom Template Label")
+    
+    auto_check_update = bpy.props.BoolProperty(
+        name = "Auto-check for Update",
+        description = "If enabled, auto-check for updates using an interval",
+        default = False,
+        )
+    updater_intrval_months = bpy.props.IntProperty(
+        name='Months',
+        description = "Number of months between checking for updates",
+        default=0,
+        min=0
+        )
+    updater_intrval_days = bpy.props.IntProperty(
+        name='Days',
+        description = "Number of days between checking for updates",
+        default=7,
+        min=0,
+        )
+    updater_intrval_hours = bpy.props.IntProperty(
+        name='Hours',
+        description = "Number of hours between checking for updates",
+        default=0,
+        min=0,
+        max=23
+        )
+    updater_intrval_minutes = bpy.props.IntProperty(
+        name='Minutes',
+        description = "Number of minutes between checking for updates",
+        default=0,
+        min=0,
+        max=59
+        )
+
     #behavior_mode = EnumProperty(name="How Active Tooth is determined by operator", description="'LIST' is more predictable, 'ACTIVE' more like blender, 'ACTIVE_SELECTED' is for advanced users", items=behavior_enum, default='0')
 
     def draw(self, context):
@@ -252,7 +272,8 @@ class ODCAddonPreferences(AddonPreferences):
         layout.prop(self, "ortho_lib")
         layout.prop(self, "behavior")
         layout.prop(self, "workflow")
-        layout.prop(self, "debug")
+        
+        addon_updater_ops.update_settings_ui(self, context)
 
 class OPENDENTAL_OT_addon_prefs_odc(Operator):
     """Display example preferences"""
@@ -320,6 +341,7 @@ def register():
     
     import classes, odcutils, crown, margin, bridge, splint, implant, panel, help, flexible_tooth, bracket_placement, denture_base, occlusion, ortho, curve_partition, articulator, splint_landmark_fns # , odcmenus, bgl_utils
     import healing_abutment, model_work, tracking
+    
     #register them
     classes.register()
     odcutils.register()
@@ -348,6 +370,7 @@ def register():
     bpy.utils.register_class(OPENDENTAL_OT_addon_prefs_odc)
     
     tracking.register(bl_info)
+    addon_updater_ops.register(bl_info)
     
     bpy.app.handlers.load_post.append(load_post_method)
     bpy.app.handlers.save_pre.append(save_pre_method)
