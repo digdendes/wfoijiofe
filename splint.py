@@ -2970,7 +2970,10 @@ class OPENDENTAL_OT_splint_go_sculpt(bpy.types.Operator):
         scene.tool_settings.sculpt.brush = brush
         scene.tool_settings.sculpt.detail_type_method = 'CONSTANT'
         scene.tool_settings.sculpt.constant_detail = 50
-        brush.strength = .3
+        scene.tool_settings.sculpt.use_symmetry_x = False
+        scene.tool_settings.sculpt.use_symmetry_y = False
+        scene.tool_settings.sculpt.use_symmetry_z = False
+        brush.strength = .6
         
         #brush.stroke_method = 'SPACE' 
 

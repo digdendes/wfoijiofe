@@ -71,8 +71,8 @@ class SCENE_UL_odc_splints(bpy.types.UIList):
 class VIEW3D_PT_ODCSettings(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type="TOOLS"
-    bl_category = "Open Dental CAD"
-    bl_label = "ODC Control Panel"
+    bl_category = "Dental"
+    bl_label = "D3Tool Control Panel"
     bl_context = ""
 
     def draw(self, context):
@@ -90,7 +90,7 @@ class VIEW3D_PT_ODCSettings(bpy.types.Panel):
 class VIEW3D_PT_ODCTeeth(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type="TOOLS"
-    bl_category = "Open Dental CAD"
+    bl_category = "Dental"
     bl_label = "Tooth Restorations"
     bl_context = ""
 
@@ -196,7 +196,7 @@ class VIEW3D_PT_ODCTeeth(bpy.types.Panel):
 class VIEW3D_PT_ODCImplants(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type="TOOLS"
-    bl_category = "Open Dental CAD"
+    bl_category = "Dental"
     bl_label = "Implant Restorations"
     bl_context = ""
     
@@ -250,7 +250,7 @@ class VIEW3D_PT_ODCImplants(bpy.types.Panel):
 class VIEW3D_PT_ODCBridges(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type="TOOLS"
-    bl_category = "Open Dental CAD"
+    bl_category = "Dental"
     bl_label = "Bridge Restorations"
     bl_context = ""
     
@@ -312,7 +312,7 @@ class VIEW3D_PT_ODCBridges(bpy.types.Panel):
 class VIEW3D_PT_ODCSplints(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type="TOOLS"
-    bl_category = "Open Dental CAD"
+    bl_category = "Dental"
     bl_label = "Splints"
     bl_context = ""
     
@@ -376,25 +376,25 @@ class VIEW3D_PT_ODCSplints(bpy.types.Panel):
         row = layout.row()
         row.operator("opendental.splint_trim_from_curve", text = "Trim Upper")
         
-        row = layout.row()
-        row.label('Paint Method')
-        row = layout.row()
-        row.operator("opendental.splint_paint_margin", text = "Paint Splint Outline")
+        #row = layout.row()
+        #row.label('Paint Method')
+        #row = layout.row()
+        #row.operator("opendental.splint_paint_margin", text = "Paint Splint Outline")
         
-        if context.mode == 'SCULPT':
+        #if context.mode == 'SCULPT':
             
-            paint_settings = sce.tool_settings.unified_paint_settings
+        #    paint_settings = sce.tool_settings.unified_paint_settings
             
-            row = layout.row()
-            row.prop(paint_settings, "unprojected_radius")
+        #    row = layout.row()
+        #    row.prop(paint_settings, "unprojected_radius")
             
-            brush = bpy.data.brushes['Mask']
-            row = layout.row()
-            row.prop(brush, "stroke_method")
+        #    brush = bpy.data.brushes['Mask']
+        #    row = layout.row()
+        #    row.prop(brush, "stroke_method")
             
         
-            row = layout.row()
-            row.operator("opendental.splint_trim_from_paint", text = "Trim Upper (Paint)")
+        #    row = layout.row()
+        #    row.operator("opendental.splint_trim_from_paint", text = "Trim Upper (Paint)")
         
 
         row = layout.row()
@@ -421,145 +421,43 @@ class VIEW3D_PT_ODCSplints(bpy.types.Panel):
         col.operator("opendental.splint_stop_articulator", text = "Stop Functional Surface")
         
         row = layout.row()
+        col.operator("opendental.splint_subtract_surface", text = "Subtract Functional Surface")
+        
+        
+        row = layout.row()
+        row.label('Sulpt and Refinement')
+        row = layout.row()
+        row.operator("opendental.splint_start_sculpt", text = "Go to Sculpt")
+        
+        if context.mode == 'SCULPT': #TODO other checks for sculpt object and stuff
+            
+            paint_settings = sce.tool_settings.unified_paint_settings
+            other_settings = context.tool_settings.sculpt
+            row= layout.row()
+            col = row.column()
+            col.template_ID_preview(other_settings, "brush", new="brush.add", rows=3, cols=8)
+            
+        #    row = layout.row()
+        #    row.prop(paint_settings, "unprojected_radius")
+            
+        #    brush = bpy.data.brushes['Mask']
+        #    row = layout.row()
+        #    row.prop(brush, "stroke_method")
+        
+        
+        row = layout.row()
         row.label('Finalize Steps')
+        
         row = layout.row()
         col = row.column()
-        col.operator("opendental.splint_subtract_surface", text = "Subtract Functional Surface")
-        col.operator("opendental.splint_start_sculpt", text = "Go to Sculpt") 
         col.operator("opendental.splint_finish_booleans", text = "Finalize The Splint")
         
         
-class VIEW3D_PT_ODCOrtho(bpy.types.Panel):
-    bl_space_type = "VIEW_3D"
-    bl_region_type="TOOLS"
-    bl_category = "Open Dental CAD"
-    bl_label = "Orthodontics"
-    bl_context = ""
-    
-    def draw(self, context):
-        if not context.scene.odc_props.show_ortho:
-            return
-        sce = bpy.context.scene
-        layout = self.layout
-        
-        addon_prefs = get_settings()
-        
-        row = layout.row()
-        row.label(text = "Orthodontics")
-        row.operator("wm.url_open", text = "", icon="INFO").url = "https://github.com/patmo141/odc_public/wiki"
-        
-        layout.label(text = 'Brackets')
-        
-        row = layout.row()
-        row.prop(addon_prefs, "ortho_lib", text = "")
-        row = layout.row()
-        row.prop(addon_prefs, "bracket", text = "Bracket")
-        row = layout.row()
-        row.prop(addon_prefs, "bgauge_override", text = "")
-        row.prop(addon_prefs, "bracket_gauge", text = "")
-        
-        row = layout.row()
-        row.operator("opendental.place_ortho_bracket", text = "Place Bracket Guide")
-        
-        row = layout.row()
-        row.operator("opendental.place_static_bracket", text = "Place Bracket at Cursor")
-        
-        
-        layout.label(text = "Treatment Animation/Setup")
-        row = layout.row()
-        row.operator("opendental.show_max_teeth", text = "Upper")
-        row.operator("opendental.show_man_teeth", text = "Lower")
-        
-        row = layout.row()
-        row.operator("opendental.show_left_teeth", text = "Left")
-        row.operator("opendental.show_right_teeth", text = "Right")
-        
-        row = layout.row()
-        col = row.column(align=True)
-        col.operator("opendental.add_bone_roots", "Add roots")
-        if context.mode == "OBJECT":
-            col.operator("opendental.adjust_bone_roots", "Adjust Roots")
-        elif context.mode == 'EDIT_ARMATURE' and context.object.type == 'ARMATURE':
-            col.operator("object.mode_set",'Finish Roots').mode = 'OBJECT'
-        
-        col.operator("opendental.set_roots_parents", "Set Root Parents")
-        
-        
-        if context.scene.frame_current != 0 and not any([ob.animation_data for ob in context.scene.objects]):
-            row = layout.row()
-            row.label("Initial position not captured!", icon = 'ERROR')
-            row = layout.row()
-            row.label('Set Frame to 0 and record initial position')
-        else:
-            row = layout.row()
-            row.operator("opendental.set_treatment_keyframe", "Capture Positions")
-        
-        row = layout.row()
-        row.prop(context.scene, "frame_current", text = '')
-        
-        layout.label(text = "Physics Simulation Tools")
-        
-        row = layout.row()
-        col = row.column(align=True)
-        col.operator("opendental.add_physics_scene", "Add Physics Scene")
-        col.operator("opendental.physics_sim_setup", "Setup Physics Simulation")
-        col.operator("opendental.add_forcefields", "Add Forcefields")
-        
-        col.operator("opendental.limit_physics_movements", "Limit Movement")
-        col.operator("opendental.unlimit_physics_movements", "Unlimit Movement")
-        col.operator("opendental.lock_physics_movements", "Lock Tooth")
-        col.operator("opendental.unlock_physics_movements", "Unlock Tooth")
-        
-        layout.label(text = "Simulation Timeline")
-        row = layout.row()
-        row.operator("screen.animation_play", icon = 'PLAY')
-        row.prop(context.scene, "frame_current")
-        row.operator("screen.frame_jump", icon = 'FILE_REFRESH').end = False
-        
-        # Big render button
-        row = layout.row()
-        row.scale_y = 1.5
-        row.operator("opendental.keep_simulation_results", "Keep Simulation")
-        
-        
-class VIEW3D_PT_ODCDentures(bpy.types.Panel):
-    bl_space_type = "VIEW_3D"
-    bl_region_type="TOOLS"
-    bl_category = "Open Dental CAD"
-    bl_label = "Dentures"
-    bl_context = ""
-    
-    def draw(self, context):
-        sce = bpy.context.scene
-        layout = self.layout
-        
-        addon_prefs = get_settings()
-        
-        row = layout.row()
-        row.label(text = "Dentures")
-        row.operator("wm.url_open", text = "", icon="INFO").url = "https://github.com/patmo141/odc_public/wiki"
-        
-        row = layout.row()
-        col = row.column(align=True)
-        #col.operator("opendental.add_implant_restoration", text = "Add a Space")
-        col.operator("opendental.meta_scaffold_create", text = "Make Baseplate/Tray Scaffold")
-        
-        
-        col.operator("opendental.meta_custom_tray", text = "Make Meta Custom Tray")
-        col.operator("opendental.meta_offset_surface", text = "Make Meta Baseplate")
-        col.operator("opendental.meta_rim_from_curve", text = "Make Meta Wax Rim")
-        
-        if context.object and context.object.type == 'META':
-            col.operator("object.convert", text = "Convert Meta Baseplate to Mesh")
-        
-        col.operator("opendental.denture_boolean_intaglio", text = "Boolean with Master Cast")
-        
-        
-        
+          
 class VIEW3D_PT_ODCModels(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type="TOOLS"
-    bl_category = "Open Dental CAD"
+    bl_category = "Dental"
     bl_label = "Model Operations"
     bl_context = ""
     
