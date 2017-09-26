@@ -413,7 +413,7 @@ class VIEW3D_PT_ODCSplints(bpy.types.Panel):
         row = layout.row()
         col = row.column()
         col.operator("opendental.generate_articulator", text = "Generate Articulator")
-        col.operator("opendental.splint_mount_articulator", text = "Mount on Articulator")
+        #col.operator("opendental.splint_mount_articulator", text = "Mount on Articulator")
         
         row = layout.row()
         col = row.column()
