@@ -22,7 +22,7 @@
 # ##### END GPL LICENSE BLOCK #####
 
 bl_info = {
-    'name': "D3T Occlusal Guards",
+    'name': "D3T Splint Module",
     'author': "Patrick R. Moore",
     'version': (0,0,0),
     'blender': (2, 7, 8),
