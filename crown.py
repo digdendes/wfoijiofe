@@ -13,7 +13,7 @@ from bpy_extras import view3d_utils
 #from . import bgl_utils
 #from . import classes
 
-import odcutils, crown_methods, full_arch_methods, bgl_utils, classes
+import odcutils, crown_methods, full_arch_methods, bgl_utils
 from odcutils import get_settings
 import odcmenus.menu_utils as menu_utils
 import odcmenus.button_data as button_data

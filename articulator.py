@@ -30,9 +30,9 @@ bpy.app.driver_namespace['saw_tooth'] = saw_tooth
 bpy.app.driver_namespace['thirty_steps'] = thirty_steps
 
     
-class OPENDENTAL_OT_generate_articulator(bpy.types.Operator):
+class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
     """Create Arcon Style semi adjustable articulator from parameters"""
-    bl_idname = "opendental.generate_articulator"
+    bl_idname = "d3splint.generate_articulator"
     bl_label = "Create Arcon Articulator"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -328,11 +328,11 @@ class OPENDENTAL_OT_generate_articulator(bpy.types.Operator):
         return context.window_manager.invoke_props_dialog(self)
     
 def register():
-    bpy.utils.register_class(OPENDENTAL_OT_generate_articulator)
+    bpy.utils.register_class(D3SPLINT_OT_generate_articulator)
     
     
 def unregister():
-    bpy.utils.unregister_class(OPENDENTAL_OT_generate_articulator)
+    bpy.utils.unregister_class(D3SPLINT_OT_generate_articulator)
     
 if __name__ == "__main__":
     register()

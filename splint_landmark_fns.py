@@ -22,9 +22,9 @@ def arch_crv_draw_callback(self, context):
     self.crv.draw(context)
     self.help_box.draw()   
     
-class OPENDENTAL_OT_splint_occlusal_arch_max(bpy.types.Operator):
+class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
     """Draw a line along the cusps of the maxillary model"""
-    bl_idname = "opendental.draw_occlusal_curve_max"
+    bl_idname = "d3splint.draw_occlusal_curve_max"
     bl_label = "Mark Occlusal Curve"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -164,9 +164,9 @@ def landmarks_draw_callback(self, context):
     self.crv.draw(context)
     self.help_box.draw()    
     
-class OPENDENTAL_OT_splint_land_marks(bpy.types.Operator):
+class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
     """Define Right Molar, Left Molar, Midline"""
-    bl_idname = "opendental.splint_mark_landmarks"
+    bl_idname = "d3splint.splint_mark_landmarks"
     bl_label = "Define Model Landmarks"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -381,9 +381,9 @@ class OPENDENTAL_OT_splint_land_marks(bpy.types.Operator):
 
         tracking.trackUsage("D3Splint:SplintLandmarks",None)
 
-class OPENDENTAL_OT_splint_paint_margin(bpy.types.Operator):
+class D3SPLINT_OT_splint_paint_margin(bpy.types.Operator):
     '''Use dyntopo sculpt to add/remove detail at margin'''
-    bl_idname = "opendental.splint_paint_margin"
+    bl_idname = "d3splint.splint_paint_margin"
     bl_label = "Paint Splint Margin"
     bl_options = {'REGISTER','UNDO'}
 
@@ -436,9 +436,9 @@ class OPENDENTAL_OT_splint_paint_margin(bpy.types.Operator):
         
         return {'FINISHED'}
     
-class OPENDENTAL_OT_splint_trim_model_paint(bpy.types.Operator):
+class D3SPLINT_OT_splint_trim_model_paint(bpy.types.Operator):
     """Trim model from painted boundary"""
-    bl_idname = "opendental.splint_trim_from_paint"
+    bl_idname = "d3splint.splint_trim_from_paint"
     bl_label = "Trim Model From Paint"
     bl_options = {'REGISTER','UNDO'}
 
@@ -619,16 +619,16 @@ class OPENDENTAL_OT_splint_trim_model_paint(bpy.types.Operator):
         return {'FINISHED'}
         
 def register():
-    bpy.utils.register_class(OPENDENTAL_OT_splint_land_marks)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_paint_margin)  
-    bpy.utils.register_class(OPENDENTAL_OT_splint_trim_model_paint)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_occlusal_arch_max)
+    bpy.utils.register_class(D3SPLINT_OT_splint_land_marks)
+    bpy.utils.register_class(D3SPLINT_OT_splint_paint_margin)  
+    bpy.utils.register_class(D3SPLINT_OT_splint_trim_model_paint)
+    bpy.utils.register_class(D3SPLINT_OT_splint_occlusal_arch_max)
      
 def unregister():
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_land_marks)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_paint_margin)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_trim_model_paint)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_occlusal_arch_max)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_land_marks)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_paint_margin)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_trim_model_paint)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_occlusal_arch_max)
     
 if __name__ == "__main__":
     register()

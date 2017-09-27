@@ -5,11 +5,11 @@ Created on Aug 20, 2017
 '''
 import bpy
 import bmesh
-from mesh_cut import flood_selection_faces
+from mesh_cut import flood_selection_faces, edge_loops_from_bmedges
 
-class OPENDENTAL_OT_paint_model(bpy.types.Operator):
+class D3SPLINT_OT_paint_model(bpy.types.Operator):
     '''Use sculpt mask to mark parts of model'''
-    bl_idname = "opendental.enter_sculpt_paint_mask"
+    bl_idname = "d3splint.enter_sculpt_paint_mask"
     bl_label = "Paint Model"
     bl_options = {'REGISTER','UNDO'}
 
@@ -46,9 +46,9 @@ class OPENDENTAL_OT_paint_model(bpy.types.Operator):
         
         return {'FINISHED'}
 
-class OPENDENTAL_OT_finish_paint(bpy.types.Operator):
+class D3SPLINT_OT_finish_paint(bpy.types.Operator):
     '''Finish painting by re-entering object mode'''
-    bl_idname = "opendental.finish_pain"
+    bl_idname = "d3splint.finish_pain"
     bl_label = "Paint Model"
     bl_options = {'REGISTER','UNDO'}
 
@@ -73,9 +73,9 @@ class OPENDENTAL_OT_finish_paint(bpy.types.Operator):
         
         return {'FINISHED'}
       
-class OPENDENTAL_OT_delete_sculpt_mask(bpy.types.Operator):
+class D3SPLINT_OT_delete_sculpt_mask(bpy.types.Operator):
     '''Delete painted parts of mesh'''
-    bl_idname = "opendental.delete_sculpt_mask"
+    bl_idname = "d3splint.delete_sculpt_mask"
     bl_label = "Delete Sculpt Mask"
     bl_options = {'REGISTER','UNDO'}
 
@@ -110,9 +110,9 @@ class OPENDENTAL_OT_delete_sculpt_mask(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class OPENDENTAL_OT_keep_sculpt_mask(bpy.types.Operator):
+class D3SPLINT_OT_keep_sculpt_mask(bpy.types.Operator):
     '''Delete everything not painted'''
-    bl_idname = "opendental.delete_sculpt_mask_inverse"
+    bl_idname = "d3splint.delete_sculpt_mask_inverse"
     bl_label = "Delete Sculpt Mask Inverse"
     bl_options = {'REGISTER','UNDO'}
 
@@ -145,9 +145,9 @@ class OPENDENTAL_OT_keep_sculpt_mask(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class OPENDENTAL_OT_mask_to_convex_hull(bpy.types.Operator):
+class D3SPLINT_OT_mask_to_convex_hull(bpy.types.Operator):
     '''Turn painted area into convex hull'''
-    bl_idname = "opendental.sculpt_mask_qhull"
+    bl_idname = "d3splint.sculpt_mask_qhull"
     bl_label = "Sculpt Mask to convex hull"
     bl_options = {'REGISTER','UNDO'}
 
@@ -188,9 +188,9 @@ class OPENDENTAL_OT_mask_to_convex_hull(bpy.types.Operator):
         bpy.ops.paint.mask_flood_fill(mode = 'VALUE', value = 0)
         return {'FINISHED'}
         
-class OPENDENTAL_OT_delete_islands(bpy.types.Operator):
+class D3SPLINT_OT_delete_islands(bpy.types.Operator):
     '''Delete small disconnected pieces of mesh'''
-    bl_idname = "opendental.delete_islands"
+    bl_idname = "d3splint.delete_islands"
     bl_label = "Delete Mesh Islands"
     bl_options = {'REGISTER','UNDO'}
 
@@ -279,20 +279,77 @@ class OPENDENTAL_OT_delete_islands(bpy.types.Operator):
         
         return {'FINISHED'}
 
-
+class D3PLINT_OT_simple_model_base(bpy.types.Operator):
+    """Simple ortho base with height 5 - 50mm """
+    bl_idname = "d3splint.simple_base"
+    bl_label = "Simple model base"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    base_height = bpy.props.FloatProperty(name = 'Base Height', default = 10, min = -50, max = 50,  description = 'Base height added in mm')
+    
+    @classmethod
+    def poll(cls, context):
+        if context.mode == "OBJECT" and context.object != None and context.object.type == 'MESH':
+            return True
+        else:
+            return False
+        
+    def execute(self, context):
+        
+        bme = bmesh.new()
+        bme.from_mesh(context.object.data)
+        
+        bme.verts.ensure_lookup_table()
+        bme.edges.ensure_lookup_table()
+        bme.faces.ensure_lookup_table()
+        
+        non_man_eds = [ed.index for ed in bme.edges if not ed.is_manifold]
+        loops = edge_loops_from_bmedges(bme, non_man_eds)
+                
+                
+        if len(loops)>1:
+            biggest_loop = max(loops, key = len)
+        else:
+            biggest_loop = loops[0]
+            
+        
+        if biggest_loop[0] != biggest_loop[-1]:
+            
+            print('Biggest loop not a hole!')
+            bme.free() 
+            
+            return {'FINISHED'}
+        
+        biggest_loop.pop()
+        
+        com = Vector((0,0,0))
+        for vind in biggest_loop:
+            com += bme.verts[vind].co
+        com *= 1/len(biggest_loop)
+        
+        for vind in biggest_loop:
+            bme.verts[vind].co[2] = com[2] + self.base_height
+        
+        bme.faces.new([bme.verts[vind] for vind in biggest_loop])
+        bmesh.ops.recalc_face_normals(bme, faces = bme.faces)
+        bme.to_mesh(context.object.data)
+        bme.free()             
+        return {'FINISHED'}
 def register():
-    bpy.utils.register_class(OPENDENTAL_OT_paint_model)
-    bpy.utils.register_class(OPENDENTAL_OT_delete_sculpt_mask)
-    bpy.utils.register_class(OPENDENTAL_OT_keep_sculpt_mask)
-    bpy.utils.register_class(OPENDENTAL_OT_delete_islands)
-    bpy.utils.register_class(OPENDENTAL_OT_mask_to_convex_hull)
+    bpy.utils.register_class(D3SPLINT_OT_paint_model)
+    bpy.utils.register_class(D3SPLINT_OT_delete_sculpt_mask)
+    bpy.utils.register_class(D3SPLINT_OT_keep_sculpt_mask)
+    bpy.utils.register_class(D3SPLINT_OT_delete_islands)
+    bpy.utils.register_class(D3SPLINT_OT_mask_to_convex_hull)
+    bpy.utils.register_class(D3PLINT_OT_simple_model_base)
     
 def unregister():
-    bpy.utils.unregister_class(OPENDENTAL_OT_paint_model)
-    bpy.utils.unregister_class(OPENDENTAL_OT_delete_sculpt_mask)
-    bpy.utils.unregister_class(OPENDENTAL_OT_keep_sculpt_mask)
-    bpy.utils.unregister_class(OPENDENTAL_OT_delete_islands)
-    bpy.utils.unregister_class(OPENDENTAL_OT_mask_to_convex_hull)
+    bpy.utils.unregister_class(D3SPLINT_OT_paint_model)
+    bpy.utils.unregister_class(D3SPLINT_OT_delete_sculpt_mask)
+    bpy.utils.unregister_class(D3SPLINT_OT_keep_sculpt_mask)
+    bpy.utils.unregister_class(D3SPLINT_OT_delete_islands)
+    bpy.utils.unregister_class(D3SPLINT_OT_mask_to_convex_hull)
+    bpy.utils.unregister_class(D3PLINT_OT_simple_model_base)
     
 if __name__ == "__main__":
     register()

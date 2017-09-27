@@ -52,181 +52,26 @@ import odcutils
 
 from . import addon_updater_ops
 
-def update_brackets(self,context):
-    settings = odcutils.get_settings()
-    libpath = settings.ortho_lib
-    assets = odcutils.obj_list_from_lib(libpath)
-    return [(asset,asset, asset) for asset in assets]
 
 #addon preferences
-class ODCAddonPreferences(AddonPreferences):
+class D3SplintAddonPreferences(AddonPreferences):
     bl_idname = __name__
 
     addons = bpy.context.user_preferences.addons
     
     folderpath = os.path.dirname(os.path.abspath(__file__))
-    print('SETTINGS FOLDERPATH')
-    print(folderpath)
+
     data_folder =os.path.join(folderpath,'data\\')
     
     dev = bpy.props.BoolProperty(name="Development Mode",
                                  default=False)
-    
-    #addons_folder = bpy.utils.script_paths('addons')[0]
-    #data_folder =os.path.join(addons_folder,'odc_public','data')
-    def_tooth_lib = os.path.join(data_folder,"odc_tooth_library.blend")
-    def_mat_lib = os.path.join(data_folder,"odc_materials.blend")
-    def_imp_lib = os.path.join(data_folder,"odc_implants_leone.blend")
-    def_drill_lib = os.path.join(data_folder,"odc_drill_lib.blend")
-    def_ortho_lib = os.path.join(data_folder,"odc_bracket_library.blend")
-    
-    #enums
-    behavior_modes=['LIST','ACTIVE','ACTIVE_SELECTED']
-    behavior_enum = []
-    for index, item in enumerate(behavior_modes):
-        behavior_enum.append((str(index), behavior_modes[index], str(index)))
-        
-    workflow_modes=['SINGLE','MULTIPLE_LINEAR','MULTIPLE_PARALLEL']
-    workflow_enum = []
-    for index, item in enumerate(workflow_modes):
-        workflow_enum.append((str(index), workflow_modes[index], str(index)))
-    
-    
-              
-    #real properties
-    tooth_lib = bpy.props.StringProperty(
-        name="Tooth Library",
-        default=def_tooth_lib,
-        #default = '',
-        subtype='FILE_PATH')
-    
-    mat_lib = bpy.props.StringProperty(
-        name="Material Library",
-        default=def_mat_lib,
-        #default = '',
-        subtype='FILE_PATH')
-    
-    imp_lib = bpy.props.StringProperty(
-        name="Implant Library",
-        default=def_imp_lib,
-        #default = '',
-        subtype='FILE_PATH')
-    
-    drill_lib = bpy.props.StringProperty(
-        name="Drill Library",
-        default=def_drill_lib,
-        #default = '',
-        subtype='FILE_PATH')
-    
-    ortho_lib = bpy.props.StringProperty(
-        name="Bracket Library",
-        default=def_ortho_lib,
-        #default = '',
-        subtype='FILE_PATH')
- 
+
     debug = IntProperty(
             name="Debug Level",
             default=1,
             min = 0,
             max = 4,
             )
-    
-    behavior = EnumProperty(
-            name = "Behavior Mode",
-            description = "",
-            items = behavior_enum,
-            default = '2',
-            )
-
-
-    workflow = EnumProperty(
-            items = workflow_enum,
-            name = "Workflow Mode",
-            description = "SINGLE: for single units, LINEAR: do each tooth start to finish, MULTI_PARALLELS: Do all teeth at each step",
-            default = '0')
-    
-    #Ortho Settings
-    bgauge_override = BoolProperty(name="Override Edge Height",
-            default=False,
-            description = "Use manual gauge height instead of default bracket prescription")
-    
-    bracket_gauge = FloatProperty(name="Gauge Height",
-            default=4,
-            min = .5,
-            max = 7,
-            unit = 'LENGTH',
-            description = "Manual gauge height to override the default library prescription")
-    
-    bracket = EnumProperty(
-            items = update_brackets,
-            name = "Choose Bracket")
-    
-    #custom healing properties
-    heal_show_prefs = bpy.props.BoolProperty(
-            name="Show UCLA Abut Preferences",
-            default=True)
-    
-    heal_show_ob = bpy.props.BoolProperty(
-            name="Show Object Transforms",
-            default=True)
-        
-    heal_tibase_file = bpy.props.StringProperty(
-            name="Abutment File",
-            default='',
-            subtype='FILE_PATH')
-        
-    heal_abutment_depth = bpy.props.FloatProperty(
-            name="Abutment Depth",
-            default=5.0)
-        
-        
-    heal_tibase_diameter = bpy.props.FloatProperty(
-            name="Abutment Collar Diameter",
-            description = "The diameter of the collar where material will meet the abutment",
-            default=3.5)
-        
-    heal_block_border_x = bpy.props.FloatProperty(
-            name="X Border Spacer",
-            description = "The spacer between edge of CEJ template at sides of block",
-            default=2)
-    
-    heal_block_border_y = bpy.props.FloatProperty(
-            name="Y Border Spacer",
-            description = "The spacer between edge of CEJ template at top of block",
-            default=5)
-        
-    heal_inter_space_x = bpy.props.FloatProperty(
-            name="X spacing between abutments",
-            description = "The spacer between edge of templates",
-            default=2.0)
-    
-    heal_inter_space_y = bpy.props.FloatProperty(
-            name="Y spacing between abutments",
-            description = "The spacer between edge of templates",
-            default=2.0)
-    
-    heal_middle_space_x= bpy.props.FloatProperty(
-            name="Width of middle column",
-            description = "The spacer between edge of templates",
-            default=4.0)
-       
-    heal_bevel_width = bpy.props.FloatProperty(
-            name="Bevel Width",
-            description = "Constant which controls beveling of the block",
-            default=3)
-        
-    heal_n_cols = bpy.props.IntProperty(
-            name = "Wells Per Row",
-            default = 6)
-        
-    heal_teeth = bpy.props.BoolVectorProperty(
-            name = "Teeth",
-            size = 32,
-            subtype = 'LAYER')
-    
-    heal_custom_text = bpy.props.StringProperty(
-            name = "Custom Text",
-            default = "Custom Template Label")
     
     auto_check_update = bpy.props.BoolProperty(
         name = "Auto-check for Update",
@@ -264,18 +109,12 @@ class ODCAddonPreferences(AddonPreferences):
 
     def draw(self, context):
         layout = self.layout
-        layout.label(text="Open Dental CAD Preferences and Settings")
-        layout.prop(self, "mat_lib")
-        layout.prop(self, "tooth_lib")
-        layout.prop(self, "imp_lib")
-        layout.prop(self, "drill_lib")
-        layout.prop(self, "ortho_lib")
-        layout.prop(self, "behavior")
-        layout.prop(self, "workflow")
+        layout.label(text="D3Splint Preferences and Settings")
+        #layout.prop(self, "mat_lib")
         
         addon_updater_ops.update_settings_ui(self, context)
 
-class OPENDENTAL_OT_addon_prefs_odc(Operator):
+class D3Splint_OT_addon_prefs(Operator):
     """Display example preferences"""
     bl_idname = "opendental.odc_addon_pref"
     bl_label = "ODC Preferences Display"
@@ -339,35 +178,26 @@ def register():
     
     
     
-    import classes, odcutils, crown, margin, bridge, splint, implant, panel, help, flexible_tooth, bracket_placement, denture_base, occlusion, ortho, curve_partition, articulator, splint_landmark_fns # , odcmenus, bgl_utils
+    import d3classes, odcutils, crown, margin, bridge, splint, implant, panel, help, flexible_tooth, bracket_placement, denture_base, occlusion, ortho, curve_partition, articulator, splint_landmark_fns # , odcmenus, bgl_utils
     import healing_abutment, model_work, tracking
     
     #register them
-    classes.register()
+    d3classes.register()
     odcutils.register()
-    crown.register()
-    implant.register()
-    margin.register()
-    bridge.register()
+    curve_partition.register()
     splint.register()
     articulator.register()
-    help.register()
-    flexible_tooth.register()
-    bracket_placement.register()
-    denture_base.register()
-    panel.register()
+    #help.register()
+    #denture_base.register()
     occlusion.register()
-    ortho.register()
-    curve_partition.register()
-    healing_abutment.register()
     splint_landmark_fns.register()
     model_work.register()
     
+    panel.register()
     
     #register this module
-    print('REGISERESTED THE ADDON PREFERENCES?')
-    bpy.utils.register_class(ODCAddonPreferences)
-    bpy.utils.register_class(OPENDENTAL_OT_addon_prefs_odc)
+    bpy.utils.register_class(D3SplintAddonPreferences)
+    bpy.utils.register_class(D3Splint_OT_addon_prefs)
     
     tracking.register(bl_info)
     addon_updater_ops.register(bl_info)
@@ -378,36 +208,27 @@ def register():
     
 def unregister():
     #import the relevant modules
-    from . import classes, odcutils, crown, margin, bridge, splint, panel, implant, flexible_tooth, curve_partition, articulator, splint_landmark_fns#, splint, panel, odcmenus, bgl_utils
+    from . import d3classes, odcutils, splint, panel, curve_partition, articulator, splint_landmark_fns, model_work, tracking
     
     bpy.app.handlers.save_pre.remove(save_pre_method)
     bpy.app.handlers.load_post.remove(load_post_method)
     bpy.app.handlers.frame_change_pre.remove(pause_playback)
     
     #bpy.utils.unregister_module(__name__)
-    bpy.utils.unregister_class(ODCAddonPreferences)
-    bpy.utils.unregister_class(OPENDENTAL_OT_addon_prefs_odc)
+    bpy.utils.unregister_class(D3SplintAddonPreferences)
+    bpy.utils.unregister_class(D3Splint_OT_addon_prefs)
     
     #unregister them
-    classes.unregister()
+    d3classes.unregister()
     odcutils.unregister()
-    crown.unregister()
-    margin.unregister()
-    implant.unregister()
+
     splint.unregister()
     articulator.unregister()
-    bridge.unregister()
     panel.unregister()
-    flexible_tooth.unregister()
     curve_partition.unregister()
     splint_landmark_fns.unregister()
+    model_work.unregister()
     
-    #odcmenus.unregister()
-    #bgl_utils.unregister()
-    
-    if platform.system() == "Windows" and platform.release() in ['7','Vista']:
-        from . import cdt
-        cdt.unregister()
     #unregister this module
  
 if __name__ == "__main__":

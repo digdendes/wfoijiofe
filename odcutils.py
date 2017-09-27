@@ -1068,12 +1068,12 @@ def scene_verification(scene, debug = False):
     #splint_props = ['']
     #bridge_props_exclude=['']
     
-    teeth = scene.odc_teeth
-    imps = scene.odc_implants
-    bridges = scene.odc_bridges
+    #teeth = scene.odc_teeth
+    #imps = scene.odc_implants
+    #bridges = scene.odc_bridges
     splints = scene.odc_splints
     
-    for collect in [teeth, imps, bridges,splints]:
+    for collect in [splints]:
         if len(collect):
             for item in collect:
                 keys = item.keys()

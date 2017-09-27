@@ -31,9 +31,9 @@ import tracking
 https://occlusionconnections.com/gnm-optimized/which-occlusal-plane-do-you-undestand-dont-get-confused/
 http://www.claytonchandds.com/pdf/ICCMO/AReviewOfTheOcclusalPlane.pdf
 '''
-class OPENDENTAL_OT_link_selection_splint(bpy.types.Operator):
+class D3SPLINT_OT_link_selection_splint(bpy.types.Operator):
     ''''''
-    bl_idname='opendental.link_selection_splint'
+    bl_idname='d3splint.link_selection_splint'
     bl_label="Link Units to Splint"
     bl_options = {'REGISTER','UNDO'}
     
@@ -56,13 +56,13 @@ class OPENDENTAL_OT_link_selection_splint(bpy.types.Operator):
         
         return {'FINISHED'}
     
-class OPENDENTAL_OT_splint_bone(bpy.types.Operator):
+class D3SPLINT_OT_splint_bone(bpy.types.Operator):
     '''
     Will assign the active object as the bone model
     Only use if making multi tissue support.  eg bone
     and teeth.
     '''
-    bl_idname='opendental.bone_model_set'
+    bl_idname='d3splint.bone_model_set'
     bl_label="Splint Bone"
     bl_options = {'REGISTER','UNDO'}
     
@@ -86,17 +86,16 @@ class OPENDENTAL_OT_splint_bone(bpy.types.Operator):
         else:
             self.report({'WARNING'}, "there are not guides, bone will not be linked to a guide")
         
-        context.scene.odc_props.bone = context.object.name
         
         return {'FINISHED'}
 
-class OPENDENTAL_OT_splint_model(bpy.types.Operator):
+class D3SPLINT_OT_splint_model(bpy.types.Operator):
     '''
     Will assign the active object as the  model to build
     a splint on.  Needed if an object was not linked
     when splint was planned
     '''
-    bl_idname='opendental.model_set'
+    bl_idname='d3splint.model_set'
     bl_label="Set Splint Model"
     bl_options = {'REGISTER','UNDO'}
     
@@ -125,11 +124,11 @@ class OPENDENTAL_OT_splint_model(bpy.types.Operator):
         tracking.trackUsage("D3Splint:StartSplint")
         return {'FINISHED'}    
 
-class OPENDENTAL_OT_splint_opposing(bpy.types.Operator):
+class D3SPLINT_OT_splint_opposing(bpy.types.Operator):
     '''
     Will assign the active object as the  opposing model
     '''
-    bl_idname='opendental.splint_opposing_set'
+    bl_idname='d3splint.splint_opposing_set'
     bl_label="Set Splint Opposing"
     bl_options = {'REGISTER','UNDO'}
     
@@ -156,13 +155,13 @@ class OPENDENTAL_OT_splint_opposing(bpy.types.Operator):
         
         return {'FINISHED'} 
     
-class OPENDENTAL_OT_splint_report(bpy.types.Operator):
+class D3SPLINT_OT_splint_report(bpy.types.Operator):
     '''
     Will add a text object to the .blend file which tells
     the information about a surgical guide and it's various
     details.
     '''
-    bl_idname='opendental.splint_report'
+    bl_idname='d3splint.splint_report'
     bl_label="Splint Report"
     bl_options = {'REGISTER','UNDO'}
     
@@ -262,9 +261,9 @@ class OPENDENTAL_OT_splint_report(bpy.types.Operator):
         
         return {'FINISHED'}
     
-class OPENDENTAL_OT_splint_subtract_holes(bpy.types.Operator):
+class D3SPLINT_OT_splint_subtract_holes(bpy.types.Operator):
     ''''''
-    bl_idname='opendental.splint_subtract_holes'
+    bl_idname='d3splint.splint_subtract_holes'
     bl_label="Subtract Splint Holes"
     bl_options = {'REGISTER','UNDO'}
     
@@ -350,10 +349,10 @@ class OPENDENTAL_OT_splint_subtract_holes(bpy.types.Operator):
         
         return {'FINISHED'}
         
-class OPENDENTAL_OT_splint_subtract_sleeves(bpy.types.Operator):
+class D3SPLINT_OT_splint_subtract_sleeves(bpy.types.Operator):
     '''
     '''
-    bl_idname='opendental.splint_subtract_sleeves'
+    bl_idname='d3splint.splint_subtract_sleeves'
     bl_label="Subtract Splint Sleeves"
     bl_options = {'REGISTER','UNDO'}
     
@@ -438,9 +437,9 @@ class OPENDENTAL_OT_splint_subtract_sleeves(bpy.types.Operator):
         
         return {'FINISHED'}
     
-class OPENDENTAL_OT_splint_add_guides(bpy.types.Operator):
+class D3SPLINT_OT_splint_add_guides(bpy.types.Operator):
     ''''''
-    bl_idname='opendental.splint_add_guides'
+    bl_idname='d3splint.splint_add_guides'
     bl_label="Merge Guide Cylinders to Splint"
     bl_options = {'REGISTER','UNDO'}
     
@@ -532,201 +531,15 @@ class OPENDENTAL_OT_splint_add_guides(bpy.types.Operator):
         
         return {'FINISHED'}
 
-#Depricated, no longer used
-class OPENDENTAL_OT_initiate_arch_curve(bpy.types.Operator):
-    '''Places a bezier curve to be extruded around the planned plane of occlussion'''
-    bl_idname = 'opendental.initiate_arch_curve'
-    bl_label = "Arch Plan Curve"
-    bl_options = {'REGISTER','UNDO'}
-    
-    
-    @classmethod
-    def poll(cls, context):
-        if context.object and context.mode == 'OBJECT':
-            return True
-        else:
-            return False
-        #return len(context.scene.odc_splints) > 0             
-
-    def execute(self, context):
-        
-        sce=bpy.context.scene
-        ob = context.object
-        layers_copy = [layer for layer in context.scene.layers]
-        context.scene.layers[0] = True
-        
-        if ob:
-
-            L = odcutils.get_bbox_center(ob, world=True)
-        
-        elif sce.odc_props.master:
-            ob = bpy.data.objects[sce.odc_props.master]
-            L = odcutils.get_bbox_center(ob, world=True)
-            
-        else:
-            L = bpy.context.scene.cursor_location
-
-        bpy.ops.view3d.viewnumpad(type='TOP')
-        bpy.ops.object.select_all(action='DESELECT')
-        
-        if context.mode != 'OBJECT':
-            bpy.ops.object.mode_set(mode='OBJECT')
-        
-        #bpy.context.scene.cursor_location = L
-        bpy.ops.curve.primitive_bezier_curve_add(view_align=True, enter_editmode=True, location=L)
-        PlanCurve = context.object
-        PlanCurve.layers[4] = True
-        PlanCurve.layers[0] = True
-        PlanCurve.layers[1] = True
-        PlanCurve.layers[3] = True
-        
-        context.tool_settings.use_snap = True
-        context.tool_settings.snap_target= 'ACTIVE'
-        context.tool_settings.snap_element = 'FACE'
-        context.tool_settings.proportional_edit = 'DISABLED'
-        context.tool_settings.use_snap_project = False
-        
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.curve.handle_type_set(type='AUTOMATIC')
-        bpy.ops.curve.select_all(action='DESELECT')
-        context.object.data.splines[0].bezier_points[1].select_control_point=True
-        bpy.ops.curve.delete()
-        bpy.ops.curve.select_all(action='SELECT')
-            
-        odcutils.layer_management(sce.odc_splints)
-        for i, layer in enumerate(layers_copy):
-            context.scene.layers[i] = layer
-        context.scene.layers[3] = True
-        return {'FINISHED'}
 
 def arch_crv_draw_callback(self, context):  
     self.crv.draw(context)
     self.help_box.draw()      
     
 
-class OPENDENTAL_OT_arch_curve(bpy.types.Operator):
-    """Draw a line with the mouse to extrude bezier curves"""
-    bl_idname = "opendental.draw_arch_curve"
-    bl_label = "Arch Curve Generic"
-    bl_options = {'REGISTER', 'UNDO'}
-    
-    @classmethod
-    def poll(cls,context):
-        return True
-    
-    def modal_nav(self, event):
-        events_nav = {'MIDDLEMOUSE', 'WHEELINMOUSE','WHEELOUTMOUSE', 'WHEELUPMOUSE','WHEELDOWNMOUSE'} #TODO, better navigation, another tutorial
-        handle_nav = False
-        handle_nav |= event.type in events_nav
-
-        if handle_nav: 
-            return 'nav'
-        return ''
-    
-    def modal_main(self,context,event):
-        # general navigation
-        nmode = self.modal_nav(event)
-        if nmode != '':
-            return nmode  #stop here and tell parent modal to 'PASS_THROUGH'
-
-        #after navigation filter, these are relevant events in this state
-        if event.type == 'G' and event.value == 'PRESS':
-            if self.crv.grab_initiate():
-                return 'grab'
-            else:
-                #error, need to select a point
-                return 'main'
-        
-        if event.type == 'MOUSEMOVE':
-            self.crv.hover(context, event.mouse_region_x, event.mouse_region_y)    
-            return 'main'
-        
-        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
-            x, y = event.mouse_region_x, event.mouse_region_y
-            self.crv.click_add_point(context, x,y)
-            return 'main'
-        
-        if event.type == 'RIGHTMOUSE' and event.value == 'PRESS':
-            self.crv.click_delete_point(mode = 'mouse')
-            return 'main'
-        
-        if event.type == 'X' and event.value == 'PRESS':
-            self.crv.delete_selected(mode = 'selected')
-            return 'main'
-            
-        if event.type == 'RET' and event.value == 'PRESS':
-            context.space_data.show_manipulator = True #TODO..save initial state
-            return 'finish'
-            
-        elif event.type == 'ESC' and event.value == 'PRESS':
-            context.space_data.show_manipulator = True  #TODO..save initial state
-            return 'cancel' 
-
-        return 'main'
-    
-    def modal_grab(self,context,event):
-        # no navigation in grab mode
-        
-        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
-            #confirm location
-            self.crv.grab_confirm()
-            return 'main'
-        
-        elif event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS':
-            #put it back!
-            self.crv.grab_cancel()
-            return 'main'
-        
-        elif event.type == 'MOUSEMOVE':
-            #update the b_pt location
-            self.crv.grab_mouse_move(context,event.mouse_region_x, event.mouse_region_y)
-            return 'grab'
-        
-    def modal(self, context, event):
-        context.area.tag_redraw()
-        
-        FSM = {}    
-        FSM['main']    = self.modal_main
-        FSM['grab']    = self.modal_grab
-        FSM['nav']     = self.modal_nav
-        
-        nmode = FSM[self.mode](context, event)
-        
-        if nmode == 'nav': 
-            return {'PASS_THROUGH'}
-        
-        if nmode in {'finish','cancel'}:
-            #clean up callbacks
-            bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
-            return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
-        
-        if nmode: self.mode = nmode
-        
-        return {'RUNNING_MODAL'}
-
-    def invoke(self,context, event):
-        
-        if context.object:
-            ob = context.object
-            L = odcutils.get_bbox_center(ob, world=True)
-            context.scene.cursor_location = L
-        
-        context.space_data.show_manipulator = False
-        self.crv = CurveDataManager(context,snap_type ='SCENE', snap_object = None, shrink_mod = False, name = 'Plan Curve')
-         
-        #TODO, tweak the modifier as needed
-        help_txt = "DRAW ARCH OUTLINE\n\nLeft Click in scene to draw a curve \nPoints will snap to objects under mouse \nNot clicking on object will make points at same depth as 3D cursor \n Right click to delete a point n\ G to grab  \n ENTER to confirm \n ESC to cancel"
-        self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
-        self.help_box.snap_to_corner(context, corner = [1,1])
-        self.mode = 'main'
-        self._handle = bpy.types.SpaceView3D.draw_handler_add(arch_crv_draw_callback, (self, context), 'WINDOW', 'POST_PIXEL')
-        context.window_manager.modal_handler_add(self) 
-        return {'RUNNING_MODAL'}
-
-
-class OPENDENTAL_OT_splint_buccal_marks(bpy.types.Operator):
+class D3SPLINT_OT_splint_buccal_marks(bpy.types.Operator):
     """Draw a line along the facial limits of the splint"""
-    bl_idname = "opendental.draw_buccal_curve"
+    bl_idname = "d3splint.draw_buccal_curve"
     bl_label = "Mark Buccal Splint Limits"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -861,9 +674,9 @@ class OPENDENTAL_OT_splint_buccal_marks(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
 
-class OPENDENTAL_OT_splint_occlusal_arch(bpy.types.Operator):
+class D3SPLINT_OT_splint_occlusal_arch(bpy.types.Operator):
     """Draw a line along the lingual cusps of the opposign model"""
-    bl_idname = "opendental.draw_occlusal_curve"
+    bl_idname = "d3splint.draw_occlusal_curve"
     bl_label = "Mark Occlusal Curve"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -1112,9 +925,9 @@ def ispltmgn_draw_callback(self, context):
     self.help_box.draw()      
     
 
-class OPENDENTAL_OT_splint_margin(bpy.types.Operator):
+class D3SPLINT_OT_splint_margin(bpy.types.Operator):
     """Draw a line with the mouse to extrude bezier curves"""
-    bl_idname = "opendental.initiate_splint_outline"
+    bl_idname = "d3splint.initiate_splint_outline"
     bl_label = "Splint Outine"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -1282,9 +1095,9 @@ def plyknife_draw_callback(self, context):
         common_drawing.draw_polyline_from_points(context, self.sketch, (.3,.3,.3,.8), 2, "GL_LINE_SMOOTH")
         
 
-class OPENDENTAL_OT_initiate_splint_margin(bpy.types.Operator):
+class D3SPLINT_OT_initiate_splint_margin(bpy.types.Operator):
     '''Places a bezier curve to be extruded around the boundaries of a splint'''
-    bl_idname = 'opendental.initiate_splint_margin'
+    bl_idname = 'd3splint.initiate_splint_margin'
     bl_label = "Initiate Splint Margin"
     bl_options = {'REGISTER','UNDO'}
         
@@ -1349,9 +1162,9 @@ class OPENDENTAL_OT_initiate_splint_margin(bpy.types.Operator):
         context.scene.layers[4] = True
         return {'FINISHED'}
     
-class OPENDENTAL_OT_survey_model(bpy.types.Operator):
+class D3SPLINT_OT_survey_model(bpy.types.Operator):
     '''Calculates silhouette of object which surveys convexities AND concavities from the current view axis'''
-    bl_idname = 'opendental.view_silhouette_survey'
+    bl_idname = 'd3splint.view_silhouette_survey'
     bl_label = "Survey Model From View"
     bl_options = {'REGISTER','UNDO'}
     
@@ -1410,9 +1223,9 @@ class OPENDENTAL_OT_survey_model(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class OPENDENTAL_OT_survey_model_axis(bpy.types.Operator):
+class D3SPLINT_OT_survey_model_axis(bpy.types.Operator):
     '''Calculates silhouette of of model from the defined insertion axis arrow object'''
-    bl_idname = 'opendental.arrow_silhouette_survey'
+    bl_idname = 'd3splint.arrow_silhouette_survey'
     bl_label = "Survey Model From Axis"
     bl_options = {'REGISTER','UNDO'}
     
@@ -1449,9 +1262,9 @@ class OPENDENTAL_OT_survey_model_axis(bpy.types.Operator):
         return {'FINISHED'}
     
     
-class OPENDENTAL_OT_blockout_model(bpy.types.Operator):
+class D3SPLINT_OT_blockout_model(bpy.types.Operator):
     '''Calculates silhouette of object which surveys convexities AND concavities from the current view axis'''
-    bl_idname = 'opendental.view_blockout_undercuts'
+    bl_idname = 'd3splint.view_blockout_undercuts'
     bl_label = "Blockout Model From View"
     bl_options = {'REGISTER','UNDO'}
     
@@ -1477,9 +1290,9 @@ class OPENDENTAL_OT_blockout_model(bpy.types.Operator):
         bmesh_fns.remove_undercuts(context, ob, view, self.world, self.smooth)
         return {'FINISHED'}
           
-class OPENDENTAL_OT_splint_bezier_model(bpy.types.Operator):
+class D3SPLINT_OT_splint_bezier_model(bpy.types.Operator):
     '''Calc a Splint/Tray from a model and a curve'''
-    bl_idname = "opendental.splint_from_curve"
+    bl_idname = "d3splint.splint_from_curve"
     bl_label = "Calculate Bezier Splint"
     bl_options = {'REGISTER','UNDO'}
 
@@ -1601,9 +1414,9 @@ class OPENDENTAL_OT_splint_bezier_model(bpy.types.Operator):
         odcutils.layer_management(context.scene.odc_splints, debug = dbg)   
         return {'FINISHED'}
 
-class OPENDENTAL_OT_splint_margin_trim(bpy.types.Operator):
+class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
     '''Cut a model with the margin line'''
-    bl_idname = "opendental.splint_model_trim"
+    bl_idname = "d3splint.splint_model_trim"
     bl_label = "Splint Trim Margin"
     bl_options = {'REGISTER','UNDO'}
 
@@ -1672,9 +1485,9 @@ class OPENDENTAL_OT_splint_margin_trim(bpy.types.Operator):
         return {'FINISHED'}
     
           
-class OPENDENTAL_OT_splint_margin_detail(bpy.types.Operator):
+class D3SPLINT_OT_splint_margin_detail(bpy.types.Operator):
     '''Use dyntopo sculpt to add/remove detail at margin'''
-    bl_idname = "opendental.splint_margin_detail"
+    bl_idname = "d3splint.splint_margin_detail"
     bl_label = "Splint Margin Detail Bezier Splint"
     bl_options = {'REGISTER','UNDO'}
 
@@ -1874,9 +1687,9 @@ class OPENDENTAL_OT_splint_margin_detail(bpy.types.Operator):
         bpy.ops.object.mode_set(mode = 'OBJECT')
         return {'FINISHED'}
 
-class OPENDENTAL_OT_splint_add_rim(bpy.types.Operator):
+class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
     """Create Meta Wax Rim previously defined maxillary and mandibular curves"""
-    bl_idname = "opendental.splint_rim_from_dual_curves"
+    bl_idname = "d3splint.splint_rim_from_dual_curves"
     bl_label = "Create Splint Rim "
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -2025,9 +1838,9 @@ class OPENDENTAL_OT_splint_add_rim(bpy.types.Operator):
         return context.window_manager.invoke_props_dialog(self)
     
     
-class OPENDENTAL_OT_splint_add_rim_curve(bpy.types.Operator):
+class D3SPLINT_OT_splint_add_rim_curve(bpy.types.Operator):
     """Create Meta Wax Rim from selected bezier curve"""
-    bl_idname = "opendental.splint_rim_from_curve"
+    bl_idname = "d3splint.splint_rim_from_curve"
     bl_label = "Create Rim from Curve"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -2166,9 +1979,9 @@ class OPENDENTAL_OT_splint_add_rim_curve(bpy.types.Operator):
 
         return context.window_manager.invoke_props_dialog(self)
 
-class OPENDENTAL_OT_splint_trim_model(bpy.types.Operator):
+class D3SPLINT_OT_splint_trim_model(bpy.types.Operator):
     """Trim model from buccal curve"""
-    bl_idname = "opendental.splint_trim_from_curve"
+    bl_idname = "d3splint.splint_trim_from_curve"
     bl_label = "Trim Splint Model"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -2374,9 +2187,9 @@ class OPENDENTAL_OT_splint_trim_model(bpy.types.Operator):
   
         return {'FINISHED'}
     
-class OPENDENTAL_OT_splint_mount_on_articulator(bpy.types.Operator):
+class D3SPLINT_OT_splint_mount_on_articulator(bpy.types.Operator):
     """Mount models on articulator"""
-    bl_idname = "opendental.splint_mount_articulator"
+    bl_idname = "d3splint.splint_mount_articulator"
     bl_label = "Mount in Articulator"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -2450,9 +2263,9 @@ def occlusal_surface_frame_change(scene):
         if hit[0]:
             v.co = imx_p * mx_jaw * hit[0]
         
-class OPENDENTAL_OT_splint_join_rim(bpy.types.Operator):
+class D3SPLINT_OT_splint_join_rim(bpy.types.Operator):
     """Join Rim to Shell"""
-    bl_idname = "opendental.splint_join_rim"
+    bl_idname = "d3splint.splint_join_rim"
     bl_label = "Join Shell to Rim"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -2487,9 +2300,9 @@ class OPENDENTAL_OT_splint_join_rim(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class OPENDENTAL_OT_splint_subtract_surface(bpy.types.Operator):
+class D3SPLINT_OT_splint_subtract_surface(bpy.types.Operator):
     """Subtract functions surface from Shell"""
-    bl_idname = "opendental.splint_subtract_surface"
+    bl_idname = "d3splint.splint_subtract_surface"
     bl_label = "Subtract Surface from Shell"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -2522,9 +2335,9 @@ class OPENDENTAL_OT_splint_subtract_surface(bpy.types.Operator):
         Plane.hide = True 
         return {'FINISHED'}
     
-class OPENDENTAL_OT_splint_finish_booleans(bpy.types.Operator):
+class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
     """Finish the Booleans"""
-    bl_idname = "opendental.splint_finish_booleans"
+    bl_idname = "d3splint.splint_finish_booleans"
     bl_label = "Finalize the Splint"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -2595,9 +2408,9 @@ class OPENDENTAL_OT_splint_finish_booleans(bpy.types.Operator):
         return {'FINISHED'}
     
         
-class OPENDENTAL_OT_splint_create_functional_surface(bpy.types.Operator):
+class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
     """Create functional surface using envelope of motion on articulator"""
-    bl_idname = "opendental.splint_animate_articulator"
+    bl_idname = "d3splint.splint_animate_articulator"
     bl_label = "Animate on Articulator"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -2642,9 +2455,9 @@ class OPENDENTAL_OT_splint_create_functional_surface(bpy.types.Operator):
         return {'FINISHED'}
     
 
-class OPENDENTAL_OT_splint_stop_functional_surface(bpy.types.Operator):
+class D3SPLINT_OT_splint_stop_functional_surface(bpy.types.Operator):
     """Create functional surface using envelope of motion on articulator"""
-    bl_idname = "opendental.splint_stop_articulator"
+    bl_idname = "d3splint.splint_stop_articulator"
     bl_label = "Stop Occlusal Surface"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -2665,9 +2478,9 @@ class OPENDENTAL_OT_splint_stop_functional_surface(bpy.types.Operator):
         
         return {'FINISHED'}
 
-class OPENDENTAL_OT_meta_splint_surface(bpy.types.Operator):
+class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
     """Create Offset Surface from mesh"""
-    bl_idname = "opendental.splint_offset_shell"
+    bl_idname = "d3splint.splint_offset_shell"
     bl_label = "Create Splint Outer Surface"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -2751,9 +2564,9 @@ class OPENDENTAL_OT_meta_splint_surface(bpy.types.Operator):
         row.prop(self, "radius")
         row.prop(self,"resolution")
         
-class OPENDENTAL_OT_meta_splint_passive_spacer(bpy.types.Operator):
+class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
     """Create Meta Offset Surface discs on verts, good for thin offsets .075 to 1mm"""
-    bl_idname = "opendental.splint_passive_spacer"
+    bl_idname = "d3splint.splint_passive_spacer"
     bl_label = "Create Splint Spacer"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -2927,9 +2740,9 @@ class OPENDENTAL_OT_meta_splint_passive_spacer(bpy.types.Operator):
         row.prop(self,"resolution")
  
  
-class OPENDENTAL_OT_splint_go_sculpt(bpy.types.Operator):
+class D3SPLINT_OT_splint_go_sculpt(bpy.types.Operator):
     '''Enter sculpt mode with good settings to start sculpting'''
-    bl_idname = "opendental.splint_start_sculpt"
+    bl_idname = "d3splint.splint_start_sculpt"
     bl_label = "Splint Sculpt Shell"
     bl_options = {'REGISTER','UNDO'}
 
@@ -2981,75 +2794,78 @@ class OPENDENTAL_OT_splint_go_sculpt(bpy.types.Operator):
         #brush.stroke_method = 'SPACE' 
 
         
-        return {'FINISHED'}                             
-def register():
-    bpy.utils.register_class(OPENDENTAL_OT_link_selection_splint)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_bezier_model)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_add_guides)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_subtract_holes)
-    bpy.utils.register_class(OPENDENTAL_OT_survey_model)
-    bpy.utils.register_class(OPENDENTAL_OT_survey_model_axis)
-    bpy.utils.register_class(OPENDENTAL_OT_blockout_model)
-    #bpy.utils.register_class(OPENDENTAL_OT_splint_margin_trim)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_buccal_marks)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_occlusal_arch)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_opposing)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_add_rim)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_trim_model)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_mount_on_articulator)
-    bpy.utils.register_class(OPENDENTAL_OT_meta_splint_passive_spacer)
-    bpy.utils.register_class(OPENDENTAL_OT_meta_splint_surface)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_create_functional_surface)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_stop_functional_surface)
+        return {'FINISHED'}
     
-    #bpy.utils.register_class(OPENDENTAL_OT_initiate_arch_curve)
-    bpy.utils.register_class(OPENDENTAL_OT_arch_curve)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_subtract_sleeves)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_bone)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_model)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_report)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_margin)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_margin_detail)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_join_rim)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_subtract_surface)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_go_sculpt)
-    bpy.utils.register_class(OPENDENTAL_OT_splint_finish_booleans)
+                             
+def register():
+    bpy.utils.register_class(D3SPLINT_OT_splint_model)
+    bpy.utils.register_class(D3SPLINT_OT_splint_opposing)
+    
+    bpy.utils.register_class(D3SPLINT_OT_survey_model)
+    bpy.utils.register_class(D3SPLINT_OT_survey_model_axis)
+    
+    bpy.utils.register_class(D3SPLINT_OT_splint_margin)
+    bpy.utils.register_class(D3SPLINT_OT_splint_buccal_marks)
+    bpy.utils.register_class(D3SPLINT_OT_splint_occlusal_arch)
+    bpy.utils.register_class(D3SPLINT_OT_splint_trim_model)
 
-    #bpy.utils.register_class(OPENDENTAL_OT_mesh_trim_polyline)
+    bpy.utils.register_class(D3SPLINT_OT_meta_splint_surface)
+    bpy.utils.register_class(D3SPLINT_OT_meta_splint_passive_spacer)
+    bpy.utils.register_class(D3SPLINT_OT_splint_add_rim)
+    bpy.utils.register_class(D3SPLINT_OT_splint_join_rim)
+    
+    bpy.utils.register_class(D3SPLINT_OT_splint_mount_on_articulator)
+    bpy.utils.register_class(D3SPLINT_OT_splint_create_functional_surface)
+    bpy.utils.register_class(D3SPLINT_OT_splint_stop_functional_surface)
+   
+    bpy.utils.register_class(D3SPLINT_OT_splint_subtract_surface)
+    bpy.utils.register_class(D3SPLINT_OT_splint_go_sculpt)
+    bpy.utils.register_class(D3SPLINT_OT_splint_finish_booleans)
+
+    #Experimental
+    #bpy.utils.register_class(D3SPLINT_OT_splint_margin_detail)
+    #bpy.utils.register_class(D3SPLINT_OT_splint_margin_trim)
+    
+    
+    #Old from ODC Splints
+    #bpy.utils.register_class(D3SPLINT_OT_blockout_model)
+    #bpy.utils.register_class(D3SPLINT_OT_link_selection_splint)
+    #bpy.utils.register_class(D3SPLINT_OT_splint_bezier_model)
+    #bpy.utils.register_class(D3SPLINT_OT_splint_add_guides)
+    #bpy.utils.register_class(D3SPLINT_OT_splint_subtract_holes)
+    #bpy.utils.register_class(D3SPLINT_OT_mesh_trim_polyline)
+    #bpy.utils.register_class(D3SPLINT_OT_splint_report)
+    #bpy.utils.register_class(D3SPLINT_OT_splint_subtract_sleeves)
+    #bpy.utils.register_class(D3SPLINT_OT_splint_bone)
+    #bpy.utils.register_class(D3SPLINT_OT_initiate_arch_curve)
+    
+    
     #bpy.utils.register_module(__name__)
     
 def unregister():
-    bpy.utils.unregister_class(OPENDENTAL_OT_link_selection_splint)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_bezier_model)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_add_guides)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_subtract_holes)
-    bpy.utils.unregister_class(OPENDENTAL_OT_survey_model)
-    bpy.utils.unregister_class(OPENDENTAL_OT_survey_model_axis)
-    bpy.utils.unregister_class(OPENDENTAL_OT_blockout_model)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_margin_trim)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_buccal_marks)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_occlusal_arch)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_opposing)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_add_rim)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_trim_model)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_mount_on_articulator)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_create_functional_surface)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_stop_functional_surface)
-    bpy.utils.unregister_class(OPENDENTAL_OT_meta_splint_surface)
-    bpy.utils.unregister_class(OPENDENTAL_OT_meta_splint_passive_spacer)
-    #bpy.utils.unregister_class(OPENDENTAL_OT_initiate_arch_curve)
-    bpy.utils.unregister_class(OPENDENTAL_OT_arch_curve)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_subtract_sleeves)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_bone)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_model)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_report)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_margin)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_margin_detail)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_join_rim)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_subtract_surface)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_go_sculpt)
-    bpy.utils.unregister_class(OPENDENTAL_OT_splint_finish_booleans)
-    #bpy.utils.unregister_class(OPENDENTAL_OT_mesh_trim_polyline)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_model)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_opposing)
+    
+    bpy.utils.unregister_class(D3SPLINT_OT_survey_model)
+    bpy.utils.unregister_class(D3SPLINT_OT_survey_model_axis)
+    
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_margin)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_buccal_marks)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_occlusal_arch)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_trim_model)
+
+    bpy.utils.unregister_class(D3SPLINT_OT_meta_splint_surface)
+    bpy.utils.unregister_class(D3SPLINT_OT_meta_splint_passive_spacer)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_add_rim)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_join_rim)
+    
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_mount_on_articulator)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_create_functional_surface)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_stop_functional_surface)
+   
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_subtract_surface)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_go_sculpt)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_finish_booleans)
     
 if __name__ == "__main__":
     register()
