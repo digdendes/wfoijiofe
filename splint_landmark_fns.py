@@ -114,6 +114,7 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
         
         if nmode in {'finish','cancel'}:
             context.space_data.show_manipulator = True
+            context.space_data.transform_manipulators = {'TRANSLATE'}
             #clean up callbacks
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
             return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
@@ -124,7 +125,7 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
 
     def invoke(self,context, event):
         
-        self.splint = odcutils.splint_selction(context)[0]    
+        self.splint = context.scene.odc_splints[0]
         self.crv = None
         margin = "Occlusal Curve Max"
            
@@ -141,6 +142,7 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
             self.crv = CurveDataManager(context,snap_type ='OBJECT', snap_object = Model, shrink_mod = False, name = margin)
             self.crv.crv_obj.parent = Model
             context.space_data.show_manipulator = False
+            context.space_data.transform_manipulators = {'TRANSLATE'}
         else:
             self.report({'ERROR'}, "Need to set the Master Model first!")
             return {'CANCELLED'}
@@ -246,6 +248,8 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         
         if nmode in {'finish','cancel'}:
             context.space_data.show_manipulator = True
+            context.space_data.transform_manipulators = {'TRANSLATE'}
+            
             #clean up callbacks
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
             return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
@@ -256,7 +260,7 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
 
     def invoke(self,context, event):
         
-        self.splint = odcutils.splint_selction(context)[0]    
+        self.splint = context.scene.odc_splints[0]    
            
         if self.splint.model != '' and self.splint.model in bpy.data.objects:
             Model = bpy.data.objects[self.splint.model]
@@ -270,6 +274,7 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
             bpy.ops.view3d.view_selected()
             self.crv = PointPicker(context,snap_type ='OBJECT', snap_object = Model)
             context.space_data.show_manipulator = False
+            context.space_data.transform_manipulators = {'TRANSLATE'}
             
         else:
             self.report({'ERROR'}, "Need to mark the UpperJaw model first!")

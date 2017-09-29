@@ -615,27 +615,9 @@ def splint_selction(context):
     returns a list,
     '''
     sce = context.scene
-    splint = None
-    settings = get_settings()
-    b = settings.behavior
-    behave_mode = settings.behavior_modes[int(b)]
-    
-    if behave_mode == 'LIST':
-        #choose just one tooth in the list
-        splint = sce.odc_splints[sce.odc_splint_index]
-        
-        
-    elif behave_mode == 'ACTIVE':
-        #test the active object, if nothing...default to item_list
-        if context.object:
-            ob = context.object
-            tooth = active_odc_item_candidate(sce.odc_splints, ob,[])
-            if tooth:
-                splint = tooth
-    
-    if splint == None:
-        splint = sce.odc_splints[sce.odc_splint_index]
-                    
+
+    splint = sce.odc_splints[sce.odc_splint_index]
+                     
     return [splint]
 
 def tooth_selection(context):

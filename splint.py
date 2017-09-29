@@ -629,6 +629,7 @@ class D3SPLINT_OT_splint_buccal_marks(bpy.types.Operator):
         if nmode in {'finish','cancel'}:
             #clean up callbacks
             context.space_data.show_manipulator = False
+            context.space_data.transform_manipulators = {'TRANSLATE'}
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
             return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
         
@@ -638,7 +639,7 @@ class D3SPLINT_OT_splint_buccal_marks(bpy.types.Operator):
 
     def invoke(self,context, event):
         
-        self.splint = odcutils.splint_selction(context)[0]    
+        self.splint = context.scene.odc_splints[0]   
         self.crv = None
         margin = self.splint.name + '_buccal'
            
@@ -653,6 +654,7 @@ class D3SPLINT_OT_splint_buccal_marks(bpy.types.Operator):
             bpy.ops.view3d.viewnumpad(type = 'FRONT')
             bpy.ops.view3d.view_selected()
             context.space_data.show_manipulator = False
+            context.space_data.transform_manipulators = {'TRANSLATE'}
             self.crv = CurveDataManager(context,snap_type ='OBJECT', snap_object = Model, shrink_mod = False, name = margin)
             self.crv.crv_obj.parent = Model
             
@@ -732,66 +734,19 @@ class D3SPLINT_OT_splint_occlusal_arch(bpy.types.Operator):
         plane_obj = bpy.data.objects.new('Occlusal Plane', me)
         plane_obj.matrix_world = T * R
         context.scene.objects.link(plane_obj)
+        plane_obj.hide = True
         bme.free()
         
-        #bme = bmesh.new()
-        #bme.verts.ensure_lookup_table()
-        #bme.edges.ensure_lookup_table()
-        #bme.faces.ensure_lookup_table()
-        #bmesh.ops.create_grid(bme, x_segments = 2, y_segments = 2, size = 40)
+        Opposing = bpy.data.objects.get(self.splint.opposing)
+        Opposing.hide = True
         
-        #new_me = bpy.data.meshes.new('Lower Plane')
-        #bme.to_mesh(new_me)
-        #plane_obj2 = bpy.data.objects.new('Lower Plane', new_me)
-        #plane_obj2.matrix_world = T * R
-        #context.scene.objects.link(plane_obj2)
-        #bme.free()
-        
-        #mod = plane_obj.modifiers.new('Shrink', type = 'SHRINKWRAP')
-        #mod.wrap_method = 'PROJECT'
-        #mod.use_project_z = True
-        #mod.use_negative_direction = True
-        #mod.use_positive_direction = True
-        #mod.target = bpy.data.objects[context.scene.odc_splints[0].opposing]
-        #mod.auxiliary_target = plane_obj2
-        
-        
-        #plane_obj2.hide = True
-        #plane_obj.hide = True
-        
-        #Lets Calculate the matrix transform for an
-        #8 degree Fox plane cant.
-        #Z_w = Vector((0,0,1))
-        #X_w = Vector((1,0,0))
-        #Y_w = Vector((0,1,0))
-        #Fox_R = Matrix.Rotation(8 * math.pi /180, 3, 'Y')
-        #Z_fox = Fox_R * Z_w
-        #X_fox = Fox_R * X_w
-        
-        #R_fox = Matrix.Identity(3)  #make the columns of matrix U, V, W
-        #R_fox[0][0], R_fox[0][1], R_fox[0][2]  = X_fox[0] ,Y_w[0],  Z_fox[0]
-        #R_fox[1][0], R_fox[1][1], R_fox[1][2]  = X_fox[1], Y_w[1],  Z_fox[1]
-        #R_fox[2][0] ,R_fox[2][1], R_fox[2][2]  = X_fox[2], Y_w[2],  Z_fox[2]
-        
-     
-        #mx_final = T * R
-        #mx_inv = mx_final.inverted()
-        
-        #incisal = mx_inv * v_ant
-        
-        #average distance from campers plane to occlusal
-        #plane is 30 mm
-        #file:///C:/Users/Patrick/Downloads/CGBCC4_2014_v6n6_483.pdf
-        #incisal_final = Vector((90, 0, -30))
-        
-        
-        #T2 = Matrix.Translation(incisal_final - incisal)
-        
-        #mx_mount = T2 * R_fox.to_4x4()
-        
-        #self.crv.crv_obj.data.transform(mx_inv)
-        #self.crv.crv_obj.matrix_world = mx_mount
-        
+        Model = bpy.data.objects.get(self.splint.model)
+        if Model:
+            Model.select = True
+            Model.hide = False
+            context.scene.objects.active = Model
+            bpy.ops.view3d.viewnumpad(type = 'BOTTOM')
+            bpy.ops.view3d.view_selected()
             
     def modal_nav(self, event):
         events_nav = {'MIDDLEMOUSE', 'WHEELINMOUSE','WHEELOUTMOUSE', 'WHEELUPMOUSE','WHEELDOWNMOUSE'} #TODO, better navigation, another tutorial
@@ -876,6 +831,7 @@ class D3SPLINT_OT_splint_occlusal_arch(bpy.types.Operator):
         
         if nmode in {'finish','cancel'}:
             context.space_data.show_manipulator = True
+            context.space_data.transform_manipulators = {'TRANSLATE'}
             #clean up callbacks
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
             return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
@@ -886,7 +842,7 @@ class D3SPLINT_OT_splint_occlusal_arch(bpy.types.Operator):
 
     def invoke(self,context, event):
         
-        self.splint = odcutils.splint_selction(context)[0]    
+        self.splint = context.scene.odc_splints[0]    
         self.crv = None
         margin = 'Occlusal Curve Mand'
            
@@ -901,6 +857,7 @@ class D3SPLINT_OT_splint_occlusal_arch(bpy.types.Operator):
             bpy.ops.view3d.viewnumpad(type = 'TOP')
             bpy.ops.view3d.view_selected()
             context.space_data.show_manipulator = False
+            context.space_data.transform_manipulators = {'TRANSLATE'}
             self.crv = CurveDataManager(context,snap_type ='OBJECT', snap_object = Model, shrink_mod = False, name = margin)
             self.crv.crv_obj.parent = Model
             
@@ -1018,6 +975,7 @@ class D3SPLINT_OT_splint_margin(bpy.types.Operator):
         if nmode in {'finish','cancel'}:
             #clean up callbacks
             context.space_data.show_manipulator = True
+            context.space_data.transform_manipulators = {'TRANSLATE'}
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
             return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
         
@@ -1043,7 +1001,7 @@ class D3SPLINT_OT_splint_margin(bpy.types.Operator):
             self.splint = my_item
             
         else:
-            self.splint = odcutils.splint_selction(context)[0]
+            self.splint = context.scene.odc_splints[0]
             
         self.crv = None
         margin = self.splint.name + '_outline'
@@ -1085,6 +1043,7 @@ class D3SPLINT_OT_splint_margin(bpy.types.Operator):
         self._handle = bpy.types.SpaceView3D.draw_handler_add(ispltmgn_draw_callback, (self, context), 'WINDOW', 'POST_PIXEL')
         context.window_manager.modal_handler_add(self) 
         context.space_data.show_manipulator = False
+        context.space_data.transform_manipulators = {'TRANSLATE'}
         return {'RUNNING_MODAL'}
     
     
@@ -1218,8 +1177,11 @@ class D3SPLINT_OT_survey_model(bpy.types.Operator):
         context.scene.cursor_location = ob.location
         bpy.ops.view3d.view_center_cursor()
         bpy.ops.view3d.viewnumpad(type = 'FRONT')
+        bpy.ops.view3d.view_selected()
         
+        context.space_data.transform_manipulators = {'ROTATE'}
         
+
         return {'FINISHED'}
 
 
