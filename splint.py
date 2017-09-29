@@ -2434,10 +2434,6 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
             
             keep_verts = set()
             for v in bme.verts:
-                a = imx_s * mx_p * v.co
-                b = imx_s * mx_p * (v.co + Vector((0,0,30)))
-                
-                hit = bvh_shell.ray_cast(a, Vector((0,0,1)))
                 ray_orig = mx_p * v.co
                 ray_target = mx_p * v.co + 5 * Vector((0,0,1))
                 ok, loc, no, face_ind = Shell.ray_cast(imx_s * ray_orig, imx_s * ray_target - imx_s*ray_orig)
