@@ -2223,7 +2223,13 @@ def occlusal_surface_frame_change(scene):
         hit = bvh.ray_cast(imx_j * a, imx_j * b - imx_j * a)
         
         if hit[0]:
-            v.co = imx_p * mx_jaw * hit[0]
+            #check again
+            hit2 = bvh.ray_cast(hit[0], imx_j * b - hit[0])
+            
+            if hit2[0]:
+                v.co = imx_p * mx_jaw * hit[0]
+            else:
+                v.co = imx_p * mx_jaw * hit[0]
         
 class D3SPLINT_OT_splint_join_rim(bpy.types.Operator):
     """Join Rim to Shell"""
@@ -2258,6 +2264,7 @@ class D3SPLINT_OT_splint_join_rim(bpy.types.Operator):
         bool_mod.operation = 'UNION'
         bool_mod.object = Rim
         Rim.hide = True
+        Shell.hide = False
          
         return {'FINISHED'}
 
@@ -2286,10 +2293,11 @@ class D3SPLINT_OT_splint_subtract_surface(bpy.types.Operator):
         
         if Shell == None:
             self.report({'ERROR'}, 'Need to calculate splint shell first')
-        
+            return {'CANCELLED'}
         if Plane == None:
             self.report({'ERROR'}, 'Need to generate functional surface first')
-            
+            return {'CANCELLED'}
+        
         tracking.trackUsage("D3Splint:SubtractSurface",None)
         bool_mod = Shell.modifiers.new('Join Rim', type = 'BOOLEAN')
         bool_mod.operation = 'DIFFERENCE'
@@ -2406,6 +2414,61 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
             bvh = BVHTree.FromBMesh(bme)
             splint_cache.write_mesh_cache(Model, bme, bvh)
         
+        
+        #filter the occlusal surface verts
+        Plane = bpy.data.objects.get('Occlusal Plane')
+        Shell = bpy.data.objects.get('Splint Shell')
+        if Shell:
+            bme_shell = bmesh.new()
+            bvh_shell = BVHTree.FromBMesh(bme_shell)
+            
+            bme = bmesh.new()
+            bme.from_mesh(Plane.data)
+            bme.verts.ensure_lookup_table()
+            
+            mx_p = Plane.matrix_world
+            imx_p = mx_p.inverted()
+            
+            mx_s = Shell.matrix_world
+            imx_s = mx_s.inverted()
+            
+            keep_verts = set()
+            for v in bme.verts:
+                a = imx_s * mx_p * v.co
+                b = imx_s * mx_p * (v.co + Vector((0,0,30)))
+                
+                hit = bvh_shell.ray_cast(a, Vector((0,0,1)))
+                ray_orig = mx_p * v.co
+                ray_target = mx_p * v.co + 5 * Vector((0,0,1))
+                ok, loc, no, face_ind = Shell.ray_cast(imx_s * ray_orig, imx_s * ray_target - imx_s*ray_orig)
+            
+                if ok:
+                    keep_verts.add(v)
+        
+            print('there are %i keep verts' % len(keep_verts))
+            front = set()
+            for v in keep_verts:
+        
+                immediate_neighbors = [ed.other_vert(v) for ed in v.link_edges if ed.other_vert(v) not in keep_verts]
+            
+                front.update(immediate_neighbors)
+                front.difference_update(keep_verts)
+            
+            keep_verts.update(front)
+        
+            for i in range(0,5):
+                new_neighbors = set()
+                for v in front:
+                    immediate_neighbors = [ed.other_vert(v) for ed in v.link_edges if ed.other_vert(v) not in front]
+                    new_neighbors.update(immediate_neighbors)
+                    
+                keep_verts.update(front)
+                front = new_neighbors
+                
+        delete_verts = [v for v in bme.verts if v not in keep_verts]
+        bmesh.ops.delete(bme, geom = delete_verts, context = 1)
+        bme.to_mesh(Plane.data)
+                
         tracking.trackUsage("D3Splint:CreateSurface",None)
         context.scene.frame_current = -1
         context.scene.frame_current = 0
