@@ -114,19 +114,14 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         row = layout.row()
         row.template_list("SCENE_UL_odc_splints","", sce, "odc_splints", sce, "odc_splint_index")
         
-        col = row.column(align=True)
-        
-        col.operator("d3splint.add_splint", text = "Start a Splint")
-        col.operator("d3splint.remove_splint", text = "Remove Splint")
-        
         row = layout.row()
         row.operator("import_mesh.stl", text = 'Import STL Models')
                 
         row = layout.row()
-        row.operator("d3splint.model_set", text = "Set Model")
+        row.operator("d3splint.pick_model", text = "Set Splint Model")
         
         row = layout.row()
-        row.operator("d3splint.splint_opposing_set", text = "Set Opposing")
+        row.operator("d3splint.pick_opposing", text = "Set Opposing")
         
         row = layout.row()
         row.operator("d3splint.splint_mark_landmarks", text = "Set Landmarks")

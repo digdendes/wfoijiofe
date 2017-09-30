@@ -141,7 +141,8 @@ class D3SPLINT_OT_keep_sculpt_mask(bpy.types.Operator):
         bme.to_mesh(context.object.data)
         bme.free()
         context.object.data.update()
-        
+        bpy.ops.paint.mask_flood_fill(mode = 'VALUE', value = 0)
+
         return {'FINISHED'}
 
 
@@ -160,6 +161,8 @@ class D3SPLINT_OT_mask_to_convex_hull(bpy.types.Operator):
     
     def execute(self, context):
         
+        start_ob = context.object
+        
         bme = bmesh.new()
             
         bme.from_mesh(context.object.data)
@@ -172,9 +175,58 @@ class D3SPLINT_OT_mask_to_convex_hull(bpy.types.Operator):
 
         bmesh.ops.delete(bme, geom = delete, context = 1)
         
-        out_geom = bmesh.ops.convex_hull(bme, input = bme.verts[:])
+        out_geom = bmesh.ops.convex_hull(bme, input = bme.verts[:], use_existing_faces = True)
         
         print('out geom')
+        
+        unused_geom = out_geom['geom_interior']
+        
+        del_v = [ele for ele in unused_geom if isinstance(ele, bmesh.types.BMVert)]
+        del_e = [ele for ele in unused_geom if isinstance(ele, bmesh.types.BMEdge)]
+        del_f = [ele for ele in unused_geom if isinstance(ele, bmesh.types.BMFace)]
+        
+        #these must go
+        bmesh.ops.delete(bme, geom = del_v, context = 1)
+        #bmesh.ops.delete(bme, geom = del_e, context = )
+        bmesh.ops.delete(bme, geom = del_f, context = 5)
+        #then we need to remove internal faces that got enclosed in
+        holes_geom = out_geom['geom_holes']
+        
+        
+        for v in bme.verts:
+            v.select_set(False)
+        for ed in bme.edges:
+            ed.select_set(False)
+        for f in bme.faces:
+            f.select_set(False)
+            
+        bme.select_mode = {'FACE'}    
+        
+        del_f = [ele for ele in holes_geom if isinstance(ele, bmesh.types.BMFace)]
+        #bmesh.ops.delete(bme, geom = del_f, context = 5)
+        
+        
+        
+        #find bad edges
+        
+        bad_eds = [ed for ed in bme.edges if len(ed.link_faces) != 2]
+        print("there are %i bad eds" % len(bad_eds))
+        
+        eds_zero_face = [ed for ed in bad_eds if len(ed.link_faces) == 0]
+        eds_one_face = [ed for ed in bad_eds if len(ed.link_faces) == 1]
+        eds_three_face = [ed for ed in bad_eds if len(ed.link_faces) == 3]
+        eds_other = [ed for ed in bad_eds if len(ed.link_faces) > 3]
+        
+        print('there are %i bad edges with 0 facew' % len(eds_zero_face))
+        print('there are %i bad edges with 1 faces' % len(eds_one_face))
+        print('there are %i bad edges with 3 faces' % len(eds_three_face))
+        print('there are %i bad edges with more faces' % len(eds_other))
+        
+        
+        #First Delete loose edge
+        
+        bad_faces = [f for f in bme.faces if not all(len(ed.link_faces) == 2 for ed in f.edges)]
+        print("there are %i bad faces" % len(bad_faces))
         
         new_me = bpy.data.meshes.new("hull")
         new_ob = bpy.data.objects.new("hull", new_me)
@@ -186,6 +238,19 @@ class D3SPLINT_OT_mask_to_convex_hull(bpy.types.Operator):
         context.object.data.update()
         
         bpy.ops.paint.mask_flood_fill(mode = 'VALUE', value = 0)
+        
+        mod = new_ob.modifiers.new('Remesh', type = 'REMESH')
+        mod.mode = 'SMOOTH'
+        mod.octree_depth = 5
+        
+        final_bme = bmesh.new()
+        final_bme.from_object(new_ob, context.scene, deform = True)
+        
+        new_ob.modifiers.remove(mod)
+        final_bme.to_mesh(new_ob.data)
+        
+        final_bme.free()
+        
         return {'FINISHED'}
         
 class D3SPLINT_OT_delete_islands(bpy.types.Operator):

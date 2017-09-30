@@ -12,10 +12,11 @@ import odcutils
 from points_picker import PointPicker
 from textbox import TextBox
 from mathutils import Vector, Matrix
+from bpy_extras.view3d_utils import region_2d_to_location_3d, region_2d_to_origin_3d, region_2d_to_vector_3d
 import math
 from mesh_cut import flood_selection_faces, edge_loops_from_bmedges, flood_selection_faces_limit
 from curve import CurveDataManager, PolyLineKnife
-
+from common_utilities import bversion
 import tracking
 
 def arch_crv_draw_callback(self, context):  
@@ -198,7 +199,7 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
             
             if len(self.crv.b_pts) == 0:
                 txt = "Right Molar"
-                help_txt = "DRAW LANDMARK POINTS\n Left Click on Left Molar Occlusal Surface"
+                help_txt = "DRAW LANDMARK POINTS\n Click on Symmetric Patient Left Side Molar Occlusal Surface"
                 self.help_box.raw_text = help_txt
                 self.help_box.format_and_wrap_text()
                 
@@ -283,7 +284,7 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
 
         
         #TODO, tweak the modifier as needed
-        help_txt = "DRAW LANDMARK POINTS\n Click on Right Molar Occlusal Surface"
+        help_txt = "DRAW LANDMARK POINTS\n Click on the Patient's Right Molar Occlusal Surface"
         self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
         self.help_box.snap_to_corner(context, corner = [1,1])
         self.mode = 'main'
@@ -622,18 +623,299 @@ class D3SPLINT_OT_splint_trim_model_paint(bpy.types.Operator):
         
         
         return {'FINISHED'}
+
+def pick_model_callback(self, context):
+    self.help_box.draw()
+    
+class D3SPLINT_OT_pick_model(bpy.types.Operator):
+    """Left Click on Model to Build Splint"""
+    bl_idname = "d3splint.pick_model"
+    bl_label = "Pick Model"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls,context):
+        return True
+    
+    def modal_nav(self, event):
+        events_nav = {'MIDDLEMOUSE', 'WHEELINMOUSE','WHEELOUTMOUSE', 'WHEELUPMOUSE','WHEELDOWNMOUSE'} #TODO, better navigation, another tutorial
+        handle_nav = False
+        handle_nav |= event.type in events_nav
+
+        if handle_nav: 
+            return 'nav'
+        return ''
+    
+    def modal_main(self,context,event):
+        # general navigation
+        nmode = self.modal_nav(event)
+        if nmode != '':
+            return nmode  #stop here and tell parent modal to 'PASS_THROUGH'
+
         
+        if event.type == 'MOUSEMOVE':
+            self.hover_scene(context, event.mouse_region_x, event.mouse_region_y)    
+            return 'main'
+        
+        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+            
+            return self.pick_model(context)
+        
+            
+        elif event.type == 'ESC' and event.value == 'PRESS':
+            return 'cancel' 
+
+        return 'main'
+    
+
+
+    def modal(self, context, event):
+        context.area.tag_redraw()
+        
+        FSM = {}    
+        FSM['main']    = self.modal_main
+        FSM['nav']     = self.modal_nav
+        
+        nmode = FSM[self.mode](context, event)
+        
+        if nmode == 'nav': 
+            return {'PASS_THROUGH'}
+        
+        if nmode in {'finish','cancel'}:
+            #clean up callbacks
+            context.window.cursor_modal_restore()
+            context.area.header_text_set()
+            context.user_preferences.themes[0].view_3d.outline_width = self.outline_width
+        
+            bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+            return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
+        
+        if nmode: self.mode = nmode
+        
+        return {'RUNNING_MODAL'}
+
+    def hover_scene(self,context,x, y):
+        scene = context.scene
+        region = context.region
+        rv3d = context.region_data
+        coord = x, y
+        ray_max = 10000
+        view_vector = region_2d_to_vector_3d(region, rv3d, coord)
+        ray_origin = region_2d_to_origin_3d(region, rv3d, coord)
+        ray_target = ray_origin + (view_vector * ray_max)
+
+        if bversion() <= '002.076.000':
+            result, ob, mx, loc, normal = scene.ray_cast(ray_origin, ray_target)
+        else:
+            result, loc, normal, idx, ob, mx = scene.ray_cast(ray_origin, ray_target)
+
+        if result:
+            self.ob = ob
+            self.ob_preview = ob.name
+            context.area.header_text_set(ob.name)
+            
+            for obj in context.scene.objects:
+                if obj != ob:
+                    obj.select = False
+                else:
+                    obj.select = True
+        
+        else:
+            self.ob = None
+            self.ob_preview = 'None'
+            context.area.header_text_set('None')
+            for ob in context.scene.objects:
+                ob.select = False
+            if context.object:
+                context.scene.objects.active = None
+    
+    def pick_model(self, context):
+        
+        if self.ob == None:
+            return 'main'
+        
+        n = context.scene.odc_splint_index
+        if len(context.scene.odc_splints) != 0:
+            
+            odc_splint = context.scene.odc_splints[n]
+            odc_splint.model = self.ob.name
+            
+        else:
+            my_item = context.scene.odc_splints.add()        
+            my_item.name = 'Splint'
+            my_item.model = self.ob.name
+        
+        tracking.trackUsage("D3Splint:PickModel")
+        return 'finish'
+            
+    def invoke(self,context, event):
+        
+        self.outline_width = context.user_preferences.themes[0].view_3d.outline_width
+        context.user_preferences.themes[0].view_3d.outline_width = 4
+        
+        self.ob_preview = 'None'
+        context.window.cursor_modal_set('EYEDROPPER')
+        
+        #TODO, tweak the modifier as needed
+        help_txt = "Pick Model\n\n Hover over objects in the scene \n left click on model that splint will build on \n ESC to cancel"
+        self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
+        self.help_box.snap_to_corner(context, corner = [1,1])
+        self.mode = 'main'
+        self._handle = bpy.types.SpaceView3D.draw_handler_add(pick_model_callback, (self, context), 'WINDOW', 'POST_PIXEL')
+        context.window_manager.modal_handler_add(self) 
+        
+        tracking.trackUsage("D3Splint:MarkOutline", None)
+        return {'RUNNING_MODAL'}
+   
+class D3SPLINT_OT_pick_opposing(bpy.types.Operator):
+    """Left Click on Model to mark the opposing"""
+    bl_idname = "d3splint.pick_opposing"
+    bl_label = "Pick Opposing"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls,context):
+        if len(context.scene.odc_splints) == 0:
+            return False
+        return True
+    
+    def modal_nav(self, event):
+        events_nav = {'MIDDLEMOUSE', 'WHEELINMOUSE','WHEELOUTMOUSE', 'WHEELUPMOUSE','WHEELDOWNMOUSE'} #TODO, better navigation, another tutorial
+        handle_nav = False
+        handle_nav |= event.type in events_nav
+
+        if handle_nav: 
+            return 'nav'
+        return ''
+    
+    def modal_main(self,context,event):
+        # general navigation
+        nmode = self.modal_nav(event)
+        if nmode != '':
+            return nmode  #stop here and tell parent modal to 'PASS_THROUGH'
+
+        
+        if event.type == 'MOUSEMOVE':
+            self.hover_scene(context, event.mouse_region_x, event.mouse_region_y)    
+            return 'main'
+        
+        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+            
+            return self.pick_model(context)
+        
+            
+        elif event.type == 'ESC' and event.value == 'PRESS':
+            return 'cancel' 
+
+        return 'main'
+    
+
+
+    def modal(self, context, event):
+        context.area.tag_redraw()
+        
+        FSM = {}    
+        FSM['main']    = self.modal_main
+        FSM['nav']     = self.modal_nav
+        
+        nmode = FSM[self.mode](context, event)
+        
+        if nmode == 'nav': 
+            return {'PASS_THROUGH'}
+        
+        if nmode in {'finish','cancel'}:
+            #clean up callbacks
+            context.window.cursor_modal_restore()
+            context.area.header_text_set()
+            context.user_preferences.themes[0].view_3d.outline_width = self.outline_width
+        
+            bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+            return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
+        
+        if nmode: self.mode = nmode
+        
+        return {'RUNNING_MODAL'}
+
+    def hover_scene(self,context,x, y):
+        scene = context.scene
+        region = context.region
+        rv3d = context.region_data
+        coord = x, y
+        ray_max = 10000
+        view_vector = region_2d_to_vector_3d(region, rv3d, coord)
+        ray_origin = region_2d_to_origin_3d(region, rv3d, coord)
+        ray_target = ray_origin + (view_vector * ray_max)
+
+        if bversion() <= '002.076.000':
+            result, ob, mx, loc, normal = scene.ray_cast(ray_origin, ray_target)
+        else:
+            result, loc, normal, idx, ob, mx = scene.ray_cast(ray_origin, ray_target)
+
+        if result:
+            self.ob = ob
+            self.ob_preview = ob.name
+            context.area.header_text_set(ob.name)
+            
+            for obj in context.scene.objects:
+                if obj != ob:
+                    obj.select = False
+                else:
+                    obj.select = True
+        
+        else:
+            self.ob = None
+            self.ob_preview = 'None'
+            context.area.header_text_set('None')
+            for ob in context.scene.objects:
+                ob.select = False
+            if context.object:
+                context.scene.objects.active = None
+    
+    def pick_model(self, context):
+        
+        if self.ob == None:
+            return 'main'
+        
+        n = context.scene.odc_splint_index
+        odc_splint = context.scene.odc_splints[n]
+        odc_splint.opposing = self.ob.name
+    
+        tracking.trackUsage("D3Splint:SetOpposing")
+        return 'finish'
+            
+    def invoke(self,context, event):
+        
+        self.outline_width = context.user_preferences.themes[0].view_3d.outline_width
+        context.user_preferences.themes[0].view_3d.outline_width = 4
+        
+        self.ob_preview = 'None'
+        context.window.cursor_modal_set('EYEDROPPER')
+        
+        #TODO, tweak the modifier as needed
+        help_txt = "Pick Model\n\n Hover over objects and left click on opposing model\n ESC to cancel"
+        self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
+        self.help_box.snap_to_corner(context, corner = [1,1])
+        self.mode = 'main'
+        self._handle = bpy.types.SpaceView3D.draw_handler_add(pick_model_callback, (self, context), 'WINDOW', 'POST_PIXEL')
+        context.window_manager.modal_handler_add(self) 
+        
+        tracking.trackUsage("D3Splint:PickOpposing", None)
+        return {'RUNNING_MODAL'}     
 def register():
     bpy.utils.register_class(D3SPLINT_OT_splint_land_marks)
     bpy.utils.register_class(D3SPLINT_OT_splint_paint_margin)  
     bpy.utils.register_class(D3SPLINT_OT_splint_trim_model_paint)
     bpy.utils.register_class(D3SPLINT_OT_splint_occlusal_arch_max)
+    bpy.utils.register_class(D3SPLINT_OT_pick_model)
+    bpy.utils.register_class(D3SPLINT_OT_pick_opposing)
      
 def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_splint_land_marks)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_paint_margin)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_trim_model_paint)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_occlusal_arch_max)
+    bpy.utils.unregister_class(D3SPLINT_OT_pick_model)
+    bpy.utils.unregister_class(D3SPLINT_OT_pick_opposing)
     
 if __name__ == "__main__":
     register()
