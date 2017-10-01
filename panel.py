@@ -98,7 +98,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
 
         sce = bpy.context.scene
         layout = self.layout
-
+        prefs = get_settings()
         #split = layout.split()
 
         #row = layout.row()
@@ -181,6 +181,18 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         col.operator("d3splint.splint_join_rim", text = "Join rim to Shell")
         
         row = layout.row()
+        row.prop(prefs, "show_occlusal_mod")
+        if get_settings().show_occlusal_mod:
+            row = layout.row()
+            row.label('Occlusal Modification [BETA!]')
+        
+            row = layout.row()
+            col = row.column()
+            col.operator("d3splint.convexify_lower", text = "Make Convex (FAST)")
+            col.operator("d3splint.convexify_lower", text = "Make Convex (SLOW)").method1 = 'CARVE'
+            col.operator("d3splint.join_convex_lower", text = "Join Convex Elements")
+            
+        row = layout.row()
         row.label('Articulation/Mounting')
         row = layout.row()
         col = row.column()
@@ -234,8 +246,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         row = layout.row()
         col = row.column()
         col.operator("d3splint.splint_finish_booleans", text = "Finalize The Splint")
-        
-        
+        col.operator("d3splint.export_splint_stl", text = "Export Splint STL")
           
 class VIEW3D_PT_D3SplintModels(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
@@ -265,7 +276,8 @@ class VIEW3D_PT_D3SplintModels(bpy.types.Panel):
         col = row.column(align=True)
             
         col.operator("d3splint.enter_sculpt_paint_mask", text = "Paint Model")
-        col.operator("d3splint.delete_sculpt_mask", text = "Delete Painted")
+        col.operator("paint.mask_flood_fill", text = "Clear Paing").mode = 'VALUE'
+        col.operator("d3splint.delete_sculpt_mask", text = "Delete Painted") #defaults to .value = 0
         col.operator("d3splint.delete_sculpt_mask_inverse", text = "Keep Only Painted")
         col.operator("d3splint.delete_islands", text = "Delete Small Parts")
         

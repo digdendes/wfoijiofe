@@ -24,7 +24,7 @@
 bl_info = {
     'name': "D3T Splint Module",
     'author': "Patrick R. Moore",
-    'version': (0,0,3),
+    'version': (0,0,4),
     'blender': (2, 7, 8),
     'api': "3c04373",
     'location': "3D View -> Tool Shelf",
@@ -105,6 +105,11 @@ class D3SplintAddonPreferences(AddonPreferences):
         max=59
         )
 
+    show_occlusal_mod = bpy.props.BoolProperty(
+        name = "Show Occlusal Mod",
+        description = "Shows some beta Settings",
+        default = True,
+        )
     #behavior_mode = EnumProperty(name="How Active Tooth is determined by operator", description="'LIST' is more predictable, 'ACTIVE' more like blender, 'ACTIVE_SELECTED' is for advanced users", items=behavior_enum, default='0')
 
     def draw(self, context):
@@ -179,7 +184,7 @@ def register():
     
     
     import d3classes, odcutils, crown, margin, bridge, splint, implant, panel, help, flexible_tooth, bracket_placement, denture_base, occlusion, ortho, curve_partition, articulator, splint_landmark_fns # , odcmenus, bgl_utils
-    import healing_abutment, model_work, tracking
+    import healing_abutment, model_work, tracking, import_export
     
     #register them
     d3classes.register()
@@ -192,6 +197,7 @@ def register():
     occlusion.register()
     splint_landmark_fns.register()
     model_work.register()
+    import_export.register()
     
     panel.register()
     
@@ -209,6 +215,7 @@ def register():
 def unregister():
     #import the relevant modules
     from . import d3classes, odcutils, splint, panel, curve_partition, articulator, splint_landmark_fns, model_work, tracking
+    from . import import_export
     
     bpy.app.handlers.save_pre.remove(save_pre_method)
     bpy.app.handlers.load_post.remove(load_post_method)
@@ -228,7 +235,7 @@ def unregister():
     curve_partition.unregister()
     splint_landmark_fns.unregister()
     model_work.unregister()
-    
+    import_export.unregister()
     #unregister this module
  
 if __name__ == "__main__":

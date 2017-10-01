@@ -228,11 +228,11 @@ class D3SPLINT_OT_mask_to_convex_hull(bpy.types.Operator):
         bad_faces = [f for f in bme.faces if not all(len(ed.link_faces) == 2 for ed in f.edges)]
         print("there are %i bad faces" % len(bad_faces))
         
-        new_me = bpy.data.meshes.new("hull")
-        new_ob = bpy.data.objects.new("hull", new_me)
+        new_me = bpy.data.meshes.new("CHull")
+        new_ob = bpy.data.objects.new("CHull", new_me)
         new_ob.matrix_world = context.object.matrix_world
         context.scene.objects.link(new_ob)
-        
+        new_ob.parent = context.object
         bme.to_mesh(new_me)
         bme.free()
         context.object.data.update()

@@ -8,7 +8,7 @@ from bpy_extras import view3d_utils
 from bpy.props import FloatProperty, BoolProperty, IntProperty, EnumProperty
 import bgl
 import blf
-
+import random
 from mesh_cut import edge_loops_from_bmedges, space_evenly_on_path
 
 #from . 
@@ -739,6 +739,7 @@ class D3SPLINT_OT_splint_occlusal_arch(bpy.types.Operator):
         
         Opposing = bpy.data.objects.get(self.splint.opposing)
         Opposing.hide = True
+        self.crv_ob.hide = True
         
         Model = bpy.data.objects.get(self.splint.model)
         if Model:
@@ -1799,7 +1800,494 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
 
         return context.window_manager.invoke_props_dialog(self)
     
+
+
+def convex_mand_draw_callback(self, context):  
+    self.crv.draw(context)
+    self.help_box.draw()   
     
+class D3SPLINT_OT_convexify_model(bpy.types.Operator):
+    """Click along embrasures to make model locally convex"""
+    bl_idname = "d3splint.convexify_lower"
+    bl_label = "Convexify Lower Model"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls,context):
+        return True
+
+    method1 = EnumProperty(
+        description="First Boolean Method",
+        items=(("BMESH", "Bmesh", "Faster/More Errors"),
+               ("CARVE", "Carve", "Slower/Less Errors")),
+        default = "BMESH")
+    
+    
+    method2 = EnumProperty(
+        description="Second Boolean Method",
+        items=(("BMESH", "Bmesh", "Faster/More Errors"),
+               ("CARVE", "Carve", "Slower/Less Errors")),
+        default = "CARVE")
+    
+    
+    def make_cubes(self, context):
+        
+        Z = Vector((0,0,1))
+        
+        convex_obs = []
+        for i in range(0,len(self.crv.b_pts) - 2):
+            
+            vi = self.crv.b_pts[i]
+            vi_p1 = self.crv.b_pts[i+1]
+            vi_p2 = self.crv.b_pts[i+2]
+            
+            l_0 = .5 * (vi + vi_p1)
+            
+            l_1 = .5 * (vi_p1 + vi_p2)
+
+
+            #we want a box that spans vi to vi+1
+            tan_0 = vi_p1 - vi
+            
+            #and a box that spans from the midpoint to the midpoint of the next one
+            tan_1 = l_1 - l_0
+            
+            y0 = tan_0.normalized()
+            y1 = tan_1.normalized()
+            
+            x0 = Z.cross(y0)
+            x1 = Z.cross(y1)
+            
+            z_rh0 = x0.cross(y0)
+            z_rh1 = x1.cross(y1)
+            
+            loc_0 = l_0
+            loc_1 = vi_p1 
+            
+            
+            T0 = Matrix.Translation(loc_0)
+            T1 = Matrix.Translation(loc_1)
+            
+            R0 = Matrix.Identity(3)
+            R0.col[0] = x0
+            R0.col[1] = y0
+            R0.col[2] = z_rh0
+            
+            R1 = Matrix.Identity(3)
+            R1.col[0] = x1
+            R1.col[1] = y1
+            R1.col[2] = z_rh1
+            
+            S0 = Matrix.Identity(3)
+            S0[0][0], S0[1][1], S0[2][2] = 14, .93 * tan_0.length, 5
+            
+            S1 = Matrix.Identity(3)
+            S1[0][0], S1[1][1], S1[2][2] = 14, .93 * tan_1.length, 5
+            
+            
+            
+            new_me0 = bpy.data.meshes.new('CHull')
+            new_ob0 = bpy.data.objects.new('CHull', new_me0)
+            
+            new_me1 = bpy.data.meshes.new('CHull')
+            new_ob1 = bpy.data.objects.new('CHull', new_me1)
+            
+            context.scene.objects.link(new_ob0)
+            context.scene.objects.link(new_ob1)
+            
+            new_ob0.parent = self.model
+            new_ob1.parent = self.model
+            
+            
+            bme = bmesh.new()
+            bmesh.ops.create_cube(bme, size = 1)
+            bme.to_mesh(new_me0)
+            bme.to_mesh(new_me1)
+            
+            new_ob0.matrix_world = T0 * R0.to_4x4() * S0.to_4x4()
+            new_ob1.matrix_world = T1 * R1.to_4x4() * S1.to_4x4()
+            
+            mod0 = new_ob0.modifiers.new('Boolean', type = 'BOOLEAN')
+            mod0.object = self.model
+            mod0.solver = self.method1
+        
+            mod1 = new_ob1.modifiers.new('Boolean', type = 'BOOLEAN')
+            mod1.object = self.model
+            mod1.solver = self.method1
+            
+            convex_obs += [new_ob0, new_ob1]
+        
+        #do the final box
+        vi = self.crv.b_pts[-2]
+        vi_p1 = self.crv.b_pts[-1]
+        
+        l_0 = .5 * (vi + vi_p1)
+        #we want a box that spans vi to vi+1
+        tan_0 = vi_p1 - vi
+        y0 = tan_0.normalized()
+        
+        x0 = Z.cross(y0)
+        z_rh0 = x0.cross(y0)
+        loc_0 = l_0
+
+        T0 = Matrix.Translation(loc_0)
+
+        R0 = Matrix.Identity(3)
+        R0.col[0] = x0
+        R0.col[1] = y0
+        R0.col[2] = z_rh0
+        
+        
+        S0 = Matrix.Identity(3)
+        S0[0][0], S0[1][1], S0[2][2] = 12, .93 * tan_0.length, 5
+        
+
+        new_me0 = bpy.data.meshes.new('CHull')
+        new_ob0 = bpy.data.objects.new('CHull', new_me0)
+
+        context.scene.objects.link(new_ob0)
+        new_ob0.parent = self.model
+        
+        bme = bmesh.new()
+        bmesh.ops.create_cube(bme, size = 1)
+        bme.to_mesh(new_me0)
+
+        #transform data...may speed up booleans
+        new_ob0.matrix_world = T0 * R0.to_4x4() * S0.to_4x4()
+
+        
+        mod0 = new_ob0.modifiers.new('Boolean', type = 'BOOLEAN')
+        mod0.object = self.model
+        #mod0.operation = 'INTERSECTION'  default
+        convex_obs += [new_ob0]
+        
+        
+        
+        start = time.time()
+        #now convert them all to convex hulls:
+        for ob in convex_obs:
+            bme = bmesh.new()
+            bme.from_object(ob, context.scene, deform = True)
+            out_geom = bmesh.ops.convex_hull(bme, input = bme.verts[:], use_existing_faces = True)
+            unused_geom = out_geom['geom_interior']
+            
+            del_v = [ele for ele in unused_geom if isinstance(ele, bmesh.types.BMVert)]
+            del_e = [ele for ele in unused_geom if isinstance(ele, bmesh.types.BMEdge)]
+            del_f = [ele for ele in unused_geom if isinstance(ele, bmesh.types.BMFace)]
+            
+            #these must go
+            bmesh.ops.delete(bme, geom = del_v, context = 1)
+            #bmesh.ops.delete(bme, geom = del_e, context = )
+            bmesh.ops.delete(bme, geom = del_f, context = 5)
+            #then we need to remove internal faces that got enclosed in
+
+            bad_eds = [ed for ed in bme.edges if len(ed.link_faces) != 2]
+            print("there are %i bad eds" % len(bad_eds))
+            
+            eds_zero_face = [ed for ed in bad_eds if len(ed.link_faces) == 0]
+            eds_one_face = [ed for ed in bad_eds if len(ed.link_faces) == 1]
+            eds_three_face = [ed for ed in bad_eds if len(ed.link_faces) == 3]
+            eds_other = [ed for ed in bad_eds if len(ed.link_faces) > 3]
+            
+            #bmesh.ops.delete(bme, geom = del_e, context = )
+            bmesh.ops.delete(bme, geom = eds_zero_face, context = 2)
+            
+            ob.modifiers.remove(ob.modifiers[0])
+            bme.to_mesh(ob.data)
+            
+            mod = ob.modifiers.new('Remesh', type = 'REMESH')
+            mod.mode = 'SMOOTH'
+            mod.octree_depth = 5
+            bme.free()
+            
+            bme = bmesh.new()
+            bme.from_object(ob, context.scene, deform = True)
+            ob.modifiers.remove(ob.modifiers[0])
+            bme.to_mesh(ob.data)
+            bme.free()
+            
+
+        finish = time.time()
+        print('took %f seconds to do the initial hulls' % (finish-start))
+        
+        
+        return {'finish'}
+    
+        base_ob = convex_obs.pop(0)
+        convex_obs.remove(base_ob)
+        context.scene.objects.active = base_ob
+        base_ob.select = True
+        start = time.time()
+        for i,ob in enumerate(convex_obs):
+            print('boolean %i  out of %i' % (i, len(convex_obs)))
+            bme = bmesh.new()
+            bme.from_object(ob, context.scene, deform = True)
+            ob.modifiers.remove(ob.modifiers[0])
+            bme.to_mesh(ob.data)
+            bme.free()
+            
+            name = 'Bool' + str(i)
+            mod = base_ob.modifiers.new(name, type = 'BOOLEAN')
+            mod.solver = self.method2
+            mod.operation = 'UNION'
+            mod.object = ob
+            
+            #bpy.ops.object.modifier_apply(modifier = name)
+        context.scene.update()
+        new_mesh = base_ob.to_mesh(context.scene, apply_modifiers = True,settings = 'PREVIEW')
+        new_ob = bpy.data.objects.new('Convex Object', new_mesh)
+        new_ob.matrix_world = base_ob.matrix_world
+        context.scene.objects.link(new_ob)
+            
+        finish = time.time()
+        print('took %f seconds to do the boolean joining of hulls' % (finish-start))
+        
+        #final_mesh = base_ob.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+        #final_ob = bpy.data.objects.new('Convex Lower', final_mesh)
+        #context.scene.objects.link(final_ob)
+        start = time.time()
+        bpy.ops.object.select_all(action = 'DESELECT')
+        base_ob.select = True
+        base_ob.select = True
+        for ob in convex_obs:
+            ob.select = True
+        context.scene.objects.active = ob    
+        bpy.ops.object.delete()    
+        
+        finish = time.time()
+        print('took %f seconds to delete temp objects' % (finish-start))
+        
+        return 'finish'
+            
+            
+    def modal_nav(self, event):
+        events_nav = {'MIDDLEMOUSE', 'WHEELINMOUSE','WHEELOUTMOUSE', 'WHEELUPMOUSE','WHEELDOWNMOUSE'} #TODO, better navigation, another tutorial
+        handle_nav = False
+        handle_nav |= event.type in events_nav
+
+        if handle_nav: 
+            return 'nav'
+        return ''
+    
+    def modal_main(self,context,event):
+        # general navigation
+        nmode = self.modal_nav(event)
+        if nmode != '':
+            return nmode  #stop here and tell parent modal to 'PASS_THROUGH'
+
+        #after navigation filter, these are relevant events in this state
+        if event.type == 'G' and event.value == 'PRESS':
+            if self.crv.grab_initiate():
+                return 'grab'
+            else:
+                #error, need to select a point
+                return 'main'
+        
+        if event.type == 'MOUSEMOVE':
+            self.crv.hover(context, event.mouse_region_x, event.mouse_region_y)    
+            return 'main'
+        
+        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+            x, y = event.mouse_region_x, event.mouse_region_y
+            self.crv.click_add_point(context, x,y)
+            return 'main'
+        
+        if event.type == 'RIGHTMOUSE' and event.value == 'PRESS':
+            self.crv.click_delete_point(mode = 'mouse')
+            return 'main'
+        
+        if event.type == 'X' and event.value == 'PRESS':
+            self.crv.delete_selected(mode = 'selected')
+            return 'main'
+            
+        if event.type == 'RET' and event.value == 'PRESS':
+            self.make_cubes(context)
+            return 'finish'
+            
+        elif event.type == 'ESC' and event.value == 'PRESS':
+            return 'cancel' 
+
+        return 'main'
+    
+    def modal_grab(self,context,event):
+        # no navigation in grab mode
+        
+        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+            #confirm location
+            self.crv.grab_confirm()
+            return 'main'
+        
+        elif event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS':
+            #put it back!
+            self.crv.grab_cancel()
+            return 'main'
+        
+        elif event.type == 'MOUSEMOVE':
+            #update the b_pt location
+            self.crv.grab_mouse_move(context,event.mouse_region_x, event.mouse_region_y)
+            return 'grab'
+        
+    def modal(self, context, event):
+        context.area.tag_redraw()
+        
+        FSM = {}    
+        FSM['main']    = self.modal_main
+        FSM['grab']    = self.modal_grab
+        FSM['nav']     = self.modal_nav
+        
+        nmode = FSM[self.mode](context, event)
+        
+        if nmode == 'nav': 
+            return {'PASS_THROUGH'}
+        
+        if nmode in {'cancel', 'finish'}:
+            context.space_data.show_manipulator = True
+            context.space_data.transform_manipulators = {'TRANSLATE'}
+            #clean up callbacks
+            bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+            return {'CANCELLED'}
+        
+
+        if nmode: self.mode = nmode
+        
+        return {'RUNNING_MODAL'}
+
+    def invoke(self,context, event):
+        
+        self.splint = context.scene.odc_splints[0]
+        self.crv = None
+        margin = "Embrasures"
+           
+        if self.splint.opposing != '' and self.splint.opposing in bpy.data.objects:
+            Model = bpy.data.objects[self.splint.opposing]
+            self.model = Model
+            
+            for ob in bpy.data.objects:
+                ob.select = False
+                if ob.parent and ob.parent.name == Model.name:
+                    if 'CHull' in ob.name:
+                        ob.hide = False
+                    else:
+                        ob.hide = True
+                else:
+                    ob.hide = True
+                
+            Model.select = True
+            Model.hide = False
+            context.scene.objects.active = Model
+            bpy.ops.view3d.viewnumpad(type = 'TOP')
+            bpy.ops.view3d.view_selected()
+            self.crv = CurveDataManager(context,snap_type ='OBJECT', snap_object = Model, shrink_mod = False, name = margin)
+            self.crv.crv_obj.parent = Model
+            self.crv.crv_obj.hide = True
+            context.space_data.show_manipulator = False
+            context.space_data.transform_manipulators = {'TRANSLATE'}
+        else:
+            self.report({'ERROR'}, "Need to set the Opposing Model first!")
+            return {'CANCELLED'}
+            
+        
+        #self.splint.occl = self.crv.crv_obj.name
+        
+        #TODO, tweak the modifier as needed
+        help_txt = "DRAW EMBRASURE POINTS\n\nLeft Click on the terminal marginal ridge and at each embrasure \n Points will snap to objects under mouse \n Right click to delete a point n\ G to grab  \n ENTER to confirm \n ESC to cancel"
+        self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
+        self.help_box.snap_to_corner(context, corner = [1,1])
+        self.mode = 'main'
+        self._handle = bpy.types.SpaceView3D.draw_handler_add(convex_mand_draw_callback, (self, context), 'WINDOW', 'POST_PIXEL')
+        context.window_manager.modal_handler_add(self) 
+        
+        tracking.trackUsage("D3Splint:Convexify",None)
+
+        return {'RUNNING_MODAL'}
+    
+class D3SPLINT_OT_join_convex(bpy.types.Operator):
+    """Attempt to logically smooth and convexify the lower model"""
+    bl_idname = "d3splint.join_convex_lower"
+    bl_label = "Join Convex Elements"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    method = EnumProperty(
+        description="Method for joinin hulls",
+        items=(("SIMPLE", "Join Intersect", "Fastest/Non Manifold/No Errors"),
+               ("BOOL_BMESH", "Boolean BMesh", "Slower/Manifold/Some Errors"),
+               ("BOOL_CARVE", "Boolean Carve", "Slowest/Manifold/Less Errors")),
+
+        default = "SIMPLE")
+    
+    
+    @classmethod
+    def poll(cls, context):
+        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
+        #    return True
+        #else:
+        #    return False
+        return True
+    
+    def execute(self, context):
+        
+        
+        if len(context.scene.odc_splints) == 0:
+            self.report({'ERROR'}, "need to start a splint first")
+            return {'CANCELLED'}
+        splint = context.scene.odc_splints[0]
+        
+        Opposing = bpy.data.objects.get(splint.opposing)
+        if not Opposing:
+            self.report({'ERROR'}, "need to set opposing model")
+            return {'CANCELLED'}
+        
+        conv_obs = []
+        for ob in context.scene.objects:
+            if ob.parent and ob.parent == Opposing and 'CHull' in ob.name:
+                conv_obs += [ob]
+                
+        conv_obs.sort(key = lambda x: x.name)
+        
+        print([ob.name for ob in conv_obs])
+
+        if self.method == 'SIMPLE':
+            
+            for ob in conv_obs:
+                ob.hide = False
+            
+            bpy.ops.object.select_all(action = 'DESELECT')
+            for ob in conv_obs:
+                ob.select = True
+            context.scene.objects.active = conv_obs[0]
+            mx = conv_obs[0].matrix_world
+            imx = mx.inverted()
+            mx_norm = imx.transposed().to_3x3() #local directions to global
+            imx_norm = imx.to_3x3() #global direction to local
+            
+            bpy.ops.object.join()
+            
+            #Delete all the internal and lower
+            bme = bmesh.new()
+            bme.from_mesh(context.object.data)
+            bme.verts.ensure_lookup_table()
+            
+            bvh = BVHTree.FromBMesh(bme)
+            
+            to_delete = set()
+            for v in bme.verts:
+                start = v.co + .001 * Vector((0,0,-1))
+                hit = bvh.ray_cast(start, Vector((0,0,-1)), 10)
+                if hit[0]:
+                    to_delete.add(v)
+                    
+            del_fs = []       
+            for f in bme.faces:
+                if all([v in to_delete for v in f.verts]):
+                    del_fs += [f]
+                    
+            bmesh.ops.delete(bme, geom = del_fs, context = 5)
+            
+            bme.to_mesh(context.object.data)        
+                 
+                      
+        return {'FINISHED'}
+
 class D3SPLINT_OT_splint_add_rim_curve(bpy.types.Operator):
     """Create Meta Wax Rim from selected bezier curve"""
     bl_idname = "d3splint.splint_rim_from_curve"
@@ -2828,6 +3316,8 @@ def register():
     bpy.utils.register_class(D3SPLINT_OT_splint_margin)
     bpy.utils.register_class(D3SPLINT_OT_splint_buccal_marks)
     bpy.utils.register_class(D3SPLINT_OT_splint_occlusal_arch)
+    bpy.utils.register_class(D3SPLINT_OT_convexify_model)
+    bpy.utils.register_class(D3SPLINT_OT_join_convex)
     bpy.utils.register_class(D3SPLINT_OT_splint_trim_model)
 
     bpy.utils.register_class(D3SPLINT_OT_meta_splint_surface)
@@ -2873,6 +3363,8 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_splint_margin)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_buccal_marks)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_occlusal_arch)
+    bpy.utils.unregister_class(D3SPLINT_OT_convexify_model)
+    bpy.utils.unregister_class(D3SPLINT_OT_join_convex)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_trim_model)
 
     bpy.utils.unregister_class(D3SPLINT_OT_meta_splint_surface)
