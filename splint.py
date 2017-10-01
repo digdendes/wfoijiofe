@@ -2284,7 +2284,12 @@ class D3SPLINT_OT_join_convex(bpy.types.Operator):
             bmesh.ops.delete(bme, geom = del_fs, context = 5)
             
             bme.to_mesh(context.object.data)        
-                 
+            bme.free()
+            
+            context.scene.objects.active = Opposing
+            Opposing.select = True
+            
+            bpy.ops.object.join()     
                       
         return {'FINISHED'}
 
