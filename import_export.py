@@ -26,7 +26,9 @@ from bpy.props import StringProperty, BoolProperty, EnumProperty, FloatProperty
 from bpy.types import Operator
 
 
-class D3SplintExportSplint(Operator, ExportHelper):
+IOSTLOrientationHelper = orientation_helper_factory("IOSTLOrientationHelper", axis_forward='Y', axis_up='Z')
+
+class D3SplintExportSplint(Operator, ExportHelper, IOSTLOrientationHelper):
     """Use this to export your splint"""
     bl_idname = "d3splint.export_splint_stl"  # important since its how bpy.ops.import_test.some_data is constructed
     bl_label = "Export Splint STL"
@@ -101,8 +103,8 @@ class D3SplintExportSplint(Operator, ExportHelper):
         if scene.unit_settings.system != 'NONE' and self.use_scene_unit:
             global_scale *= scene.unit_settings.scale_length
 
-        global_matrix = axis_conversion(to_forward=self.axis_forward,
-                                        to_up=self.axis_up,
+        global_matrix = axis_conversion(from_forward=self.axis_forward,
+                                        from_up=self.axis_up,
                                         ).to_4x4() * Matrix.Scale(global_scale, 4)
 
         if self.batch_mode == 'OFF':

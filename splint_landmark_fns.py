@@ -11,7 +11,7 @@ import bmesh
 import odcutils
 from points_picker import PointPicker
 from textbox import TextBox
-from mathutils import Vector, Matrix
+from mathutils import Vector, Matrix, Color
 from bpy_extras.view3d_utils import region_2d_to_location_3d, region_2d_to_origin_3d, region_2d_to_vector_3d
 import math
 from mesh_cut import flood_selection_faces, edge_loops_from_bmedges, flood_selection_faces_limit
@@ -75,6 +75,7 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
             return 'main'
             
         if event.type == 'RET' and event.value == 'PRESS':
+            self.splint.curve_max = True
             return 'finish'
             
         elif event.type == 'ESC' and event.value == 'PRESS':
@@ -125,8 +126,12 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def invoke(self,context, event):
+        if len(context.scene.odc_splints) == 0:
+            self.report({'ERROR'},'need to start splint')
+            return {'CANCELLED'}
         
-        self.splint = context.scene.odc_splints[0]
+        n = context.scene.odc_splint_index
+        self.splint = context.scene.odc_splints[n]
         self.crv = None
         margin = "Occlusal Curve Max"
            
@@ -152,7 +157,7 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
         #self.splint.occl = self.crv.crv_obj.name
         
         #TODO, tweak the modifier as needed
-        help_txt = "DRAW OCCLUSAL POINTS\n\nLeft Click on BUCCAL CUSPS and incisal edges \n Points will snap to objects under mouse \n Right click to delete a point n\ G to grab  \n ENTER to confirm \n ESC to cancel"
+        help_txt = "DRAW MAXIILARY OCCLUSAL POINTS\n\nLeft Click on BUCCAL CUSPS and incisal edges \n Points will snap to objects under mouse \n Right click to delete a point n\ G to grab  \n ENTER to confirm \n ESC to cancel"
         self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
         self.help_box.snap_to_corner(context, corner = [1,1])
         self.mode = 'main'
@@ -260,8 +265,8 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def invoke(self,context, event):
-        
-        self.splint = context.scene.odc_splints[0]    
+        n = context.scene.odc_splint_index
+        self.splint = context.scene.odc_splints[n]    
            
         if self.splint.model != '' and self.splint.model in bpy.data.objects:
             Model = bpy.data.objects[self.splint.model]
@@ -280,8 +285,6 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         else:
             self.report({'ERROR'}, "Need to mark the UpperJaw model first!")
             return {'CANCELLED'}
-            
-
         
         #TODO, tweak the modifier as needed
         help_txt = "DRAW LANDMARK POINTS\n Click on the Patient's Right Molar Occlusal Surface"
@@ -293,8 +296,7 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def finish(self, context):
-        
-        
+
         v_ant = self.crv.b_pts[2] #midline
         v_R = self.crv.b_pts[0] #R molar
         v_L = self.crv.b_pts[1] #L molar
@@ -384,7 +386,8 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         context.scene.cursor_location = Model.location
         bpy.ops.view3d.view_center_cursor()
         bpy.ops.view3d.viewnumpad(type = 'BOTTOM')
-
+        
+        self.splint.landmarks_set = True
         tracking.trackUsage("D3Splint:SplintLandmarks",None)
 
 class D3SPLINT_OT_splint_paint_margin(bpy.types.Operator):
@@ -739,12 +742,27 @@ class D3SPLINT_OT_pick_model(bpy.types.Operator):
             
             odc_splint = context.scene.odc_splints[n]
             odc_splint.model = self.ob.name
+            odc_splint.model_set = True
             
         else:
             my_item = context.scene.odc_splints.add()        
             my_item.name = 'Splint'
             my_item.model = self.ob.name
+            my_item.model_set = True
+        if "Model Mat" not in bpy.data.materials:
+            mat = bpy.data.materials.new('Model Mat')
+            mat.diffuse_color = Color((0.5, .8, .4))
+        else:
+            mat = bpy.data.materials.get('Box Mat')
         
+        # Assign it to object
+        if self.ob.data.materials:
+            # assign to 1st material slot
+            self.ob.data.materials[0] = mat
+        else:
+            # no slots
+            self.ob.data.materials.append(mat)    
+            
         tracking.trackUsage("D3Splint:PickModel")
         return 'finish'
             
@@ -879,7 +897,21 @@ class D3SPLINT_OT_pick_opposing(bpy.types.Operator):
         n = context.scene.odc_splint_index
         odc_splint = context.scene.odc_splints[n]
         odc_splint.opposing = self.ob.name
-    
+        odc_splint.opposing_set = True
+        if "Opposing Mat" not in bpy.data.materials:
+            mat = bpy.data.materials.new('Opposing Mat')
+            mat.diffuse_color = Color((0.4, .5, .6))
+        else:
+            mat = bpy.data.materials.get('Opposing Mat')
+        
+        # Assign it to object
+        if self.ob.data.materials:
+            # assign to 1st material slot
+            self.ob.data.materials[0] = mat
+        else:
+            # no slots
+            self.ob.data.materials.append(mat) 
+            
         tracking.trackUsage("D3Splint:SetOpposing")
         return 'finish'
             

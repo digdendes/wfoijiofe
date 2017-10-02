@@ -99,6 +99,12 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         sce = bpy.context.scene
         layout = self.layout
         prefs = get_settings()
+        
+        if len(sce.odc_splints):
+            n = sce.odc_splint_index
+            splint = sce.odc_splints[n]
+        else:
+            splint = None
         #split = layout.split()
 
         #row = layout.row()
@@ -117,36 +123,70 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         row = layout.row()
         row.operator("import_mesh.stl", text = 'Import STL Models')
                 
-        row = layout.row()
-        row.operator("d3splint.pick_model", text = "Set Splint Model")
         
+        if splint and splint.model_set: 
+            ico = 'CHECKBOX_HLT'
+        else:
+            ico = 'CHECKBOX_DEHLT'
         row = layout.row()
-        row.operator("d3splint.pick_opposing", text = "Set Opposing")
+        row.operator("d3splint.pick_model", text = "Set Splint Model", icon = ico)
         
+        if splint and splint.opposing_set: 
+            ico = 'CHECKBOX_HLT'
+        else:
+            ico = 'CHECKBOX_DEHLT'
         row = layout.row()
-        row.operator("d3splint.splint_mark_landmarks", text = "Set Landmarks")
+        row.operator("d3splint.pick_opposing", text = "Set Opposing",icon = ico)
         
+        if splint and splint.landmarks_set: 
+            ico = 'CHECKBOX_HLT'
+        else:
+            ico = 'CHECKBOX_DEHLT'
         row = layout.row()
-        row.operator("d3splint.draw_occlusal_curve_max", text = "Mark Occlusal Curve Max")
+        row.operator("d3splint.splint_mark_landmarks", text = "Set Landmarks", icon = ico)
+        
+        if splint and splint.curve_max: 
+            ico = 'CHECKBOX_HLT'
+        else:
+            ico = 'CHECKBOX_DEHLT'
+        row = layout.row()
+        row.operator("d3splint.draw_occlusal_curve_max", text = "Mark Occlusal Curve Max", icon = ico)
 
+        if splint and splint.curve_mand: 
+            ico = 'CHECKBOX_HLT'
+        else:
+            ico = 'CHECKBOX_DEHLT'
         row = layout.row()
-        row.operator("d3splint.draw_occlusal_curve", text = "Mark Occlusal Curve Mand")
-        
-        
-        
-        row = layout.row()
-        row.operator("d3splint.view_silhouette_survey", text = "Survey Model (View)")
-        
-        row = layout.row()
-        row.operator("d3splint.arrow_silhouette_survey", text = "Survey Model (Arrow)")
+        row.operator("d3splint.draw_occlusal_curve", text = "Mark Occlusal Curve Mand", icon = ico)
         
         row = layout.row()
-        row.label('Draw Line Method')
-        row = layout.row()
-        row.operator("d3splint.draw_buccal_curve", text = "Mark Splint Outline")
+        row.prop(prefs, "show_survey_functions")
+        
+        if prefs.show_survey_functions:
+            row = layout.row()
+            row.label('Survey and HoC')
+            
+            row = layout.row()
+            col = row.column()
+            col.operator("d3splint.view_silhouette_survey", text = "Survey Model (View)")
+            col.operator("d3splint.arrow_silhouette_survey", text = "Survey Model (Arrow)")
         
         row = layout.row()
-        row.operator("d3splint.splint_trim_from_curve", text = "Trim Upper")
+        row.label('Splint Boundaries')
+        
+        if splint and splint.splint_outline: 
+            ico = 'CHECKBOX_HLT'
+        else:
+            ico = 'CHECKBOX_DEHLT'
+        row = layout.row()
+        row.operator("d3splint.draw_buccal_curve", text = "Mark Splint Facial Outline", icon = ico)
+        
+        if splint and splint.trim_upper: 
+            ico = 'CHECKBOX_HLT'
+        else:
+            ico = 'CHECKBOX_DEHLT'
+        row = layout.row()
+        row.operator("d3splint.splint_trim_from_curve", text = "Trim Upper", icon = ico)
         
         #row = layout.row()
         #row.label('Paint Method')
@@ -175,10 +215,29 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         row = layout.row()
         col = row.column()
         
-        col.operator("d3splint.splint_offset_shell", text = "Splint Shell")
-        col.operator("d3splint.splint_passive_spacer", text = "Passivity Offset")
-        col.operator("d3splint.splint_rim_from_dual_curves", text = "Splint Flat Plane")
-        col.operator("d3splint.splint_join_rim", text = "Join rim to Shell")
+        if splint and splint.splint_shell: 
+            ico = 'CHECKBOX_HLT'
+        else:
+            ico = 'CHECKBOX_DEHLT'
+        col.operator("d3splint.splint_offset_shell", text = "Splint Shell", icon = ico)
+        
+        if splint and splint.passive_offset: 
+            ico = 'CHECKBOX_HLT'
+        else:
+            ico = 'CHECKBOX_DEHLT'
+        col.operator("d3splint.splint_passive_spacer", text = "Passivity Offset", icon = ico)
+        
+        if splint and "MakeRim" in splint.ops_string: 
+            ico = 'FILE_TICK'
+        else:
+            ico = 'NONE'
+        col.operator("d3splint.splint_rim_from_dual_curves", text = "Splint Flat Plane", icon = ico)
+        
+        if splint and "JoinRim" in splint.ops_string: 
+            ico = 'FILE_TICK'
+        else:
+            ico = 'NONE'
+        col.operator("d3splint.splint_join_rim", text = "Join rim to Shell", icon = ico)
         
         row = layout.row()
         row.prop(prefs, "show_occlusal_mod")
@@ -195,17 +254,29 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         row = layout.row()
         row.label('Articulation/Mounting')
         row = layout.row()
+        if splint and "GenArticulator" in splint.ops_string: 
+            ico = 'FILE_TICK'
+        else:
+            ico = 'NONE'
         col = row.column()
-        col.operator("d3splint.generate_articulator", text = "Generate Articulator")
+        col.operator("d3splint.generate_articulator", text = "Generate Articulator", icon = ico)
         #col.operator("d3splint.splint_mount_articulator", text = "Mount on Articulator")
         
         row = layout.row()
         col = row.column()
-        col.operator("d3splint.splint_animate_articulator", text = "Generate Functional Surface")
+        if splint and "AnimateArticulator" in splint.ops_string: 
+            ico = 'FILE_TICK'
+        else:
+            ico = 'NONE'
+        col.operator("d3splint.splint_animate_articulator", text = "Generate Functional Surface", icon = ico)
         col.operator("d3splint.splint_stop_articulator", text = "Stop Functional Surface")
         
+        if splint and "SubtractSurface" in splint.ops_string: 
+            ico = 'FILE_TICK'
+        else:
+            ico = 'NONE'
         row = layout.row()
-        col.operator("d3splint.splint_subtract_surface", text = "Subtract Functional Surface")
+        col.operator("d3splint.splint_subtract_surface", text = "Subtract Functional Surface", icon = ico)
         
         
         row = layout.row()
@@ -244,8 +315,12 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         row.label('Finalize Steps')
         
         row = layout.row()
+        if splint and splint.finalize_splint: 
+            ico = 'CHECKBOX_HLT'
+        else:
+            ico = 'CHECKBOX_DEHLT'
         col = row.column()
-        col.operator("d3splint.splint_finish_booleans", text = "Finalize The Splint")
+        col.operator("d3splint.splint_finish_booleans", text = "Finalize The Splint", icon = ico)
         col.operator("d3splint.export_splint_stl", text = "Export Splint STL")
           
 class VIEW3D_PT_D3SplintModels(bpy.types.Panel):

@@ -24,7 +24,7 @@
 bl_info = {
     'name': "D3T Splint Module",
     'author': "Patrick R. Moore",
-    'version': (0,0,4),
+    'version': (0,0,5),
     'blender': (2, 7, 8),
     'api': "3c04373",
     'location': "3D View -> Tool Shelf",
@@ -108,8 +108,15 @@ class D3SplintAddonPreferences(AddonPreferences):
     show_occlusal_mod = bpy.props.BoolProperty(
         name = "Show Occlusal Mod",
         description = "Shows some beta Settings",
-        default = True,
+        default = False,
         )
+    
+    show_survey_functions = bpy.props.BoolProperty(
+        name = "Show Survey Tools",
+        description = "Shows Buttons for Survey Tools",
+        default = False,
+        )
+    
     #behavior_mode = EnumProperty(name="How Active Tooth is determined by operator", description="'LIST' is more predictable, 'ACTIVE' more like blender, 'ACTIVE_SELECTED' is for advanced users", items=behavior_enum, default='0')
 
     def draw(self, context):

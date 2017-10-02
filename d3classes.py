@@ -133,7 +133,30 @@ class D3SplintRestoration(bpy.types.PropertyGroup):
         #tooth names used to repopulate lists above before saving
         cls.tooth_string = bpy.props.StringProperty(name="teeth in splint names separated by : or \n",default="")
         cls.implant_string = bpy.props.StringProperty(name="implants in splint names separated by : or \n",default="")
+        cls.ops_string = bpy.props.StringProperty(name="operators used",default="", maxlen = 2000)
     
+        #done
+        cls.model_set = bpy.props.BoolProperty(name = 'model_set', default = False)
+        #done
+        cls.opposing_set = bpy.props.BoolProperty(name = 'opposing_set', default = False)
+        #done
+        cls.landmarks_set = bpy.props.BoolProperty(name = 'landmarks_set', default = False)
+        #done
+        cls.curve_max = bpy.props.BoolProperty(name = 'curve_max', default = False)
+        #done
+        cls.curve_mand = bpy.props.BoolProperty(name = 'curve_mand', default = False)
+        #done
+        cls.splint_outline = bpy.props.BoolProperty(name = 'splint_outline', default = False)
+        #done
+        cls.trim_upper = bpy.props.BoolProperty(name = 'trim_upper', default = False)
+        #done
+        cls.splint_shell = bpy.props.BoolProperty(name = 'splint_shell', default = False)
+        #done
+        cls.passive_offset = bpy.props.BoolProperty(name = 'passive_offset', default = False)
+        #done
+        cls.finalize_splint = bpy.props.BoolProperty(name = 'finalize_splint', default = False)
+        
+        
     @classmethod
     def unregister(cls):
         del bpy.types.Scene.odc_splints

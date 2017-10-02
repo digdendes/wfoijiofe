@@ -588,6 +588,7 @@ class D3SPLINT_OT_splint_buccal_marks(bpy.types.Operator):
             return 'main'
             
         if event.type == 'RET' and event.value == 'PRESS':
+            self.splint.splint_outline = True
             return 'finish'
             
         elif event.type == 'ESC' and event.value == 'PRESS':
@@ -739,7 +740,8 @@ class D3SPLINT_OT_splint_occlusal_arch(bpy.types.Operator):
         
         Opposing = bpy.data.objects.get(self.splint.opposing)
         Opposing.hide = True
-        self.crv_ob.hide = True
+        self.crv.crv_obj.hide = True
+        self.splint.curve_mand = True
         
         Model = bpy.data.objects.get(self.splint.model)
         if Model:
@@ -1793,6 +1795,9 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
         bme_mand.free()
         #todo remove/delete to_mesh mesh
   
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        splint.ops_string += 'MakeRim:'
         return {'FINISHED'}
 
     
@@ -2216,6 +2221,9 @@ class D3SPLINT_OT_join_convex(bpy.types.Operator):
         default = "SIMPLE")
     
     
+    partial_shrink = BoolProperty(description = 'Copy some of the original model shape', default = True)
+    shrink_fact = FloatProperty(name = 'Shrink Factor', default = 0.3, min = 0, max = .8)
+    join_to_model = BoolProperty(description = 'Join Convex Object with Lower Model', default = True)
     @classmethod
     def poll(cls, context):
         #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
@@ -2224,6 +2232,10 @@ class D3SPLINT_OT_join_convex(bpy.types.Operator):
         #    return False
         return True
     
+    def invoke(self,context,event):
+
+        return context.window_manager.invoke_props_dialog(self)
+        
     def execute(self, context):
         
         
@@ -2286,10 +2298,29 @@ class D3SPLINT_OT_join_convex(bpy.types.Operator):
             bme.to_mesh(context.object.data)        
             bme.free()
             
-            context.scene.objects.active = Opposing
-            Opposing.select = True
-            
-            bpy.ops.object.join()     
+            if self.partial_shrink:
+                if 'Shrink' not in context.object.vertex_groups:
+                    vg = context.object.vertex_groups.new(name = 'Shrink')
+                else:
+                    vg = context.object.vertex_groups['Shrink']
+                #make all members, weight at 0    
+                vg.add([i for i in range(0,len(context.object.data.vertices))], self.shrink_fact, type = 'REPLACE')
+                
+                mod = context.object.modifiers.new('Shrink', type = 'SHRINKWRAP')
+                mod.vertex_group = 'Shrink'
+                mod.target = Opposing
+                
+                bme = bmesh.new()
+                bme.from_object(context.object, context.scene, deform = True)
+                
+                context.object.modifiers.remove(mod)
+                bme.to_mesh(context.object.data)
+                bme.free()
+                
+            if self.join_to_model:
+                context.scene.objects.active = Opposing
+                Opposing.select = True
+                bpy.ops.object.join()     
                       
         return {'FINISHED'}
 
@@ -2639,7 +2670,7 @@ class D3SPLINT_OT_splint_trim_model(bpy.types.Operator):
         cut_bme.free()
         trimmed_bme.free()
         #todo remove/delete to_mesh mesh
-  
+        splint.trim_upper = True
         return {'FINISHED'}
     
 class D3SPLINT_OT_splint_mount_on_articulator(bpy.types.Operator):
@@ -2758,7 +2789,10 @@ class D3SPLINT_OT_splint_join_rim(bpy.types.Operator):
         bool_mod.object = Rim
         Rim.hide = True
         Shell.hide = False
-         
+        
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        splint.ops_string += 'JoinRim:' 
         return {'FINISHED'}
 
 
@@ -2796,6 +2830,10 @@ class D3SPLINT_OT_splint_subtract_surface(bpy.types.Operator):
         bool_mod.operation = 'DIFFERENCE'
         bool_mod.object = Plane
         Plane.hide = True 
+        
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        splint.ops_string += 'SubtractSurface:'
         return {'FINISHED'}
     
 class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
@@ -2867,7 +2905,9 @@ class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
         bool_mod.solver = 'CARVE'
         Passive.hide = True 
         
-        
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        splint.finalize_splint = True
         return {'FINISHED'}
     
         
@@ -2961,7 +3001,7 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
         tracking.trackUsage("D3Splint:CreateSurface",None)
         context.scene.frame_current = -1
         context.scene.frame_current = 0
-        
+        splint.ops_string += 'AnimateArticulator:'
         print('adding the handler!')
         bpy.app.handlers.frame_change_pre.append(occlusal_surface_frame_change)
         bpy.ops.screen.animation_play()
@@ -2988,8 +3028,6 @@ class D3SPLINT_OT_splint_stop_functional_surface(bpy.types.Operator):
         tracking.trackUsage("D3Splint:StopFunctionalSurface",None)
         print('removing the handler')
         bpy.app.handlers.frame_change_pre.remove(occlusal_surface_frame_change)
-        
-        
         return {'FINISHED'}
 
 class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
@@ -3054,6 +3092,10 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
         
         self.bme.free() 
         tracking.trackUsage("D3Splint:OffsetShell",self.radius)   
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        splint.splint_shell = True
+        
         return {'FINISHED'}
     
     def invoke(self, context, event):
@@ -3227,6 +3269,10 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         
         bpy.ops.view3d.viewnumpad(type = 'RIGHT')
         tracking.trackUsage("D3Splint:PassiveOffset",self.radius)
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        splint.passive_offset = True
+        
         return {'FINISHED'}
     
     def invoke(self, context, event):

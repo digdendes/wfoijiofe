@@ -299,9 +299,11 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         if not self.auto_mount:
             return {'FINISHED'}
         
-        opposing = context.scene.odc_splints[0].opposing
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        opposing = splint.opposing
         Model = bpy.data.objects.get(opposing)
-        
+        splint.ops_string += 'GenArticulator:'
         if not Model:
             self.report({'WARNING'},"Please use mark opposing model and then mount")
             return {'Finished'}
