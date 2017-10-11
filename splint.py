@@ -2,7 +2,7 @@ import time
 import bpy
 import bmesh
 import math
-from mathutils import Vector, Matrix, Color
+from mathutils import Vector, Matrix, Color, kdtree
 from mathutils.geometry import intersect_point_line
 from bpy_extras import view3d_utils
 from bpy.props import FloatProperty, BoolProperty, IntProperty, EnumProperty
@@ -734,6 +734,14 @@ class D3SPLINT_OT_splint_occlusal_arch(bpy.types.Operator):
         bme.to_mesh(me)
         plane_obj = bpy.data.objects.new('Occlusal Plane', me)
         plane_obj.matrix_world = T * R
+        
+        mat = bpy.data.materials.get("Plane Material")
+        if mat is None:
+            # create material
+            mat = bpy.data.materials.new(name="Plane Material")
+            mat.diffuse_color = Color((0.8, 1, .9))
+        
+        plane_obj.data.materials.append(mat)
         context.scene.objects.link(plane_obj)
         plane_obj.hide = True
         bme.free()
@@ -1382,7 +1390,7 @@ class D3SPLINT_OT_splint_bezier_model(bpy.types.Operator):
 class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
     '''Cut a model with the margin line'''
     bl_idname = "d3splint.splint_model_trim"
-    bl_label = "Splint Trim Margin"
+    bl_label = "Splint Trim Full Margin"
     bl_options = {'REGISTER','UNDO'}
 
     smooth_iterations= bpy.props.IntProperty(name = 'Smooth', default = 5)
@@ -1395,26 +1403,17 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
     def execute(self, context):
             
         settings = get_settings()
-        dbg = settings.debug
-        
-        #first, ensure all models are present and not deleted etc
-        odcutils.scene_verification(context.scene, debug = dbg)      
-        b = settings.behavior
-        behave_mode = settings.behavior_modes[int(b)]
-        
-        settings = get_settings()
-        dbg = settings.debug    
-        [ob_sets, tool_sets, space_sets] = odcutils.scene_preserv(context, debug=dbg)
-        
-        
         j = context.scene.odc_splint_index
         splint =context.scene.odc_splints[j]
         if splint.model in bpy.data.objects and splint.margin in bpy.data.objects:
-            model = bpy.data.objects[splint.model]
+            Model = bpy.data.objects[splint.model]
             margin = bpy.data.objects[splint.margin]
         else:
-            print('whoopsie...margin and model not defined or something is wrong')
+            self.report({'ERROR'},'Margin and model not defined')
             return {'CANCELLED'}
+        
+        
+        mx = margin.matrix_world
         
         new_me = margin.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
         bme = bmesh.new()
@@ -1423,31 +1422,280 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         
         bme.verts.ensure_lookup_table()
         bme.edges.ensure_lookup_table()
-        orig_verts = [v for v in bme.verts]
-        orig_edges = [ed for ed in  bme.edges]
-        gdict = bmesh.ops.extrude_edge_only(bme, edges = bme.edges[:])
-        bme.edges.ensure_lookup_table()
-        new_edges = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMEdge)]
         
         
-        gdict = bmesh.ops.extrude_edge_only(bme, edges = new_edges)
-        bme.edges.ensure_lookup_table()
+        verts_right = [v for v in bme.verts if (mx*v.co)[1] < 0.0]
+        verts_left = [v for v in bme.verts if (mx*v.co)[1] >= 0.0]
+        
+        
+        posterior_right_v = min(verts_right, key = lambda x: x.co[0])
+        posterior_left_v = min(verts_left, key = lambda x: x.co[0])
+        
+        
+        
+        go = True
+        iters = 0
+        ed = posterior_right_v.link_edges[0]
+        v = posterior_right_v
+        verts_in_order = [v]
+        while go and iters < 1000:
+            iters += 1
+            next_v = ed.other_vert(v)
+            verts_in_order += [next_v]
+            next_eds = [e for e in next_v.link_edges if e != ed]
+            ed = next_eds[0]
+            v = next_v
+            
+            if v == posterior_left_v:   
+                break
+            
+        
+        
+        go = True
+        iters = 0
+        ed = posterior_right_v.link_edges[1]
+        v = posterior_right_v
+        verts_in_order1 = [v]
+        while go and iters < 1000:
+            iters += 1
+            next_v = ed.other_vert(v)
+            verts_in_order1 += [next_v]
+            next_eds = [e for e in next_v.link_edges if e != ed]
+            ed = next_eds[0]
+            v = next_v
+            
+            if v == posterior_left_v:   
+                break
+        
+        #trim off verts closer than 10mm from each posterior molar spot
+        #hold onto them for later
+        r_molar_verts0 = [posterior_right_v]
+        rn_0 = 1
+        for v in verts_in_order[1:]:
+            r = v.co - posterior_right_v.co
+            if r.length < 12:
+                rn_0 += 1
+                r_molar_verts0 += [v]
+            else:
+                break
+                
+        r_molar_verts1 = []
+        rn_1 = 1
+        for v in verts_in_order1[1:]:
+            r = v.co - posterior_right_v.co
+            if r.length < 12:
+                rn_1 += 1
+                r_molar_verts1 += [v]
+            else:
+                break
+        verts_in_order = verts_in_order[rn_0:]
+        verts_in_order1 = verts_in_order1[rn_1:]
+        
+        r_molar_verts1.reverse()
+        r_molar_verts = r_molar_verts1 + r_molar_verts0
+        
+            
+        l_molar_verts0 = [posterior_left_v]    
+        ln_0 = 1
+        for v in verts_in_order[-2::-1]:
+            r = v.co - posterior_left_v.co
+            if r.length < 12:
+                ln_0 += 1
+                l_molar_verts0 += [v]
+            else:
+                break
+        
+        l_molar_verts1 = []
+        ln_1 = 1   
+        for v in verts_in_order1[-2::-1]:
+            r = v.co - posterior_left_v.co
+            if r.length < 12:
+                ln_1 += 1
+                l_molar_verts1 += [v]
+            else:
+                break    
+        
+        verts_in_order = verts_in_order[:-ln_0]
+        verts_in_order1 = verts_in_order1[:-ln_1]
+        
+        l_molar_verts0.reverse()
+        l_molar_verts = l_molar_verts0 + l_molar_verts1
+        
+        #make new evenly spaced geometry
+        l_molar_locs, eds = space_evenly_on_path([mx * v.co for v in l_molar_verts], [(0,1),(1,2)], 20)
+        r_molar_locs, eds = space_evenly_on_path([mx * v.co for v in r_molar_verts], [(0,1),(1,2)], 20)
+        
+        arch0, eds0 = space_evenly_on_path([mx * v.co for v in verts_in_order], [(0,1),(1,2)], 100)
+        arch1, eds1 = space_evenly_on_path([mx * v.co for v in verts_in_order1], [(0,1),(1,2)], 100)
+        
+        
+        new_bme = bmesh.new()
+        
+        arch_0_vs = []
+        for loc in arch0:
+            arch_0_vs += [new_bme.verts.new(loc)]                                 
+        
+        arch_1_vs = []
+        for loc in arch1:
+            arch_1_vs += [new_bme.verts.new(loc)]
+            
+        l_molar_vs = []    
+        for loc in l_molar_locs:
+            l_molar_vs += [new_bme.verts.new(loc)]
+        
+        r_molar_vs = []    
+        for loc in r_molar_locs:
+            r_molar_vs += [new_bme.verts.new(loc)]
+        
+        new_bme.faces.new(l_molar_vs)
+        new_bme.faces.new(r_molar_vs)
+        
+        arch_1_vs = [r_molar_vs[0]] + arch_1_vs + [l_molar_vs[-1]]
+        arch_0_vs = [r_molar_vs[-1]] + arch_0_vs + [l_molar_vs[0]]
+        
+        for i in range(0,len(arch_1_vs)-1):
+            a = arch_0_vs[i]
+            b = arch_0_vs[i+1]
+            d = arch_1_vs[i]
+            c = arch_1_vs[i+1]
+            new_bme.faces.new([a,b,c,d])
+        #new_ob.matrix_world = margin.matrix_world
+        
+        perimeter_eds = [ed for ed in new_bme.edges if len(ed.link_faces) == 1]
+        gdict = bmesh.ops.extrude_edge_only(new_bme, edges = perimeter_eds)
+        new_bme.edges.ensure_lookup_table()
         newer_edges = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMEdge)]
+        newer_verts = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMVert)]
+        offset_bmesh_edge_loop(new_bme, [ed.index for ed in newer_edges], Vector((0,0,1)), -2)
+        for v in newer_verts:
+            v.co[2] -= .5
         
-        
-        offset_bmesh_edge_loop(bme, [ed.index for ed in orig_edges], Vector((0,0,1)), -1)
-        offset_bmesh_edge_loop(bme, [ed.index for ed in newer_edges], Vector((0,0,1)), 1)
-        
-        
-        smooth_verts = [v for v in bme.verts if v not in orig_verts]
-        for i in range(0,self.smooth_iterations):
-            bmesh.ops.smooth_vert(bme, verts = smooth_verts, factor = .5)
-        
-        new_ob.matrix_world = margin.matrix_world
-        bme.to_mesh(new_me)
+        new_bme.to_mesh(new_me)
         bme.free()
+        
+        new_bme.verts.ensure_lookup_table()
+        new_bme.faces.ensure_lookup_table()
         context.scene.objects.link(new_ob)
+        
+        bvh = BVHTree.FromBMesh(new_bme)
+        trimmed_bme = bmesh.new()
+        trimmed_bme.from_mesh(Model.data)
+        trimmed_bme.verts.ensure_lookup_table()
+        
+        
+        to_keep = []
+        mx2 = Model.matrix_world
+        #Z = mx.inverted().to_3x3() * Vector((0,0,1))
+        Z = Vector((0,0,1))
+        for v in trimmed_bme.verts:
+            a = mx2 * v.co
+            
+            res = bvh.ray_cast(a, Z, 20)
+            if res[0] != None:
+                #v.co = Vector((0,0,0))
+                to_keep.append(v)
+        
+        to_delete = list(set(trimmed_bme.verts[:]) - set(to_keep))
+        new_bme.free()
+        
+        
+        print('deleting %i verts out of %i verts' % (len(to_delete), len(trimmed_bme.verts)))
+        bmesh.ops.delete(trimmed_bme, geom = to_delete, context = 1)
+  
+        trimmed_bme.verts.ensure_lookup_table()
+        trimmed_bme.faces.ensure_lookup_table()
+        trimmed_bme.edges.ensure_lookup_table()
+        trimmed_bme.verts.index_update()
+        trimmed_bme.edges.index_update()
+        trimmed_bme.faces.index_update()
+        
+        
+        to_delete = []
+        for v in trimmed_bme.verts:
+            if len(v.link_edges) < 2:
+                to_delete.append(v)
+                
+        print('deleting %i loose verts' % len(to_delete))
+        bmesh.ops.delete(trimmed_bme, geom = to_delete, context = 1)
+        trimmed_bme.verts.ensure_lookup_table()
+        trimmed_bme.faces.ensure_lookup_table()
+        trimmed_bme.edges.ensure_lookup_table()
+        trimmed_bme.verts.index_update()
+        trimmed_bme.edges.index_update()
+        trimmed_bme.faces.index_update()
+        
+                
+        eds = [ed for ed in trimmed_bme.edges if len(ed.link_faces) == 1]
+        
+        gdict = bmesh.ops.extrude_edge_only(trimmed_bme, edges = eds)
+        trimmed_bme.edges.ensure_lookup_table()
+        new_edges = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMEdge)]
+        trimmed_bme.verts.ensure_lookup_table()
+        trimmed_bme.edges.ensure_lookup_table()
+        trimmed_bme.verts.index_update()
+        trimmed_bme.edges.index_update()
+        trimmed_bme.faces.index_update()
+        
+        loops = edge_loops_from_bmedges(trimmed_bme, [ed.index for ed in new_edges])
+        print('there are %i loops' % len(loops))
+        for loop in loops:
+            if len(loop) < 50: continue
+            for vi in loop:
+                v = trimmed_bme.verts[vi]
+                if not v.is_valid:
+                    print('invalid vert')
+                    continue
+                a = mx2 * trimmed_bme.verts[vi].co
+                res = bvh.ray_cast(a, Z, 5)
+                if res[0] != None:
+                    v.co = mx2.inverted() * res[0]
+        
+        trimmed_model = bpy.data.meshes.new('Trimmed_Model')
+        trimmed_obj = bpy.data.objects.new('Trimmed_Model', trimmed_model)
+        trimmed_bme.to_mesh(trimmed_model)
+        trimmed_obj.matrix_world = mx2
+        context.scene.objects.link(trimmed_obj)
+        
+                    
+        trimmed_bme.verts.ensure_lookup_table()
+        for i in range(4):        
+            gdict = bmesh.ops.extrude_edge_only(trimmed_bme, edges = new_edges)
+            trimmed_bme.edges.ensure_lookup_table()
+            trimmed_bme.verts.ensure_lookup_table()
+            new_verts = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMVert)]
+            new_edges = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMEdge)]
+            for v in new_verts:
+                v.co += .4 * Vector((0,0,1))
+        
+        loops = edge_loops_from_bmedges(trimmed_bme, [ed.index for ed in new_edges])
+        print('there are %i loops' % len(loops))
+        for loop in loops:
+            if loop[0] != loop[-1]:continue
+            loop.pop()
+            f = [trimmed_bme.verts[i] for i in loop]
+            trimmed_bme.faces.new(f)
+            
+        bmesh.ops.recalc_face_normals(trimmed_bme,faces = trimmed_bme.faces[:])
+            
+            
+                    
+        based_model = bpy.data.meshes.new('Based_Model')
+        based_obj = bpy.data.objects.new('Based_Model', based_model)
+        trimmed_bme.to_mesh(based_model)
+        based_obj.matrix_world = mx2
+        context.scene.objects.link(based_obj)
+        Model.hide = True
+        #trim_ob.hide = True
+        
+        bme.free()
+        new_bme.free()
+        trimmed_bme.free()
+        #todo remove/delete to_mesh mesh
+        splint.trim_upper = True
+        
         return {'FINISHED'}
+    
+        
     
           
 class D3SPLINT_OT_splint_margin_detail(bpy.types.Operator):
@@ -2720,7 +2968,71 @@ class D3SPLINT_OT_splint_mount_on_articulator(bpy.types.Operator):
         
         return {'FINISHED'}
 
-
+class D3SPLINT_OT_splint_open_pin_on_articulator(bpy.types.Operator):
+    """Open Pin on Articulator.  Pin increments are assumed 1mm at 85mm from condyles"""
+    bl_idname = "d3splint.open_pin_on_articulator"
+    bl_label = "Change Articulator Pin"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    
+    amount = FloatProperty(name = 'Pin Setting', default = 0.5, step = 10, min = -3.0, max = 3.0)
+    @classmethod
+    def poll(cls, context):
+        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
+        #    return True
+        #else:
+        #    return False
+        return True
+    
+    def invoke(self,context,event):
+        tracking.trackUsage("D3Splint:ChangePinSetting",None)
+        return context.window_manager.invoke_props_dialog(self)
+    
+    def execute(self, context):
+        
+        splint = context.scene.odc_splints[0]  #TODO better knowledge for multiple splints
+        if not splint.landmarks_set:
+            self.report({'ERROR'}, 'You must set landmarks to get an approximate mounting')
+            return {'CANCELLED'}
+        
+        opposing = splint.opposing
+        Model = bpy.data.objects.get(opposing)
+        
+        if not Model:
+            self.report({'ERROR'},"Please set opposing model")
+            return {'CANCELLED'}
+        
+        Articulator = bpy.data.objects.get('Articulator')
+        if Articulator == None:
+            self.report({'ERROR'},"Please use Add Arcon Articulator function")
+            return {'CANCELLED'}
+        
+        if context.scene.frame_current != 0:
+            context.scene.frame_current = -1
+            context.scene.frame_current = 0
+        
+        re_mount = False
+        if len(Model.constraints):
+            Model.constraints.remove(Model.constraints[0]) 
+            re_mount = True
+            
+        
+        radians = self.amount/85
+        
+        R = Matrix.Rotation(radians, 4, 'Y')
+        Model.matrix_world = R * Model.matrix_world
+        
+        if re_mount:    
+            cons = Model.constraints.new(type = 'CHILD_OF')
+            cons.target = Articulator
+            cons.subtarget = 'Mandibular Bow'
+        
+            mx = Articulator.matrix_world * Articulator.pose.bones['Mandibular Bow'].matrix
+            cons.inverse_matrix = mx.inverted()
+    
+        return {'FINISHED'}
+    
+    
 def occlusal_surface_frame_change(scene):
 
     if not len(scene.odc_splints): return
@@ -2814,10 +3126,17 @@ class D3SPLINT_OT_splint_subtract_surface(bpy.types.Operator):
     
     def execute(self, context):
         
+        if not len(context.scene.odc_splints):
+            self.report({'ERROR'}, 'Need to start a splint by setting model first')
+            return {'CANCELLED'}
         
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        
+        Model = bpy.data.objects.get(splint.model)
         Shell = bpy.data.objects.get('Splint Shell')
         Plane = bpy.data.objects.get('Occlusal Plane')
-        
+
         if Shell == None:
             self.report({'ERROR'}, 'Need to calculate splint shell first')
             return {'CANCELLED'}
@@ -2826,6 +3145,51 @@ class D3SPLINT_OT_splint_subtract_surface(bpy.types.Operator):
             return {'CANCELLED'}
         
         tracking.trackUsage("D3Splint:SubtractSurface",None)
+        
+        high_verts = []
+        bme = bmesh.new()
+        bme.from_mesh(Plane.data)
+        bme.verts.ensure_lookup_table()
+        
+        mx_p = Plane.matrix_world
+        imx_p = mx_p.inverted()
+        
+        mx_s = Model.matrix_world
+        imx_s = mx_s.inverted()
+        
+        for v in bme.verts:
+            ray_orig = mx_p * v.co
+            ray_target = mx_p * v.co - 5 * Vector((0,0,1))
+            ray_target2 = mx_p * v.co + .8 * Vector((0,0,1))
+            
+            ok, loc, no, face_ind = Model.ray_cast(imx_s * ray_orig, imx_s * ray_target - imx_s*ray_orig)
+        
+            if ok:
+                high_verts += [v]
+                v.co = imx_p * (mx_s * loc - 0.8 * Vector((0,0,1)))
+            else:
+                ok, loc, no, face_ind = Model.ray_cast(imx_s * ray_orig, imx_s * ray_target2 - imx_s*ray_orig, distance = 0.8)
+                if ok:
+                    high_verts += [v]
+                    v.co = imx_p * (mx_s * loc - 0.8 * Vector((0,0,1)))
+        
+        if len(high_verts):
+            self.report({'WARNING'}, 'Sweep surface intersected upper model, corrected it for you!')
+            
+            mat = bpy.data.materials.get("Bad Material")
+            if mat is None:
+                # create material
+                mat = bpy.data.materials.new(name="Bad Material")
+                mat.diffuse_color = Color((1,.3, .3))
+        
+                Plane.data.materials.append(mat)
+            
+            for v in high_verts:
+                for f in v.link_faces:
+                    f.material_index = 1
+            bme.to_mesh(Plane.data)
+            
+        
         bool_mod = Shell.modifiers.new('Join Rim', type = 'BOOLEAN')
         bool_mod.operation = 'DIFFERENCE'
         bool_mod.object = Plane
@@ -2918,7 +3282,7 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     
-    resolution = IntProperty(name = 'Resolution', descriptinon = "Number of setps along the condyle to create surface.  10-40 is reasonable.  Larger = Slower", default = 20)
+    resolution = IntProperty(name = 'Resolution', description = "Number of setps along the condyle to create surface.  10-40 is reasonable.  Larger = Slower", default = 20)
     range_of_motion = FloatProperty(name = 'Range of Motion', min = 0.2, max = 1.0, description = 'Percent of condylar path to animate, typically .2 to 1.0', default = 0.8)
     @classmethod
     def poll(cls, context):
@@ -2953,7 +3317,6 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
         Shell = bpy.data.objects.get('Splint Shell')
         if Shell:
             bme_shell = bmesh.new()
-            bvh_shell = BVHTree.FromBMesh(bme_shell)
             
             bme = bmesh.new()
             bme.from_mesh(Plane.data)
@@ -3052,7 +3415,7 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
         ob = bpy.data.objects.get('Trimmed_Model')
         self.bme.from_object(ob, context.scene)
         self.bme.verts.ensure_lookup_table()
-        
+        self.bme.edges.ensure_lookup_table()
         mx = ob.matrix_world
         
         meta_data = bpy.data.metaballs.new('Splint Shell')
@@ -3061,10 +3424,49 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
         meta_data.render_resolution = self.resolution
         context.scene.objects.link(meta_obj)
         
+        perimeter_edges = [ed for ed in self.bme.edges if len(ed.link_faces) == 1]
+        perim_inds = edge_loops_from_bmedges(self.bme, [ed.index for ed in perimeter_edges])[0]
+        perim_verts = [self.bme.verts[i] for i in perim_inds]
+        stroke = [self.bme.verts[i].co for i in perim_inds]
+        print('there are %i non man verts' % len(stroke))                                          
+        kd = kdtree.KDTree(len(stroke))
+        for i in range(0, len(stroke)-1):
+            kd.insert(stroke[i], i)
+        kd.balance()
+        perim_set = set(perim_verts)
         for v in self.bme.verts:
-            mb = meta_data.elements.new(type = 'BALL')
-            mb.radius = self.radius
-            mb.co = v.co
+            if v in perim_set: 
+                continue
+            
+            loc, ind, r = kd.find(v.co)
+            
+            if r and r < .8 * self.radius:
+                mb = meta_data.elements.new(type = 'ELLIPSOID')
+                mb.size_z = .45 * r
+                mb.size_y = .45 * self.radius
+                mb.size_x = .45 * self.radius
+                mb.co = v.co
+                
+                X = v.normal
+                Y = Vector((0,0,1)).cross(X)
+                Z = X.cross(Y)
+                
+                #rotation matrix from principal axes
+                T = Matrix.Identity(3)  #make the columns of matrix U, V, W
+                T[0][0], T[0][1], T[0][2]  = X[0] ,Y[0],  Z[0]
+                T[1][0], T[1][1], T[1][2]  = X[1], Y[1],  Z[1]
+                T[2][0] ,T[2][1], T[2][2]  = X[2], Y[2],  Z[2]
+    
+                Rotation_Matrix = T.to_4x4()
+                
+                mb.rotation = Rotation_Matrix.to_quaternion()
+                
+            elif r and r < 0.2 * self.radius:
+                continue
+            else:
+                mb = meta_data.elements.new(type = 'BALL')
+                mb.radius = self.radius
+                mb.co = v.co
             
         meta_obj.matrix_world = mx
         
@@ -3126,8 +3528,8 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
     bl_label = "Create Splint Spacer"
     bl_options = {'REGISTER', 'UNDO'}
     
-    radius = FloatProperty(default = .2 , min = .075, max = 1, description = 'Thickness of Offset')
-    resolution = FloatProperty(default = 1.2, description = 'Mesh resolution. 1.5 seems ok?')
+    radius = FloatProperty(default = .15 , min = .075, max = 1, description = 'Thickness of Offset')
+    resolution = FloatProperty(default = 1.5, description = 'Mesh resolution. 1.5 seems ok?')
     n_verts = IntProperty(default = 1000)
     
     @classmethod
@@ -3139,7 +3541,7 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         
     def execute(self, context):
         self.bme = bmesh.new()
-        ob = bpy.data.objects.get('Trimmed_Model')
+        ob = bpy.data.objects.get('Based_Model')
         
         if not ob:
             self.report({'ERROR'}, 'Must trim the upper model first')
@@ -3155,9 +3557,8 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         meta_data.resolution = self.resolution
         meta_data.render_resolution = self.resolution
         context.scene.objects.link(meta_obj)
-               
-        #conversion factors
-        #for ed in []:
+        
+            
         for v in self.bme.verts:
             co = v.co
             R = .5 * max([ed.calc_length() for ed in v.link_edges])
@@ -3250,7 +3651,21 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         mod = new_ob.modifiers.new('Smooth', type = 'SMOOTH')
         mod.factor = 1
         mod.iterations = 8
-            
+        
+        
+        mod = new_ob.modifiers.new('Decimate', type = 'DECIMATE')
+        mod.ratio = 0.15
+        
+        new_bme = bmesh.new()
+        new_bme.from_object(new_ob, context.scene)
+        
+         
+        for mod in new_ob.modifiers:
+            new_ob.modifiers.remove(mod)
+        
+        new_bme.to_mesh(new_ob.data)
+        new_bme.free()
+         
         context.scene.objects.unlink(meta_obj)
         bpy.data.objects.remove(meta_obj)
         bpy.data.metaballs.remove(meta_data)
@@ -3264,6 +3679,9 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         new_ob.hide = False    
         context.scene.objects.active = new_ob
         new_ob.select = True
+        
+            
+        
         ob = bpy.data.objects.get('Based_Model')
         ob.hide = False
         
@@ -3370,7 +3788,8 @@ def register():
     bpy.utils.register_class(D3SPLINT_OT_convexify_model)
     bpy.utils.register_class(D3SPLINT_OT_join_convex)
     bpy.utils.register_class(D3SPLINT_OT_splint_trim_model)
-
+    bpy.utils.register_class(D3SPLINT_OT_splint_margin_trim)
+    
     bpy.utils.register_class(D3SPLINT_OT_meta_splint_surface)
     bpy.utils.register_class(D3SPLINT_OT_meta_splint_passive_spacer)
     bpy.utils.register_class(D3SPLINT_OT_splint_add_rim)
@@ -3383,7 +3802,7 @@ def register():
     bpy.utils.register_class(D3SPLINT_OT_splint_subtract_surface)
     bpy.utils.register_class(D3SPLINT_OT_splint_go_sculpt)
     bpy.utils.register_class(D3SPLINT_OT_splint_finish_booleans)
-
+    bpy.utils.register_class(D3SPLINT_OT_splint_open_pin_on_articulator)
     #Experimental
     #bpy.utils.register_class(D3SPLINT_OT_splint_margin_detail)
     #bpy.utils.register_class(D3SPLINT_OT_splint_margin_trim)
@@ -3417,6 +3836,7 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_convexify_model)
     bpy.utils.unregister_class(D3SPLINT_OT_join_convex)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_trim_model)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_margin_trim)
 
     bpy.utils.unregister_class(D3SPLINT_OT_meta_splint_surface)
     bpy.utils.unregister_class(D3SPLINT_OT_meta_splint_passive_spacer)
@@ -3430,6 +3850,6 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_splint_subtract_surface)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_go_sculpt)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_finish_booleans)
-    
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_open_pin_on_articulator)
 if __name__ == "__main__":
     register()

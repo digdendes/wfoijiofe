@@ -186,7 +186,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         else:
             ico = 'CHECKBOX_DEHLT'
         row = layout.row()
-        row.operator("d3splint.splint_trim_from_curve", text = "Trim Upper", icon = ico)
+        row.operator("d3splint.splint_model_trim", text = "Trim Upper", icon = ico)
         
         #row = layout.row()
         #row.label('Paint Method')

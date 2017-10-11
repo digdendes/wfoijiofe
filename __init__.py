@@ -24,7 +24,7 @@
 bl_info = {
     'name': "D3T Splint Module",
     'author': "Patrick R. Moore",
-    'version': (0,0,5),
+    'version': (0,0,6),
     'blender': (2, 7, 8),
     'api': "3c04373",
     'location': "3D View -> Tool Shelf",
@@ -60,8 +60,33 @@ class D3SplintAddonPreferences(AddonPreferences):
     addons = bpy.context.user_preferences.addons
     
     folderpath = os.path.dirname(os.path.abspath(__file__))
-
-    data_folder =os.path.join(folderpath,'data\\')
+    cork_folder =os.path.join(folderpath,'cork\\')
+    
+    if platform.system() == "Windows":
+        cork_exe =os.path.join(folderpath,'cork\\win\\wincork.exe')
+        if not os.path.exists(cork_exe):
+            cork_exe = ''
+            print('Cork Unsupported')
+    elif "Mac" in platform.system():
+        cork_exe =os.path.join(folderpath,'cork\\mac\\cork')
+        if not os.path.exists(cork_exe):
+            cork_exe = ''
+            print('Cork Unsupported')
+    elif "Linux" in platform.system():
+        cork_exe =os.path.join(folderpath,'cork\\linux\\cork.exe')
+        if not os.path.exists(cork_exe):
+            cork_exe = ''
+            print('Cork Unsupported')
+    else:
+        cork_exe = ''
+        print('Cork Unsupported')
+    
+    
+    cork_lib = bpy.props.StringProperty(
+        name="Cork Exe",
+        default=cork_exe,
+        #default = '',
+        subtype='FILE_PATH')
     
     dev = bpy.props.BoolProperty(name="Development Mode",
                                  default=False)
@@ -191,7 +216,7 @@ def register():
     
     
     import d3classes, odcutils, crown, margin, bridge, splint, implant, panel, help, flexible_tooth, bracket_placement, denture_base, occlusion, ortho, curve_partition, articulator, splint_landmark_fns # , odcmenus, bgl_utils
-    import healing_abutment, model_work, tracking, import_export
+    import healing_abutment, model_work, tracking, import_export, splint_booleans
     
     #register them
     d3classes.register()
@@ -203,6 +228,7 @@ def register():
     #denture_base.register()
     occlusion.register()
     splint_landmark_fns.register()
+    splint_booleans.register()
     model_work.register()
     import_export.register()
     
@@ -221,8 +247,11 @@ def register():
     
 def unregister():
     #import the relevant modules
-    from . import d3classes, odcutils, splint, panel, curve_partition, articulator, splint_landmark_fns, model_work, tracking
-    from . import import_export
+    from . import ( d3classes, odcutils, splint, 
+                    panel, curve_partition, articulator, 
+                    splint_landmark_fns, model_work, tracking, 
+                    splint_booleans, import_export,
+                    )
     
     bpy.app.handlers.save_pre.remove(save_pre_method)
     bpy.app.handlers.load_post.remove(load_post_method)
@@ -241,8 +270,10 @@ def unregister():
     panel.unregister()
     curve_partition.unregister()
     splint_landmark_fns.unregister()
+    splint_booleans.unregister()
     model_work.unregister()
     import_export.unregister()
+    
     #unregister this module
  
 if __name__ == "__main__":
