@@ -1655,10 +1655,10 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         trimmed_bme.to_mesh(trimmed_model)
         trimmed_obj.matrix_world = mx2
         context.scene.objects.link(trimmed_obj)
-        
+        trimmed_obj.hide = True
                     
         trimmed_bme.verts.ensure_lookup_table()
-        for i in range(4):        
+        for i in range(6):        
             gdict = bmesh.ops.extrude_edge_only(trimmed_bme, edges = new_edges)
             trimmed_bme.edges.ensure_lookup_table()
             trimmed_bme.verts.ensure_lookup_table()
@@ -3220,16 +3220,16 @@ class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
         
         
         Shell = bpy.data.objects.get('Splint Shell')
-        Plane = bpy.data.objects.get('Trim Surface')
+        #Plane = bpy.data.objects.get('Trim Surface')
         Base = bpy.data.objects.get('Based_Model')
         Passive = bpy.data.objects.get('Passive Spacer')
         
         if Shell == None:
             self.report({'ERROR'}, 'Need to calculate splint shell first')
             return {'CANCELLED'}
-        if Plane == None:
-            self.report({'ERROR'}, 'Need to generate functional surface first')
-            return {'CANCELLED'}
+        #if Plane == None:
+        #    self.report({'ERROR'}, 'Need to generate functional surface first')
+        #    return {'CANCELLED'}
         if Base == None:
             self.report({'ERROR'}, 'Need to trim model first')
             return {'CANCELLED'}
@@ -3247,16 +3247,27 @@ class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
         for mod in Shell.modifiers:
             bpy.ops.object.modifier_apply(modifier = mod.name)
             
-        Plane.location += Vector((0,0,.05))
-        thick = Plane.modifiers.new('Thicken', 'SOLIDIFY')
-        thick.offset = 1
-        thick.thickness = 4
+        #Plane.location += Vector((0,0,.05))
+        #thick = Plane.modifiers.new('Thicken', 'SOLIDIFY')
+        #thick.offset = 1
+        #thick.thickness = 4
         
-        bool_mod = Shell.modifiers.new('Trim Edge ', type = 'BOOLEAN')
-        bool_mod.operation = 'DIFFERENCE'
+        #bool_mod = Shell.modifiers.new('Trim Edge ', type = 'BOOLEAN')
+        #bool_mod.operation = 'DIFFERENCE'
         #bool_mod.solver = 'CARVE'
-        bool_mod.object = Plane
-        Plane.hide = True
+        #bool_mod.object = Plane
+        #Plane.hide = True
+        
+        bme = bmesh.new()
+        bme.from_mesh(Base.data)
+        bme.faces.ensure_lookup_table()
+        bme.verts.ensure_lookup_table()
+        f = max(bme.faces, key = lambda x: len(x.verts))
+        vmax = max(f.verts, key = lambda x: x.co[2])
+        for v in f.verts:
+            v.co[2] = vmax.co[2]
+        bme.to_mesh(Base.data)
+        bme.free()
         
         bool_mod = Shell.modifiers.new('Remove Teeth', type = 'BOOLEAN')
         bool_mod.operation = 'DIFFERENCE'
