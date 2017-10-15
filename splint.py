@@ -750,10 +750,11 @@ class D3SPLINT_OT_splint_occlusal_arch(bpy.types.Operator):
             mat.diffuse_color = Color((0.8, 1, .9))
         
         plane_obj.data.materials.append(mat)
+        Master = bpy.data.objects.get(self.splint.model)
         Opposing = bpy.data.objects.get(self.splint.opposing)
         cons = plane_obj.constraints.new('CHILD_OF')
-        cons.target = Opposing
-        cons.inverse_matrix = Opposing.matrix_world.inverted()
+        cons.target = Master
+        cons.inverse_matrix = Master.matrix_world.inverted()
         
         context.scene.objects.link(plane_obj)
         plane_obj.hide = True
@@ -1590,9 +1591,13 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         new_bme.faces.ensure_lookup_table()
         context.scene.objects.link(new_ob)
         
-        new_ob.constraints.new('COPY_TRANSFORMS')
-        new_ob.target = bpy.data.objects.get(splint.model)
+        Master = bpy.data.objects.get(splint.model)
+        #new_ob.parent = Master
         
+        cons = new_ob.constraints.new('CHILD_OF')
+        cons.target = Master
+        cons.inverse_matrix = Master.matrix_world.inverted()
+        new_ob.hide = True
         
         bvh = BVHTree.FromBMesh(new_bme)
         trimmed_bme = bmesh.new()
@@ -1733,8 +1738,8 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         trimmed_model = bpy.data.meshes.new('Trimmed_Model')
         trimmed_obj = bpy.data.objects.new('Trimmed_Model', trimmed_model)
         
-        trimmed_obj.constraints.new('COPY_TRANSFORMS')
-        trimmed_obj.target = bpy.data.objects.get(splint.model)
+        cons = trimmed_obj.constraints.new('COPY_TRANSFORMS')
+        cons.target = bpy.data.objects.get(splint.model)
         
         trimmed_bme.to_mesh(trimmed_model)
         trimmed_obj.matrix_world = mx2
@@ -1796,7 +1801,11 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         based_obj.matrix_world = mx2
         context.scene.objects.link(based_obj)
         Model.hide = True
-        trim_ob.hide = True
+        based_obj.hide = False
+        
+        cons = based_obj.constraints.new('CHILD_OF')
+        cons.target = Master
+        cons.inverse_matrix = Master.matrix_world.inverted()
         
         bme.free()
         new_bme.free()
@@ -3655,8 +3664,8 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
         context.scene.objects.link(new_ob)
         new_ob.matrix_world = mx
         
-        new_ob.constraints.new('COPY_TRANSFORMS')
-        new_ob.target = bpy.data.objects.get(splint.model)
+        cons = new_ob.constraints.new('COPY_TRANSFORMS')
+        cons.target = bpy.data.objects.get(splint.model)
         
         mat = bpy.data.materials.get("Splint Material")
         if mat is None:
@@ -3849,8 +3858,10 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         new_bme.free()
         
         splint = context.scene.odc_splints[0]
-        new_ob.constraints.new('COPY_TRANSFORMS')
-        new_ob.target = bpy.data.objects.get(splint.model)
+        Master = bpy.data.objects.get(splint.model)
+        cons = new_ob.constraints.new('CHILD_OF')
+        cons.target = Master
+        cons.inverse_matrix = Master.matrix_world.inverted()
          
         context.scene.objects.unlink(meta_obj)
         bpy.data.objects.remove(meta_obj)
