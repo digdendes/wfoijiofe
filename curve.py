@@ -590,7 +590,7 @@ class CurveDataManager(object):
     a helper class for interactive editing of Blender bezier curve
     data object
     '''
-    def __init__(self,context,snap_type ='SCENE', snap_object = None, shrink_mod = False, name = 'Outline'):
+    def __init__(self,context,snap_type ='SCENE', snap_object = None, shrink_mod = False, name = 'Outline', cyclic = 'OPTIONAL'):
         '''
         will create a new bezier object, with all auto
         handles. Links it to scene
@@ -612,6 +612,7 @@ class CurveDataManager(object):
             mod.use_keep_above_surface = True
             #mod.use_apply_on_spline = True
         
+        self.cyclic = cyclic
         self.started = False
         self.b_pts = []  #vectors representing locations of be
         self.selected = -1
@@ -778,7 +779,9 @@ class CurveDataManager(object):
         if self.hovered[0] == 'POINT':
             self.selected = self.hovered[1]
             if self.hovered[1] == 0:  #clicked on first bpt, close loop
-                self.crv_data.splines[0].use_cyclic_u = self.crv_data.splines[0].use_cyclic_u == False
+                
+                if self.cyclic in {'MANDATORY','OPTIONAL'}:
+                    self.crv_data.splines[0].use_cyclic_u = self.crv_data.splines[0].use_cyclic_u == False
             return
 
             

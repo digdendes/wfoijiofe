@@ -24,7 +24,7 @@
 bl_info = {
     'name': "D3T Splint Module",
     'author': "Patrick R. Moore",
-    'version': (0,0,6),
+    'version': (0,0,7),
     'blender': (2, 7, 8),
     'api': "3c04373",
     'location': "3D View -> Tool Shelf",
@@ -191,7 +191,10 @@ def save_pre_method(dummy):
 def pause_playback(scene):
     if scene.frame_current == scene.frame_end:
         bpy.ops.screen.animation_play()
-        scene.frame_set(scene.frame_current - 1) #prevent replaying
+        #scene.frame_set(scene.frame_current - 1) #prevent replaying
+        scene.frame_set(-1)
+        scene.frame_set(0)
+        
         print('REACHED THE END')
 
 @persistent

@@ -145,7 +145,11 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
             context.scene.objects.active = Model
             bpy.ops.view3d.viewnumpad(type = 'BOTTOM')
             bpy.ops.view3d.view_selected()
-            self.crv = CurveDataManager(context,snap_type ='OBJECT', snap_object = Model, shrink_mod = False, name = margin)
+            self.crv = CurveDataManager(context,snap_type ='OBJECT', 
+                                        snap_object = Model, 
+                                        shrink_mod = False, 
+                                        name = margin,
+                                        cyclic = 'FALSE')
             self.crv.crv_obj.parent = Model
             context.space_data.show_manipulator = False
             context.space_data.transform_manipulators = {'TRANSLATE'}
@@ -254,8 +258,11 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         
         if nmode in {'finish','cancel'}:
             context.space_data.show_manipulator = True
-            context.space_data.transform_manipulators = {'TRANSLATE'}
             
+            if nmode == 'finish':
+                context.space_data.transform_manipulators = {'TRANSLATE', 'ROTATE'}
+            else:
+                context.space_data.transform_manipulators = {'TRANSLATE'}
             #clean up callbacks
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
             return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
@@ -363,7 +370,16 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
             Opposing.data.transform(mx_inv)
             #Opposing.matrix_world = Matrix.Identity(4)
             Opposing.matrix_world = mx_mount
-            Opposing.hide = True
+            Opposing.hide = False
+        
+            #todo..check to move lower jaw after landmarks?    
+            if len(Opposing.constraints):
+                for cons in Opposing.constraints:
+                    Opposing.constraints.remove(cons)
+                    
+            cons = Opposing.constraints.new('CHILD_OF')
+            cons.target = Model
+            cons.inverse_matrix = Model.matrix_world.inverted()
         
         if "Trim Surface" in bpy.data.objects:
             trim_ob = bpy.data.objects['Trim Surface']
@@ -385,8 +401,8 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         
         context.scene.cursor_location = Model.location
         bpy.ops.view3d.view_center_cursor()
-        bpy.ops.view3d.viewnumpad(type = 'BOTTOM')
-        
+        bpy.ops.view3d.viewnumpad(type = 'FRONT')
+         
         self.splint.landmarks_set = True
         tracking.trackUsage("D3Splint:SplintLandmarks",None)
 
@@ -893,11 +909,12 @@ class D3SPLINT_OT_pick_opposing(bpy.types.Operator):
         
         if self.ob == None:
             return 'main'
-        
+            
         n = context.scene.odc_splint_index
         odc_splint = context.scene.odc_splints[n]
         odc_splint.opposing = self.ob.name
         odc_splint.opposing_set = True
+         
         if "Opposing Mat" not in bpy.data.materials:
             mat = bpy.data.materials.new('Opposing Mat')
             mat.diffuse_color = Color((0.4, .5, .6))
@@ -916,6 +933,19 @@ class D3SPLINT_OT_pick_opposing(bpy.types.Operator):
         return 'finish'
             
     def invoke(self,context, event):
+        
+        if not len(context.scene.odc_splints):
+            self.report({'ERROR'}, 'Need to set master model first')
+            return('CANCELLED')
+        
+        
+        n = context.scene.odc_splint_index
+        odc_splint = context.scene.odc_splints[n]
+        
+        Model = bpy.data.objects.get(odc_splint.model)
+        if not Model:
+            self.report({'ERROR'}, 'Need to set master model first')
+            return('CANCELLED')
         
         self.outline_width = context.user_preferences.themes[0].view_3d.outline_width
         context.user_preferences.themes[0].view_3d.outline_width = 4

@@ -179,7 +179,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         else:
             ico = 'CHECKBOX_DEHLT'
         row = layout.row()
-        row.operator("d3splint.draw_buccal_curve", text = "Mark Splint Facial Outline", icon = ico)
+        row.operator("d3splint.draw_buccal_curve", text = "Mark Splint Outline", icon = ico)
         
         if splint and splint.trim_upper: 
             ico = 'CHECKBOX_HLT'
@@ -301,7 +301,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         
             
             row = layout.row()
-            row.operator("object.mode_set", text = 'Finish Sculpt')
+            row.operator("object.mode_set", text = 'Finish Paint/Sculpt')
             
         #    row = layout.row()
         #    row.prop(paint_settings, "unprojected_radius")
@@ -351,7 +351,7 @@ class VIEW3D_PT_D3SplintModels(bpy.types.Panel):
         col = row.column(align=True)
             
         col.operator("d3splint.enter_sculpt_paint_mask", text = "Paint Model")
-        col.operator("paint.mask_flood_fill", text = "Clear Paing").mode = 'VALUE'
+        col.operator("paint.mask_flood_fill", text = "Clear Paint").mode = 'VALUE'
         col.operator("d3splint.delete_sculpt_mask", text = "Delete Painted") #defaults to .value = 0
         col.operator("d3splint.delete_sculpt_mask_inverse", text = "Keep Only Painted")
         col.operator("d3splint.delete_islands", text = "Delete Small Parts")
