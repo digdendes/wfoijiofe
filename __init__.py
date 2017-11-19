@@ -142,6 +142,16 @@ class D3SplintAddonPreferences(AddonPreferences):
         default = False,
         )
     
+    ##########################################
+    ###### Operator Defaults      ############
+    ##########################################
+    
+    default_jaw_type = bpy.props.EnumProperty(name = 'Jaw Type', 
+                                              items = [('MAXILLA', 'MAXILLA', 'MAXILLA'),('MANDIBLE', 'MANDIBLE', 'MANDIBLE')],
+                                              default = "MAXILLA",
+                                              description = 'Appliance is on upper or lower jaw')
+    
+    
     #behavior_mode = EnumProperty(name="How Active Tooth is determined by operator", description="'LIST' is more predictable, 'ACTIVE' more like blender, 'ACTIVE_SELECTED' is for advanced users", items=behavior_enum, default='0')
 
     def draw(self, context):
@@ -219,7 +229,7 @@ def register():
     
     
     import d3classes, odcutils, crown, margin, bridge, splint, implant, panel, help, flexible_tooth, bracket_placement, denture_base, occlusion, ortho, curve_partition, articulator, splint_landmark_fns # , odcmenus, bgl_utils
-    import healing_abutment, model_work, tracking, import_export, splint_booleans
+    import healing_abutment, model_work, tracking, import_export, splint_booleans, splint_face_bow
     
     #register them
     d3classes.register()
@@ -234,6 +244,7 @@ def register():
     splint_booleans.register()
     model_work.register()
     import_export.register()
+    splint_face_bow.register()
     
     panel.register()
     
@@ -253,7 +264,7 @@ def unregister():
     from . import ( d3classes, odcutils, splint, 
                     panel, curve_partition, articulator, 
                     splint_landmark_fns, model_work, tracking, 
-                    splint_booleans, import_export,
+                    splint_booleans, import_export,splint_face_bow,
                     )
     
     bpy.app.handlers.save_pre.remove(save_pre_method)
@@ -276,7 +287,7 @@ def unregister():
     splint_booleans.unregister()
     model_work.unregister()
     import_export.unregister()
-    
+    splint_face_bow.unregister()
     #unregister this module
  
 if __name__ == "__main__":

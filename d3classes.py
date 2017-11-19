@@ -121,6 +121,11 @@ class D3SplintRestoration(bpy.types.PropertyGroup):
         cls.name = bpy.props.StringProperty(name="Splint Name",default="")
         cls.model = bpy.props.StringProperty(name="Splint Model",default="")
         cls.opposing = bpy.props.StringProperty(name="Opposing Model",default="")
+        cls.jaw_type = bpy.props.EnumProperty(name = 'Jaw Type', 
+                                              items = [('MAXILLA', 'MAXILLA', 'MAXILLA'),('MANDIBLE', 'MANDIBLE', 'MANDIBLE')],
+                                              default = "MAXILLA",
+                                              description = 'Appliance is on upper or lower jaw')
+        
         cls.bone = bpy.props.StringProperty(name="Bone",default="")
         cls.refractory = bpy.props.StringProperty(name="Rrefractory model",default="")
         cls.axis = bpy.props.StringProperty(name="Splint Insertion",default="")
@@ -198,6 +203,22 @@ class D3SplintRestoration(bpy.types.PropertyGroup):
                 self.tooth_string = ":".join(tooth_list)
                 self.teeth.append(tooth)           
      
+    
+    def get_maxilla(self):
+        
+        print(self.jaw_type)
+        if self.jaw_type == 'MAXILLA':
+            return self.model
+        else:
+            return self.opposing
+    
+    def get_mandible(self):
+        if self.jaw_type == 'MANDIBLE':
+            return self.model
+        else:
+            return self.opposing
+        
+        
     def cleanup(self):
         print('not implemented')
         

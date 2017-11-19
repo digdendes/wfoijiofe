@@ -10,7 +10,7 @@ import bmesh
 import math
 from mathutils import Vector, Matrix
 from mathutils.bvhtree import BVHTree
-from bpy.props import FloatProperty, IntProperty, BoolProperty
+from bpy.props import FloatProperty, IntProperty, BoolProperty, EnumProperty
 
 import tracking
 import splint_cache
@@ -26,6 +26,43 @@ def thirty_steps(frame):
     r = math.floor(frame/30)/30
     return r
 
+
+def find_bone_drivers(amature_object, bone_name):
+    # create an empty dictionary to store all found bones and drivers in
+    boneDict = {}
+
+    # iterate over all bones of the active object
+    for bone in amature_object.pose.bones:
+
+        # iterate over all drivers now
+        # this should give better performance than the other way around
+        # as most armatures have more bones than drivers
+        foundDrivers = []
+        for d in amature_object.animation_data.drivers:
+
+            # a data path looks like this: 'pose.bones["Bone.002"].scale'
+            # search for the full bone name including the quotation marks!
+            if ('"%s"' % bone.name) in d.data_path:
+
+                # we now have identified that there is a driver 
+                # which refers to a bone channel
+                foundDrivers.append(d)
+
+        # if there are drivers, add an item to the dictionary
+        if foundDrivers:
+            print ('adding drivers of bone %s to Dictionary' % bone.name)
+
+            # the dictionary uses the bone name as the key, and the
+            # found FCurves in a list as the values
+            boneDict[bone.name] = foundDrivers
+
+    if bone_name in boneDict.keys():
+        return boneDict[bone_name]
+    else:
+        return []
+    
+    
+    
 bpy.app.driver_namespace['saw_tooth'] = saw_tooth
 bpy.app.driver_namespace['thirty_steps'] = thirty_steps
 
@@ -48,10 +85,10 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
     auto_mount = BoolProperty(default = True, description = 'Use if Upper and Lower casts are already in mounted position')
     @classmethod
     def poll(cls, context):
-        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
-        #    return True
-        #else:
-        #    return False
+        
+        if 'Articulator' in bpy.data.objects:
+            return False
+        
         return True
     
     def execute(self, context):
@@ -87,8 +124,12 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         
         
         #track lenght
-        rcp.splines[0].bezier_points[1].co = Vector((10,0,0))
-        lcp.splines[0].bezier_points[1].co = Vector((10,0,0))
+        rcp.splines[0].bezier_points[0].co = Vector((-2,0, 0))
+        lcp.splines[0].bezier_points[0].co = Vector((-2,0, 0))
+        
+        
+        rcp.splines[0].bezier_points[1].co = Vector((8,0,0))
+        lcp.splines[0].bezier_points[1].co = Vector((8,0,0))
         
         rcp.dimensions = '3D'
         lcp.dimensions = '3D'
@@ -209,7 +250,7 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         v.targets[0].id_type = 'SCENE'
         v.targets[0].id = context.scene
         v.targets[0].data_path = "frame_current"
-        d.expression = "fmod(frame,30)/30"
+        d.expression = ".2 + .8 * fmod(frame,30)/30"
         
         
         pboneL = art_arm.pose.bones.get('Left Condyle')
@@ -222,7 +263,7 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         v.targets[0].id_type = 'SCENE'
         v.targets[0].id = context.scene
         v.targets[0].data_path = "frame_current"
-        d.expression = "floor(frame/30)/30"
+        d.expression = ".2 + .8 * floor(frame/30)/30"
         
         cons = pboneR.constraints.new(type = 'LOCKED_TRACK')
         cons.target = art_arm
@@ -301,7 +342,8 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         
         n = context.scene.odc_splint_index
         splint = context.scene.odc_splints[n]
-        opposing = splint.opposing
+        
+        opposing = splint.get_mandible()
         Model = bpy.data.objects.get(opposing)
         splint.ops_string += 'GenArticulator:'
         if not Model:
@@ -316,10 +358,11 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         cons.inverse_matrix = mx.inverted()
         
         #write the lower jaw BVH to cache for fast ray_casting
+        OppModel = bpy.data.objects.get(splint.opposing)
         bme = bmesh.new()
-        bme.from_mesh(Model.data)    
+        bme.from_mesh(OppModel.data)    
         bvh = BVHTree.FromBMesh(bme)
-        splint_cache.write_mesh_cache(Model, bme, bvh)
+        splint_cache.write_mesh_cache(OppModel, bme, bvh)
         
         
         return {'FINISHED'}
@@ -328,13 +371,114 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
     def invoke(self, context, event):
 
         return context.window_manager.invoke_props_dialog(self)
+
+
+class D3Splint_OT_articulator_set_mode(bpy.types.Operator):
+    """Change the Movement Mode of the artigulator"""
+    bl_idname = "d3splint.articulator_mode_set"
+    bl_label = "Articulator Mode Set"
+    bl_options = {'REGISTER', 'UNDO'}
     
+    modes = ['PROTRUSIVE', 'RIGHT_EXCURSION', 'LEFT_EXCURSION', 'RELAX_RAMP', 'FULL_ENVELOPE']
+    mode_items = []
+    for m in modes:
+        mode_items += [(m, m, m)]
+        
+    mode = EnumProperty(name = 'Articulator Mode', items = mode_items, default = 'PROTRUSIVE')
+    
+    
+    @classmethod
+    def poll(cls, context):
+        
+        if 'Articulator' not in bpy.data.objects:
+            return False
+        
+        return True
+    
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+      
+    def execute(self, context):
+        
+        #Double Set scene to frame 0
+        context.scene.frame_set(0)
+        context.scene.frame_set(0)
+        
+        
+        art_arm = bpy.data.objects.get('Articulator')
+        
+        
+        drivers_l = find_bone_drivers(art_arm, 'Left Condyle')
+        drivers_r = find_bone_drivers(art_arm, 'Right Condyle')
+        
+        if len(drivers_l) > 1:
+            print('oh oh, there should be only one')
+            return {'CANCELLED'}
+        
+        if len(drivers_r) > 1:
+            print('uh oh, there should be only one')
+            return {'CANCELLED'}
+            
+            
+        dl = drivers_l[0].driver
+        dr = drivers_r[0].driver
+        
+        
+        
+        if self.mode == 'PROTRUSIVE':
+            dl.expression = '.2 + .8 * abs(sin(pi * frame/120))'
+            dr.expression = '.2 + .8 * abs(sin(pi * frame/120))'
+           
+           
+            context.scene.frame_start = 0
+            context.scene.frame_end = 60
+           
+           
+        elif self.mode == 'RIGHT_EXCURSION':
+        
+            dr.expression = '.2'
+            dl.expression = '.2 + .8 * abs(sin(pi * frame/120))'
+            context.scene.frame_start = 0
+            context.scene.frame_end = 60
+            
+            
+        elif self.mode == 'LEFT_EXCURSION':
+            dr.expression = '.2 + .8 * abs(sin(pi * frame/120))'
+            dl.expression = '.2'
+            context.scene.frame_start = 0
+            context.scene.frame_end = 60
+            
+            
+        elif self.mode == 'RELAX_RAMP':
+            dr.expression = '.2 - .2 * abs(sin(pi * frame/120))'
+            dl.expression = '.2 - .2 * abs(sin(pi * frame/120))'
+            context.scene.frame_start = 0
+            context.scene.frame_end = 60
+            
+            
+        elif self.mode == 'FULL_ENVELOPE':
+            
+            dr.expression = ".2 + .8 * fmod(frame,30)/30"
+            dl.expression = ".2 + .8 * floor(frame/30)/30"
+        
+            context.scene.frame_start = 0
+            context.scene.frame_end = 900
+            
+        return {'FINISHED'}
+
+
+
+
+      
 def register():
     bpy.utils.register_class(D3SPLINT_OT_generate_articulator)
+    bpy.utils.register_class(D3Splint_OT_articulator_set_mode)
     
     
 def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_generate_articulator)
+    bpy.utils.unregister_class(D3Splint_OT_articulator_set_mode)
     
 if __name__ == "__main__":
     register()

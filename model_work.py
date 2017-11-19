@@ -3,9 +3,16 @@ Created on Aug 20, 2017
 
 @author: Patrick
 '''
+
+import math
+
 import bpy
 import bmesh
-from mesh_cut import flood_selection_faces, edge_loops_from_bmedges
+from mesh_cut import flood_selection_faces, edge_loops_from_bmedges,\
+    space_evenly_on_path
+from mathutils import Vector, Matrix
+import odcutils
+
 
 class D3SPLINT_OT_paint_model(bpy.types.Operator):
     '''Use sculpt mask to mark parts of model'''
@@ -109,6 +116,65 @@ class D3SPLINT_OT_delete_sculpt_mask(bpy.types.Operator):
         
         return {'FINISHED'}
 
+
+class D3SPLINT_OT_close_painted_hole(bpy.types.Operator):
+    '''Paint a hole to close it'''
+    bl_idname = "d3splint.close_paint_hole"
+    bl_label = "Close Paint Hole"
+    bl_options = {'REGISTER','UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        
+        if not context.object:
+            return False
+        
+        c1 = context.object.type == 'MESH'
+        c2 = context.mode != 'EDIT'
+        return c1 & c2
+    
+    def execute(self, context):
+        
+        bme = bmesh.new()
+            
+        bme.from_mesh(context.object.data)
+        mask = bme.verts.layers.paint_mask.verify()
+        bme.verts.ensure_lookup_table()
+        
+        verts = set()
+        for v in bme.verts:
+            if v[mask] > 0:
+                verts.add(v)
+
+        eds = set()
+        for v in verts:
+            eds.update(v.link_edges)
+            
+        eds = list(eds)
+        
+        eds_non_man = [ed for ed in eds if len(ed.link_faces) == 1]
+        
+        bme.verts.ensure_lookup_table()
+        bme.edges.ensure_lookup_table()
+        bme.faces.ensure_lookup_table()
+        loops = edge_loops_from_bmedges(bme, [ed.index for ed in eds_non_man])    
+        
+        
+        for loop in loops:
+            if loop[0] == loop[-1]:
+                loop.pop()
+            
+            if len(loop) < 3: continue
+                
+            bme.faces.new([bme.verts[i] for i in loop])
+        
+        bme.to_mesh(context.object.data)
+        bme.free()
+        context.object.data.update()
+        
+        bpy.ops.paint.mask_flood_fill(mode = 'VALUE', value = 0)
+          
+        return {'FINISHED'}
 
 class D3SPLINT_OT_keep_sculpt_mask(bpy.types.Operator):
     '''Delete everything not painted'''
@@ -400,6 +466,299 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         bme.to_mesh(context.object.data)
         bme.free()             
         return {'FINISHED'}
+    
+    
+class D3PLINT_OT_ortho_model_base(bpy.types.Operator):
+    """Simple ortho base with height 5 - 50mm """
+    bl_idname = "d3splint.ortho_base"
+    bl_label = "Ortho model base"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    base_height = bpy.props.FloatProperty(name = 'Base Height', default = 1, min = -50, max = 50,  description = 'Base height added in mm')
+    
+    maxilla = bpy.props.BoolProperty(name = 'Maxilla', default = False, description = 'Is this the upper or lower jaw')
+    @classmethod
+    def poll(cls, context):
+        if context.mode == "OBJECT" and context.object != None and context.object.type == 'MESH':
+            return True
+        else:
+            return False
+        
+    def execute(self, context):
+        
+        base_bme = bmesh.new()
+        
+        
+        bme = bmesh.new()
+        bme.from_mesh(context.object.data)
+        
+        bme.verts.ensure_lookup_table()
+        bme.edges.ensure_lookup_table()
+        bme.faces.ensure_lookup_table()
+        
+        
+        non_man_bmeds = [ed for ed in bme.edges if not ed.is_manifold]
+        non_man_eds = [ed.index for ed in non_man_bmeds]
+        
+        
+        non_man_vs = set()
+        for ed in non_man_bmeds:
+            non_man_vs.update([ed.verts[0], ed.verts[1]])
+        non_man_vs = list(non_man_vs)
+        
+        
+        min_x, max_x = non_man_vs[0].co[0], non_man_vs[0].co[0] 
+        min_y, max_y = non_man_vs[0].co[1], non_man_vs[0].co[1]
+        min_z, max_z = non_man_vs[0].co[2], non_man_vs[0].co[2]
+        
+        com = Vector((0,0,0))
+        
+        for v in non_man_vs:
+            
+            com += v.co
+            
+            if v.co[0] < min_x:
+                min_x = v.co[0]
+            if v.co[0] > max_x:
+                max_x = v.co[0]
+            if v.co[1] < min_y:
+                min_y = v.co[1]
+            if v.co[1] > max_y:
+                max_y = v.co[1]
+            if v.co[2] < min_z:
+                min_z = v.co[2]
+            if v.co[2] > max_z:
+                max_z = v.co[2]
+                
+        com *= 1/len(non_man_vs)
+        
+        print('found the com and bound of the non manifold verts')
+                
+        loops = edge_loops_from_bmedges(bme, non_man_eds)
+                
+        print('there are %i non manifold loops' % len(loops))
+                
+        for ring in loops:
+            
+            if len(ring) < 100:
+                print('Skipping small hole, likely error')
+                continue 
+            if ring[0] != ring[-1]:
+            
+                print('loop not a hole not or a loop')
+                bme.free() 
+            
+                return {'FINISHED'}
+        
+            ring.pop() #ha ha, ring pop
+        
+            for vind in ring:
+                if self.maxilla:
+                    bme.verts[vind].co[2] = max_z + self.base_height
+                else:
+                    bme.verts[vind].co[2] = min_z - self.base_height
+        
+            
+            f = bme.faces.new([bme.verts[vind] for vind in ring])
+        
+        bmesh.ops.recalc_face_normals(bme, faces = [f])
+        
+        
+        z_filter = non_man_vs[0].co[2]
+        
+        for v in non_man_vs:
+            base_bme.verts.new(v.co)
+            if self.maxilla:
+                base_bme.verts.new(v.co - self.base_height * Vector((0,0,1)))
+            else:
+                base_bme.verts.new(v.co + self.base_height * Vector((0,0,1)))
+            
+        base_bme.verts.ensure_lookup_table()
+        geom = bmesh.ops.convex_hull(base_bme, input = base_bme.verts[:])
+        
+        verts_to_delete = set()
+        
+        for ele in geom['geom_interior']:
+            if isinstance(ele, bmesh.types.BMVert):
+                verts_to_delete.add(ele)
+            
+        for ele in geom['geom_unused']:
+            if isinstance(ele, bmesh.types.BMVert):
+                verts_to_delete.add(ele)
+                    
+        #bmesh.ops.delete(base_bme, geom = base_bme.faces[:], context = 3)
+        
+        bmesh.ops.delete(base_bme, geom = list(verts_to_delete), context = 1)
+        
+        
+        eds_to_delete = []
+        for ed in base_bme.edges:
+            if ed.calc_face_angle(1) < .5:
+                eds_to_delete.append(ed)
+        
+                    
+        bmesh.ops.delete(base_bme, geom = eds_to_delete, context = 4)
+        
+        thickness_verts = []
+        regular_verts = []
+        for v in base_bme.verts:
+            if abs(v.co[2] - z_filter) > .001:
+                thickness_verts.append(v)
+            else:
+                regular_verts.append(v)
+                
+        bmesh.ops.delete(base_bme, geom = thickness_verts, context = 1)
+        base_bme.edges.ensure_lookup_table()
+        loops = edge_loops_from_bmedges(base_bme, [i for i in range(0, len(base_bme.edges))])
+        
+        base_bme.verts.ensure_lookup_table()
+        locs = [base_bme.verts[i].co for i in loops[0]]
+        even_locs, even_eds = space_evenly_on_path(locs, [(0,1),(1,0)], segments = 200)
+        
+        new_verts = []
+        for co in even_locs:
+            new_verts.append(base_bme.verts.new(co))
+        
+        base_bme.faces.new(new_verts)
+        
+        bmesh.ops.delete(base_bme, geom = regular_verts, context = 1)
+        
+        
+        new_me = bpy.data.meshes.new('ortho base')
+        new_ob = bpy.data.objects.new('Ortho Base', new_me)
+        new_ob.matrix_world = context.object.matrix_world
+        context.scene.objects.link(new_ob)
+            
+        base_bme.to_mesh(new_me)
+        
+        
+        bme.to_mesh(context.object.data)
+        bme.free()
+        
+                    
+        return {'FINISHED'}    
+    
+
+class D3PLINT_OT_ortho_model_base_former(bpy.types.Operator):
+    """Make Ortho Model Base Former"""
+    bl_idname = "d3splint.ortho_base_former"
+    bl_label = "Model Base Former"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    base_thickness = bpy.props.FloatProperty(name = 'Base Thickness', default = 10, min = -50, max = 50,  description = 'Base height added in mm')
+    
+    molar_width = bpy.props.FloatProperty(name = 'Molar Width', default = 60, min = 10, max = 100,  description = 'Molar Width')
+    molar_bevel = bpy.props.FloatProperty(name = 'Molar Bevel', default = 10, min = 2, max = 20,  description = 'Molar Bevel')
+    
+    
+    molar_height = bpy.props.FloatProperty(name = 'Molar Height', default = 20, min = 2, max = 50,  description = 'Molar Height')
+    bevel_angle = bpy.props.IntProperty(name = 'Bevel Angle', default = 45, min = 35, max = 70,  description = 'Bevel Angle')
+    
+    
+    posterior_length =  bpy.props.FloatProperty(name = 'Posterior Length', default = 40, min = 15, max = 100,  description = 'Posterior Length')
+   
+    
+    canine_width = bpy.props.FloatProperty(name = 'Canine Width', default = 45, min = 10, max = 100,  description = 'Canine Bevel')
+    canine_height = bpy.props.FloatProperty(name = 'Canine Height', default = 10, min = 5, max = 100,  description = 'Canine Height')
+    
+    anterior_length =  bpy.props.FloatProperty(name = 'Anterior Length', default = 15, min = 5, max = 25,  description = 'Anterior Length')
+    anterior_height =  bpy.props.FloatProperty(name = 'Anterior Height', default = 10, min = 5, max = 25,  description = 'Anterior Length')
+    
+    maxilla = bpy.props.BoolProperty(name = 'Maxilla', default = False, description = 'Is this the upper or lower jaw')
+    
+    solidify = bpy.props.BoolProperty(name = 'Solidify', default = False, description = 'Solidify the top surface for boolean joining')
+    land = bpy.props.BoolProperty(name = 'Land', default = False, description = 'Make a Land/Dish like an actual base former')
+    
+    @classmethod
+    def poll(cls, context):
+        return True
+        
+    def execute(self, context):
+        
+        bme = bmesh.new()
+        
+        
+        total_len = self.anterior_length + self.posterior_length
+        
+        
+        v0 = Vector((0, 0, 0))
+        
+        
+        adj = math.cos(self.bevel_angle * math.pi/180) * self.molar_bevel
+        opp = math.sin(self.bevel_angle * math.pi/180) * self.molar_bevel
+        
+        
+        v1 = Vector((.5 * (.5 * self.molar_width - adj), 0, 0))
+        v2 = Vector((.5 * self.molar_width - adj, 0, 0))
+        v3 = Vector((.5 * self.molar_width, opp, 0))
+        
+        v4 = Vector((0.5 * self.canine_width, self.posterior_length, 0))
+        if self.maxilla:
+            v5 = Vector((0, total_len, 0))
+        else:
+            #this gives room to bevel the point backward
+            v5 = Vector((0, total_len + .5 * self.anterior_length, 0))
+        
+        v6 = v0 + Vector((0,0,self.base_thickness))
+        v7 = v1 + Vector((0,0,self.base_thickness))
+        v8 = v2 + Vector((0,0,self.molar_height))
+        v9 = v3 + Vector((0,0,self.molar_height))
+        v10 = v4 + Vector((0,0,self.canine_height))
+        v11 = v5 + Vector((0,0,self.anterior_height))
+        
+        
+        bmverts = []
+        for co in [v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11]:
+            bmverts.append(bme.verts.new(co))
+            
+            
+        bme.faces.new((bmverts[0], bmverts[1], bmverts[7], bmverts[6]))
+        bme.faces.new((bmverts[1], bmverts[2], bmverts[8], bmverts[7]))
+        bme.faces.new((bmverts[2], bmverts[3], bmverts[9], bmverts[8]))
+        bme.faces.new((bmverts[3], bmverts[4], bmverts[10], bmverts[9]))
+        bme.faces.new((bmverts[4], bmverts[5], bmverts[11], bmverts[10]))
+        bme.faces.new((bmverts[5], bmverts[4], bmverts[3], bmverts[2], bmverts[1], bmverts[0]))
+        
+        
+        
+        
+        base_me = bpy.data.meshes.new('Base')
+        base_ob = bpy.data.objects.new('Ortho Base', base_me)
+        context.scene.objects.link(base_ob)
+        bme.to_mesh(base_me)
+        bme.free()
+        
+        
+        
+        
+        mir = base_ob.modifiers.new('Mirror', type = 'MIRROR')
+        
+        if not self.maxilla:
+            bgroup = base_ob.vertex_groups.new('Bevel')
+            bgroup.add([5, 11], 1, type = 'REPLACE')
+            
+            bev = base_ob.modifiers.new('Bevel', type = 'BEVEL')
+            bev.use_clamp_overlap = False
+            bev.width = 1.2 * self.anterior_length
+            bev.profile = 0.5
+            bev.limit_method = 'VGROUP'
+            bev.segments = 20
+            bev.vertex_group = 'Bevel'
+            bev.offset_type = 'DEPTH'
+        
+        
+        if self.land:
+            solid = base_ob.modifiers.new('Solidify', type = 'SOLIDIFY')
+            solid.thickness = 3
+            solid.offset = 1
+        
+        if self.solidify:
+            rem = base_ob.modifiers.new('Remesh', type = 'REMESH')
+            rem.octree_depth = 7
+        
+        base_ob.location = context.scene.cursor_location  
+        return {'FINISHED'}   
+    
 def register():
     bpy.utils.register_class(D3SPLINT_OT_paint_model)
     bpy.utils.register_class(D3SPLINT_OT_delete_sculpt_mask)
@@ -407,6 +766,9 @@ def register():
     bpy.utils.register_class(D3SPLINT_OT_delete_islands)
     bpy.utils.register_class(D3SPLINT_OT_mask_to_convex_hull)
     bpy.utils.register_class(D3PLINT_OT_simple_model_base)
+    bpy.utils.register_class(D3PLINT_OT_ortho_model_base)
+    bpy.utils.register_class(D3PLINT_OT_ortho_model_base_former)
+    bpy.utils.register_class(D3SPLINT_OT_close_painted_hole)
     
 def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_paint_model)
@@ -415,6 +777,10 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_delete_islands)
     bpy.utils.unregister_class(D3SPLINT_OT_mask_to_convex_hull)
     bpy.utils.unregister_class(D3PLINT_OT_simple_model_base)
+    bpy.utils.unregister_class(D3PLINT_OT_ortho_model_base)
+    bpy.utils.unregister_class(D3PLINT_OT_ortho_model_base_former)
+    bpy.utils.unregister_class(D3SPLINT_OT_close_painted_hole)
+    
     
 if __name__ == "__main__":
     register()

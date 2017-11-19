@@ -120,6 +120,31 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         row = layout.row()
         row.template_list("SCENE_UL_odc_splints","", sce, "odc_splints", sce, "odc_splint_index")
         
+        
+        
+        box = layout.box()
+        box.label('Splint Properties')
+        
+        if not hasattr(context.scene , "odc_splints"):
+            col = box.column()
+            col.label('ERROR with addon installation', icon = 'ERROR')
+        elif len(context.scene.odc_splints) == 0:
+            row = box.row()
+            col = row.column()
+            col.label('Jaw Type')
+            #col = row.column()
+            col.prop(prefs, 'default_jaw_type', text = '')
+            
+        else:
+            n = context.scene.odc_splint_index
+            splint =context.scene.odc_splints[n]
+            
+            row = box.row()
+            col = row.column()
+            col.label('Jaw Type')
+            #col = row.column()
+            col.prop(splint, 'jaw_type', text = '')
+        
         row = layout.row()
         row.operator("import_mesh.stl", text = 'Import STL Models')
                 
@@ -150,14 +175,14 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         else:
             ico = 'CHECKBOX_DEHLT'
         row = layout.row()
-        row.operator("d3splint.draw_occlusal_curve_max", text = "Mark Occlusal Curve Max", icon = ico)
+        row.operator("d3splint.draw_occlusal_curve_max", text = "Mark Max Curve", icon = ico)
 
         if splint and splint.curve_mand: 
             ico = 'CHECKBOX_HLT'
         else:
             ico = 'CHECKBOX_DEHLT'
         row = layout.row()
-        row.operator("d3splint.draw_occlusal_curve", text = "Mark Occlusal Curve Mand", icon = ico)
+        row.operator("d3splint.draw_occlusal_curve_mand", text = "Mark Mand Curve", icon = ico)
         
         row = layout.row()
         row.prop(prefs, "show_survey_functions")
@@ -186,7 +211,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         else:
             ico = 'CHECKBOX_DEHLT'
         row = layout.row()
-        row.operator("d3splint.splint_model_trim", text = "Trim Upper", icon = ico)
+        row.operator("d3splint.splint_model_trim", text = "Trim Model", icon = ico)
         
         #row = layout.row()
         #row.label('Paint Method')
@@ -269,8 +294,8 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         else:
             ico = 'NONE'
         col.operator("d3splint.splint_animate_articulator", text = "Generate Functional Surface", icon = ico)
-        col.operator("d3splint.splint_stop_articulator", text = "Stop Functional Surface")
-        
+        col.operator("d3splint.stop_surface_calculation", text = "Stop Surface Calculation")
+        col.operator("d3splint.start_surface_calculation", text = "Re-Start Surface Calculation")
         if splint and "SubtractSurface" in splint.ops_string: 
             ico = 'FILE_TICK'
         else:

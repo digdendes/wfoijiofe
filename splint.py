@@ -18,6 +18,7 @@ from odcutils import get_settings, offset_bmesh_edge_loop
 import bgl_utils
 import common_drawing
 import common_utilities
+import survey_utils
 #from . 
 import full_arch_methods
 from textbox import TextBox
@@ -162,6 +163,7 @@ class D3SPLINT_OT_splint_opposing(bpy.types.Operator):
         
         
         return {'FINISHED'} 
+
     
 class D3SPLINT_OT_splint_report(bpy.types.Operator):
     '''
@@ -546,7 +548,7 @@ def arch_crv_draw_callback(self, context):
     
 
 class D3SPLINT_OT_splint_buccal_marks(bpy.types.Operator):
-    """Draw a line along the facial limits of the splint"""
+    """Draw a line along the limits of the splint"""
     bl_idname = "d3splint.draw_buccal_curve"
     bl_label = "Mark Buccal Splint Limits"
     bl_options = {'REGISTER', 'UNDO'}
@@ -686,8 +688,8 @@ class D3SPLINT_OT_splint_buccal_marks(bpy.types.Operator):
 
 
 class D3SPLINT_OT_splint_occlusal_arch(bpy.types.Operator):
-    """Draw a line along the lingual cusps of the opposign model"""
-    bl_idname = "d3splint.draw_occlusal_curve"
+    """Draw a line along the lingual cusps of the mandibular model"""
+    bl_idname = "d3splint.draw_occlusal_curve_mand"
     bl_label = "Mark Occlusal Curve"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -750,8 +752,8 @@ class D3SPLINT_OT_splint_occlusal_arch(bpy.types.Operator):
             mat.diffuse_color = Color((0.8, 1, .9))
         
         plane_obj.data.materials.append(mat)
-        Master = bpy.data.objects.get(self.splint.model)
-        Opposing = bpy.data.objects.get(self.splint.opposing)
+        Master = bpy.data.objects.get(self.splint.get_maxilla())
+        Opposing = bpy.data.objects.get(self.splint.get_mandible())
         cons = plane_obj.constraints.new('CHILD_OF')
         cons.target = Master
         cons.inverse_matrix = Master.matrix_world.inverted()
@@ -761,7 +763,10 @@ class D3SPLINT_OT_splint_occlusal_arch(bpy.types.Operator):
         bme.free()
         
         
-        Opposing.hide = True
+        
+    def finish_up(self,context):     
+        for ob in bpy.data.objects:
+            ob.hide = True
         self.crv.crv_obj.hide = True
         self.splint.curve_mand = True
         
@@ -770,7 +775,10 @@ class D3SPLINT_OT_splint_occlusal_arch(bpy.types.Operator):
             Model.select = True
             Model.hide = False
             context.scene.objects.active = Model
-            bpy.ops.view3d.viewnumpad(type = 'BOTTOM')
+            if self.splint.jaw_type == 'MAXILLA':
+                bpy.ops.view3d.viewnumpad(type = 'BOTTOM')
+            else:
+                bpy.ops.view3d.viewnumpad(type = 'TOP')
             bpy.ops.view3d.view_selected()
             
     def modal_nav(self, event):
@@ -814,7 +822,11 @@ class D3SPLINT_OT_splint_occlusal_arch(bpy.types.Operator):
             return 'main'
             
         if event.type == 'RET' and event.value == 'PRESS':
-            self.convert_curve_to_plane(context)
+            
+            if self.splint.jaw_type == 'MAXILLA':
+                self.convert_curve_to_plane(context)
+            
+            self.finish_up(context)
             tracking.trackUsage("D3Splint:SplintMandibularCurve",None)
             return 'finish'
             
@@ -870,9 +882,10 @@ class D3SPLINT_OT_splint_occlusal_arch(bpy.types.Operator):
         self.splint = context.scene.odc_splints[0]    
         self.crv = None
         margin = 'Occlusal Curve Mand'
-           
-        if self.splint.opposing != '' and self.splint.opposing in bpy.data.objects:
-            Model = bpy.data.objects[self.splint.opposing]
+        
+        model = self.splint.get_mandible()   
+        if model != '' and model in bpy.data.objects:
+            Model = bpy.data.objects[model]
             for ob in bpy.data.objects:
                 ob.select = False
                 ob.hide = True
@@ -1153,7 +1166,7 @@ class D3SPLINT_OT_survey_model(bpy.types.Operator):
     bl_options = {'REGISTER','UNDO'}
     
     world = bpy.props.BoolProperty(default = True, name = "Use world coordinate for calculation...almost always should be true.")
-    smooth = bpy.props.BoolProperty(default = True, name = "Smooth the outline.  Slightly less acuurate in some situations but more accurate in others.  Default True for best results")
+    #smooth = bpy.props.BoolProperty(default = True, name = "Smooth the outline.  Slightly less acuurate in some situations but more accurate in others.  Default True for best results")
 
     @classmethod
     def poll(cls, context):
@@ -1438,6 +1451,7 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         bme.edges.ensure_lookup_table()
         
         
+        #right and left are consistent across upper and lower jaw
         verts_right = [v for v in bme.verts if (mx*v.co)[1] < 0.0]
         verts_left = [v for v in bme.verts if (mx*v.co)[1] >= 0.0]
         
@@ -1608,7 +1622,11 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         to_keep = []
         mx2 = Model.matrix_world
         #Z = mx.inverted().to_3x3() * Vector((0,0,1))
-        Z = Vector((0,0,1))
+        if splint.jaw_type == 'MAXILLA':
+            Z = Vector((0,0,1))
+        else:
+            Z = Vector((0,0,-1))
+            
         for v in trimmed_bme.verts:
             a = mx2 * v.co
             
@@ -1754,7 +1772,7 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
             new_verts = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMVert)]
             new_edges = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMEdge)]
             for v in new_verts:
-                v.co += .4 * Vector((0,0,1))
+                v.co += .4 * Z
         
         loops = edge_loops_from_bmedges(trimmed_bme, [ed.index for ed in new_edges])
         print('there are %i loops' % len(loops))
@@ -2136,7 +2154,7 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
                         
             mb = meta_data.elements.new(type = self.meta_type)
             mb.size_y = .5 * size_y
-            mb.size_z = .5 * size_z
+            mb.size_z = .35 * size_z
             mb.size_x = 1.5
             mb.rotation = quat
             mb.stiffness = 2
@@ -2894,6 +2912,7 @@ class D3SPLINT_OT_splint_trim_model(bpy.types.Operator):
         
         
         Z = mx.inverted().to_3x3() * Vector((0,0,1))
+        
         offset_bmesh_edge_loop(cut_bme, [ed.index for ed in new_edges],Z, -4)
         
         loops = edge_loops_from_bmedges(cut_bme, [ed.index for ed in eds])
@@ -2931,7 +2950,16 @@ class D3SPLINT_OT_splint_trim_model(bpy.types.Operator):
         to_delete = []
         mx2 = Model.matrix_world
         imx = mx.inverted()
-        Z = mx.inverted().to_3x3() * Vector((0,0,1))
+        
+        if splint.jaw_type == 'MAXILLA':
+            print('MAXILLA')
+            Z = mx.inverted().to_3x3() * Vector((0,0,1))
+        else:
+            print('MANDIBLE')
+            Z = mx.inverted().to_3x3() * Vector((0,0,-1))
+        
+        print(Z)
+        print(splint.jaw_type)
         for v in trimmed_bme.verts:
             a = imx * mx2 * v.co
             
@@ -3016,7 +3044,7 @@ class D3SPLINT_OT_splint_trim_model(bpy.types.Operator):
             new_verts = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMVert)]
             new_edges = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMEdge)]
             for v in new_verts:
-                v.co += .4 * Vector((0,0,1))
+                v.co += .4 * Z
         
         loops = edge_loops_from_bmedges(trimmed_bme, [ed.index for ed in new_edges])
         print('there are %i loops' % len(loops))
@@ -3190,11 +3218,14 @@ def occlusal_surface_frame_change(scene):
     imx_p = mx_pln.inverted()
     
     bvh = splint_cache.mesh_cache['bvh']
-    
+    if splint.jaw_type == 'MAXILLA':
+        Z = Vector((0,0,1))
+    else:
+        Z = Vector((0,0,-1))
     for v in plane.data.vertices:
         
         a = mx_pln * v.co
-        b = mx_pln * (v.co + Vector((0,0,10)))
+        b = mx_pln * (v.co + 10 * Z)
         
         hit = bvh.ray_cast(imx_j * a, imx_j * b - imx_j * a)
         
@@ -3301,21 +3332,27 @@ class D3SPLINT_OT_splint_subtract_surface(bpy.types.Operator):
         mx_s = Model.matrix_world
         imx_s = mx_s.inverted()
         
+        if splint.jaw_type == 'MAXILLA':
+            Z = Vector((0,0,1))
+        else:
+            Z = Vector((0,0,-1))
+            
+            
         for v in bme.verts:
             ray_orig = mx_p * v.co
-            ray_target = mx_p * v.co - 5 * Vector((0,0,1))
-            ray_target2 = mx_p * v.co + .8 * Vector((0,0,1))
+            ray_target = mx_p * v.co - 5 * Z
+            ray_target2 = mx_p * v.co + .8 * Z
             
             ok, loc, no, face_ind = Model.ray_cast(imx_s * ray_orig, imx_s * ray_target - imx_s*ray_orig)
         
             if ok:
                 high_verts += [v]
-                v.co = imx_p * (mx_s * loc - 0.8 * Vector((0,0,1)))
+                v.co = imx_p * (mx_s * loc - 0.8 * Z)
             else:
                 ok, loc, no, face_ind = Model.ray_cast(imx_s * ray_orig, imx_s * ray_target2 - imx_s*ray_orig, distance = 0.8)
                 if ok:
                     high_verts += [v]
-                    v.co = imx_p * (mx_s * loc - 0.8 * Vector((0,0,1)))
+                    v.co = imx_p * (mx_s * loc - 0.8 * Z)
         
         if len(high_verts):
             self.report({'WARNING'}, 'Sweep surface intersected upper model, corrected it for you!')
@@ -3408,7 +3445,13 @@ class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
         bme.faces.ensure_lookup_table()
         bme.verts.ensure_lookup_table()
         f = max(bme.faces, key = lambda x: len(x.verts))
-        vmax = max(f.verts, key = lambda x: x.co[2])
+        splint = context.scene.odc_splints[0]
+        
+        if splint.jaw_type == 'MAXILLA':
+            vmax = max(f.verts, key = lambda x: x.co[2])
+        
+        else:
+            vmax = min(f.verts, key = lambda x: x.co[2])
         for v in f.verts:
             v.co[2] = vmax.co[2]
         bme.to_mesh(Base.data)
@@ -3485,6 +3528,7 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
             bme.from_mesh(Plane.data)
             bme.verts.ensure_lookup_table()
             
+            #reset occusal plane if animate articulator has happened already
             if "AnimateArticulator" in splint.ops_string:
                 for v in bme.verts:
                     v.co[2] = 0
@@ -3496,9 +3540,13 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
             imx_s = mx_s.inverted()
             
             keep_verts = set()
+            if splint.jaw_type == 'MAXILLA':
+                Z = Vector((0,0,1))
+            else:
+                Z = Vector((0,0,-1))
             for v in bme.verts:
                 ray_orig = mx_p * v.co
-                ray_target = mx_p * v.co + 5 * Vector((0,0,1))
+                ray_target = mx_p * v.co + 5 * Z
                 ok, loc, no, face_ind = Shell.ray_cast(imx_s * ray_orig, imx_s * ray_target - imx_s*ray_orig)
             
                 if ok:
@@ -3539,23 +3587,63 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
         Master.hide = False
         Plane.hide = False
         
-        
-                
+
         tracking.trackUsage("D3Splint:CreateSurface",None)
         context.scene.frame_current = -1
         context.scene.frame_current = 0
         splint.ops_string += 'AnimateArticulator:'
         print('adding the handler!')
-        bpy.app.handlers.frame_change_pre.append(occlusal_surface_frame_change)
+        
+        handlers = [hand.__name__ for hand in bpy.app.handlers.frame_change_pre]
+        
+        if occlusal_surface_frame_change.__name__ not in handlers:
+            bpy.app.handlers.frame_change_pre.append(occlusal_surface_frame_change)
+        
+        else:
+            print('handler already in there')
+            
         bpy.ops.screen.animation_play()
         
         return {'FINISHED'}
     
 
+
+class D3SPLINT_OT_splint_restart_functional_surface(bpy.types.Operator):
+    """Turn the functional surface calculation on"""
+    bl_idname = "d3splint.start_surface_calculation"
+    bl_label = "Start Surface Calculation"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    
+    @classmethod
+    def poll(cls, context):
+        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
+        #    return True
+        #else:
+        #    return False
+        return True
+    
+    def execute(self, context):
+        tracking.trackUsage("D3Splint:RestartFunctionalSurface",None)
+        print('removing the handler')
+        
+        
+        handlers = [hand.__name__ for hand in bpy.app.handlers.frame_change_pre]
+        
+        if occlusal_surface_frame_change.__name__ not in handlers:
+        
+            bpy.app.handlers.frame_change_pre.append(occlusal_surface_frame_change)
+        
+        else:
+            print('alrady added')
+            
+        return {'FINISHED'}
+    
+    
 class D3SPLINT_OT_splint_stop_functional_surface(bpy.types.Operator):
-    """Create functional surface using envelope of motion on articulator"""
-    bl_idname = "d3splint.splint_stop_articulator"
-    bl_label = "Stop Occlusal Surface"
+    """Stop functional surface calculation to improve responsiveness"""
+    bl_idname = "d3splint.stop_surface_calculation"
+    bl_label = "Stop Surface Calculation"
     bl_options = {'REGISTER', 'UNDO'}
     
     
@@ -3570,7 +3658,17 @@ class D3SPLINT_OT_splint_stop_functional_surface(bpy.types.Operator):
     def execute(self, context):
         tracking.trackUsage("D3Splint:StopFunctionalSurface",None)
         print('removing the handler')
-        bpy.app.handlers.frame_change_pre.remove(occlusal_surface_frame_change)
+        
+        
+        handlers = [hand.__name__ for hand in bpy.app.handlers.frame_change_pre]
+        
+        if occlusal_surface_frame_change.__name__ in handlers:
+        
+            bpy.app.handlers.frame_change_pre.remove(occlusal_surface_frame_change)
+        
+        else:
+            print('alrady removed')
+            
         return {'FINISHED'}
 
 class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
@@ -3995,7 +4093,8 @@ def register():
     bpy.utils.register_class(D3SPLINT_OT_splint_mount_on_articulator)
     bpy.utils.register_class(D3SPLINT_OT_splint_create_functional_surface)
     bpy.utils.register_class(D3SPLINT_OT_splint_stop_functional_surface)
-   
+    bpy.utils.register_class(D3SPLINT_OT_splint_restart_functional_surface)
+    
     bpy.utils.register_class(D3SPLINT_OT_splint_subtract_surface)
     bpy.utils.register_class(D3SPLINT_OT_splint_go_sculpt)
     bpy.utils.register_class(D3SPLINT_OT_splint_finish_booleans)
@@ -4043,6 +4142,7 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_splint_mount_on_articulator)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_create_functional_surface)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_stop_functional_surface)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_restart_functional_surface)
    
     bpy.utils.unregister_class(D3SPLINT_OT_splint_subtract_surface)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_go_sculpt)

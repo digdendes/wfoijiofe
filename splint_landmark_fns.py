@@ -14,7 +14,7 @@ from textbox import TextBox
 from mathutils import Vector, Matrix, Color
 from bpy_extras.view3d_utils import region_2d_to_location_3d, region_2d_to_origin_3d, region_2d_to_vector_3d
 import math
-from mesh_cut import flood_selection_faces, edge_loops_from_bmedges, flood_selection_faces_limit
+from mesh_cut import flood_selection_faces, edge_loops_from_bmedges, flood_selection_faces_limit, space_evenly_on_path
 from curve import CurveDataManager, PolyLineKnife
 from common_utilities import bversion
 import tracking
@@ -43,6 +43,77 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
             return 'nav'
         return ''
     
+    
+    def  convert_curve_to_plane(self, context):
+        
+        me = self.crv.crv_obj.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+        mx = self.crv.crv_obj.matrix_world
+        arch_vs = [mx*v.co for v in me.vertices]
+        arc_vs_even, eds = space_evenly_on_path(arch_vs, [(0,1),(1,2)], 101, 0)
+        
+        v_ant = arc_vs_even[50] #we established 100 verts so 50 is the anterior midpoint
+        v_0 = arc_vs_even[0]
+        v_n = arc_vs_even[-1]
+        
+        center = .5 *(.5*(v_0 + v_n) + v_ant)
+        
+        vec_n = v_n - v_0
+        vec_n.normalize()
+        
+        vec_ant = v_ant - v_0
+        vec_ant.normalize()
+        
+        Z = vec_n.cross(vec_ant)
+        Z.normalize()
+        X = v_ant - center
+        X.normalize()
+        
+        if Z.dot(Vector((0,0,1))) < 0:
+            Z = -1 * Z
+                
+        Y = Z.cross(X)
+        
+        R = Matrix.Identity(3)  #make the columns of matrix U, V, W
+        R[0][0], R[0][1], R[0][2]  = X[0] ,Y[0],  Z[0]
+        R[1][0], R[1][1], R[1][2]  = X[1], Y[1],  Z[1]
+        R[2][0] ,R[2][1], R[2][2]  = X[2], Y[2],  Z[2]
+        
+        R = R.to_4x4()
+        T = Matrix.Translation(center + 4 * Z)
+        T2 = Matrix.Translation(center + 10 * Z)
+        
+        bme = bmesh.new()
+        bme.verts.ensure_lookup_table()
+        bme.edges.ensure_lookup_table()
+        bme.faces.ensure_lookup_table()
+        bmesh.ops.create_grid(bme, x_segments = 200, y_segments = 200, size = 39.9)
+        
+        bme.to_mesh(me)
+        plane_obj = bpy.data.objects.new('Occlusal Plane', me)
+        plane_obj.matrix_world = T * R
+        
+        mat = bpy.data.materials.get("Plane Material")
+        if mat is None:
+            # create material
+            mat = bpy.data.materials.new(name="Plane Material")
+            mat.diffuse_color = Color((0.8, 1, .9))
+        
+        plane_obj.data.materials.append(mat)
+        
+        Opposing = bpy.data.objects.get(self.splint.get_mandible())
+        cons = plane_obj.constraints.new('CHILD_OF')
+        cons.target = Opposing
+        cons.inverse_matrix = Opposing.matrix_world.inverted()
+        
+        context.scene.objects.link(plane_obj)
+        plane_obj.hide = True
+        bme.free()
+        
+        
+        
+        
+        
+            
     def modal_main(self,context,event):
         # general navigation
         nmode = self.modal_nav(event)
@@ -75,6 +146,8 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
             return 'main'
             
         if event.type == 'RET' and event.value == 'PRESS':
+            if self.splint.jaw_type == 'MANDIBLE':
+                self.convert_curve_to_plane(context)
             self.splint.curve_max = True
             return 'finish'
             
@@ -134,9 +207,10 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
         self.splint = context.scene.odc_splints[n]
         self.crv = None
         margin = "Occlusal Curve Max"
-           
-        if self.splint.model != '' and self.splint.model in bpy.data.objects:
-            Model = bpy.data.objects[self.splint.model]
+        
+        model = self.splint.get_maxilla()   
+        if model != '' and model in bpy.data.objects:
+            Model = bpy.data.objects[model]
             for ob in bpy.data.objects:
                 ob.select = False
                 ob.hide = True
@@ -274,16 +348,20 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
     def invoke(self,context, event):
         n = context.scene.odc_splint_index
         self.splint = context.scene.odc_splints[n]    
+        
+        model = self.splint.get_maxilla()
            
-        if self.splint.model != '' and self.splint.model in bpy.data.objects:
-            Model = bpy.data.objects[self.splint.model]
+        if model != '' and model in bpy.data.objects:
+            Model = bpy.data.objects[model]
             for ob in bpy.data.objects:
                 ob.select = False
                 ob.hide = True
             Model.select = True
             Model.hide = False
             context.scene.objects.active = Model
+            
             bpy.ops.view3d.viewnumpad(type = 'FRONT')
+            
             bpy.ops.view3d.view_selected()
             self.crv = PointPicker(context,snap_type ='OBJECT', snap_object = Model)
             context.space_data.show_manipulator = False
@@ -348,7 +426,7 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         R_fox[2][0] ,R_fox[2][1], R_fox[2][2]  = X_fox[2], Y_w[2],  Z_fox[2]
 
         
-        Model =  bpy.data.objects[self.splint.model]
+        Model =  bpy.data.objects[self.splint.get_maxilla()]
      
         mx_final = T * R
         mx_inv = mx_final.inverted()
@@ -365,7 +443,7 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         #Model.matrix_world = Matrix.Identity(4)
         Model.matrix_world = mx_mount
         
-        Opposing = bpy.data.objects.get(self.splint.opposing)
+        Opposing = bpy.data.objects.get(self.splint.get_mandible())
         if Opposing:
             Opposing.data.transform(mx_inv)
             #Opposing.matrix_world = Matrix.Identity(4)
@@ -750,6 +828,7 @@ class D3SPLINT_OT_pick_model(bpy.types.Operator):
     
     def pick_model(self, context):
         
+        prefs = odcutils.get_settings()
         if self.ob == None:
             return 'main'
         
@@ -765,6 +844,9 @@ class D3SPLINT_OT_pick_model(bpy.types.Operator):
             my_item.name = 'Splint'
             my_item.model = self.ob.name
             my_item.model_set = True
+            
+            my_item.jaw_type = prefs.default_jaw_type
+            
         if "Model Mat" not in bpy.data.materials:
             mat = bpy.data.materials.new('Model Mat')
             mat.diffuse_color = Color((0.5, .8, .4))

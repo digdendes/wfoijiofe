@@ -158,8 +158,11 @@ def request_to_ipinfo():
     ''' return a json from the request '''
     full_url = 'https://ipinfo.io/json'
     headers = {'User-Agent': 'curl/7.30.0'}
+    try:
+        req = requests.get(full_url, headers=headers)
+    except:
+        return 'Unknown', 'Unknown', 'Unknown'
     
-    req = requests.get(full_url, headers=headers)
     j = req.json()
     if req.status_code == 200:
         return j['city'], j['country'], j['loc']
