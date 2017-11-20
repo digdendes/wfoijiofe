@@ -3288,7 +3288,8 @@ class D3SPLINT_OT_splint_subtract_surface(bpy.types.Operator):
     method = EnumProperty(
         description="First Boolean Method",
         items=(("BMESH", "Bmesh", "Faster/More Errors"),
-               ("CARVE", "Carve", "Slower/Less Errors")),
+               ("CARVE", "Carve", "Slower/Less Errors"),
+               ("PROJECTION", "Projection", "Fastest/Least Errors")),
         default = "BMESH")
     
     @classmethod
@@ -3371,14 +3372,30 @@ class D3SPLINT_OT_splint_subtract_surface(bpy.types.Operator):
             bme.to_mesh(Plane.data)
             
         
-        bool_mod = Shell.modifiers.new('Subtract Surface', type = 'BOOLEAN')
-        bool_mod.operation = 'DIFFERENCE'
-        bool_mod.solver = self.method
-        bool_mod.object = Plane
-        Plane.hide = True
-        
         n = context.scene.odc_splint_index
         splint = context.scene.odc_splints[n]
+        
+        if self.method in {'CARVE', 'BMESH'}:
+            bool_mod = Shell.modifiers.new('Subtract Surface', type = 'BOOLEAN')
+            bool_mod.operation = 'DIFFERENCE'
+            bool_mod.solver = self.method
+            bool_mod.object = Plane
+        
+        else:
+            shrink_mod = Shell.modifiers.nwe('Subtract Surface', type = 'SHRINKWRAP')
+            shrink_mod.wrap_method = 'PROJECT'
+            if splint.jaw_type == 'MAXILLA':
+                shrink_mod.use_negative_direction = False
+                shrink_mod.use_positive_direction = True
+            else:
+                shrink_mod.use_negative_direction = True
+                shrink_mod.use_positive_direction = False
+        
+            shrink_mod.use_project_z = True
+            shrink_mod.target = Plane
+        Plane.hide = True
+        
+        
         splint.ops_string += 'SubtractSurface:'
         return {'FINISHED'}
     
@@ -3514,7 +3531,7 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
         #filter the occlusal surface verts
         Plane = bpy.data.objects.get('Occlusal Plane')
         if Plane == None:
-            self.resport({'ERROR'}, 'Need to mark occlusal curve on mandible to get reference plane')
+            self.resport({'ERROR'}, 'Need to mark occlusal curve on opposing object to get reference plane')
             return {'CANCELLED'}
         
         Shell = bpy.data.objects.get('Splint Shell')
@@ -3563,7 +3580,7 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
             
             keep_verts.update(front)
         
-            for i in range(0,7):
+            for i in range(0,10):
                 new_neighbors = set()
                 for v in front:
                     immediate_neighbors = [ed.other_vert(v) for ed in v.link_edges if ed.other_vert(v) not in front]
@@ -3608,6 +3625,49 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
     
 
 
+class D3SPLINT_OT_splint_reset_functional_surface(bpy.types.Operator):
+    """Flatten the Functional Surface and Re-Set it"""
+    bl_idname = "d3splint.reset_functional_surface"
+    bl_label = "Reset Functional Surface"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    
+    @classmethod
+    def poll(cls, context):
+        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
+        #    return True
+        #else:
+        #    return False
+        return True
+    
+    def execute(self, context):
+        splint = context.scene.odc_splints[0]
+        
+        #filter the occlusal surface verts
+        Plane = bpy.data.objects.get('Occlusal Plane')
+        if Plane == None:
+            self.resport({'ERROR'}, 'Need to mark occlusal curve on opposing object to get reference plane')
+            return {'CANCELLED'}
+        
+    
+        bme_shell = bmesh.new()
+        
+        bme = bmesh.new()
+        bme.from_mesh(Plane.data)
+        bme.verts.ensure_lookup_table()
+        
+        #reset occusal plane if animate articulator has happened already
+        if "AnimateArticulator" in splint.ops_string:
+            for v in bme.verts:
+                v.co[2] = 0
+            
+            
+        bme.to_mesh(Plane.data)
+        return {'FINISHED'}
+    
+    
+    
+    
 class D3SPLINT_OT_splint_restart_functional_surface(bpy.types.Operator):
     """Turn the functional surface calculation on"""
     bl_idname = "d3splint.start_surface_calculation"
@@ -4094,6 +4154,7 @@ def register():
     bpy.utils.register_class(D3SPLINT_OT_splint_create_functional_surface)
     bpy.utils.register_class(D3SPLINT_OT_splint_stop_functional_surface)
     bpy.utils.register_class(D3SPLINT_OT_splint_restart_functional_surface)
+    bpy.utils.register_class(D3SPLINT_OT_splint_reset_functional_surface)
     
     bpy.utils.register_class(D3SPLINT_OT_splint_subtract_surface)
     bpy.utils.register_class(D3SPLINT_OT_splint_go_sculpt)
@@ -4143,6 +4204,7 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_splint_create_functional_surface)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_stop_functional_surface)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_restart_functional_surface)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_reset_functional_surface)
    
     bpy.utils.unregister_class(D3SPLINT_OT_splint_subtract_surface)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_go_sculpt)

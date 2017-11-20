@@ -289,10 +289,16 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         
         row = layout.row()
         col = row.column()
+        
+        col.operator("d3splint.open_pin_on_articulator", text = "Change Pin Setting" )
+        col.operator("d3splint.articulator_mode_set", text = "Choose Articulator Motion")
+        
         if splint and "AnimateArticulator" in splint.ops_string: 
             ico = 'FILE_TICK'
         else:
             ico = 'NONE'
+            
+        
         col.operator("d3splint.splint_animate_articulator", text = "Generate Functional Surface", icon = ico)
         col.operator("d3splint.stop_surface_calculation", text = "Stop Surface Calculation")
         col.operator("d3splint.start_surface_calculation", text = "Re-Start Surface Calculation")
@@ -305,7 +311,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         
         
         row = layout.row()
-        row.label('Sulpt and Refinement')
+        row.label('Sculpt and Refinement')
         
         if context.mode == 'OBJECT':
             row = layout.row()
