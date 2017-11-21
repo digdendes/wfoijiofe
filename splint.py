@@ -661,6 +661,11 @@ class D3SPLINT_OT_splint_buccal_marks(bpy.types.Operator):
                 ob.hide = True
             Model.select = True
             Model.hide = False
+            
+            if Model.name + '_silhouette' in bpy.data.objects:
+                Survey = bpy.data.objects.get(Model.name + '_silhouette')
+                Survey.hide = False
+                
             context.scene.objects.active = Model
             bpy.ops.view3d.viewnumpad(type = 'FRONT')
             bpy.ops.view3d.view_selected()
@@ -1166,7 +1171,7 @@ class D3SPLINT_OT_survey_model(bpy.types.Operator):
     bl_options = {'REGISTER','UNDO'}
     
     world = bpy.props.BoolProperty(default = True, name = "Use world coordinate for calculation...almost always should be true.")
-    #smooth = bpy.props.BoolProperty(default = True, name = "Smooth the outline.  Slightly less acuurate in some situations but more accurate in others.  Default True for best results")
+    smooth = bpy.props.BoolProperty(default = True, name = "Smooth the outline.  Slightly less acuurate in some situations but more accurate in others.  Default True for best results")
 
     @classmethod
     def poll(cls, context):
@@ -1193,7 +1198,62 @@ class D3SPLINT_OT_survey_model(bpy.types.Operator):
         loc = Model.location
         
         view = context.space_data.region_3d.view_rotation * Vector((0,0,1))
-        odcutils.silouette_brute_force(context, Model, view, self.world, self.smooth, debug = dbg)
+        
+        odcutils.silouette_brute_force(context, Model, view, self.world)
+        #bme = survey_utils.silouette_brute_force(context, Model, view, self.world)
+        
+        #me = bpy.data.meshes.new('Insertion')
+        #Axis = bpy
+        
+        
+        #Make GP Data or Get GP Data
+        #if not context.scene.grease_pencil:
+        #    gp = bpy.data.grease_pencil.new("My GPencil")
+        #    scene = context.scene
+        #    scene.grease_pencil = gp
+
+        #else:
+        #    gp = context.scene.grease_pencil
+            
+            
+        #Get GP Layer or Make GPLayrer
+        #if 'Survey' not in gp.layers:
+                
+        #    layer = gp.layers.new("Survey", set_active=True)
+        #else:
+        #    layer = gp.layers['Survey']
+            
+            
+        #clear existing frames
+        #if len(layer.frames):
+        #    for frame in layer.frames:
+        #        frame.clear()
+        
+        #frame = layer.frames.new(context.scene.frame_current) # frame number 5
+
+        #stroke = frame.strokes.new()
+        #stroke.draw_mode = '3DSPACE' # either of ('SCREEN', '3DSPACE', '2DSPACE', '2DIMAGE')
+
+        #start with vertex data
+        #stroke.points.add(len(bme.verts)) # add 4 points
+        #mx = Model.matrix_world
+        #for i, v in enumerate(bme.verts):
+        #    stroke.points[i].co = mx * v.co
+
+        #bme.edges.ensure_lookup_table()
+        #print('starting grease pencil data add')
+        #start = time.time()
+        #mx = Model.matrix_world
+        #for ed in bme.edges:
+        #    stroke = frame.strokes.new()
+        #    stroke.draw_mode = '3DSPACE'
+        #    stroke.points.add(2)
+        #    stroke.points[0].co = mx * ed.verts[0].co
+        #    stroke.points[1].co = mx * ed.verts[1].co
+        
+        
+        print('finished grease pencil data add')
+        print(time.time() - start)
         
         mxT = Matrix.Translation(loc)
         mxR = context.space_data.region_3d.view_rotation.to_matrix().to_4x4()
