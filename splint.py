@@ -2,7 +2,7 @@ import time
 import bpy
 import bmesh
 import math
-from mathutils import Vector, Matrix, Color, kdtree
+from mathutils import Vector, Matrix, Color, Quaternion, kdtree
 from mathutils.geometry import intersect_point_line
 from bpy_extras import view3d_utils
 from bpy.props import FloatProperty, BoolProperty, IntProperty, EnumProperty
@@ -1252,8 +1252,8 @@ class D3SPLINT_OT_survey_model(bpy.types.Operator):
         #    stroke.points[1].co = mx * ed.verts[1].co
         
         
-        print('finished grease pencil data add')
-        print(time.time() - start)
+        #print('finished grease pencil data add')
+        #print(time.time() - start)
         
         mxT = Matrix.Translation(loc)
         mxR = context.space_data.region_3d.view_rotation.to_matrix().to_4x4()
@@ -2780,48 +2780,50 @@ class D3SPLINT_OT_splint_add_rim_curve(bpy.types.Operator):
     bl_label = "Create Rim from Curve"
     bl_options = {'REGISTER', 'UNDO'}
     
-    posterior_width = FloatProperty(default = 12, description = 'Width of posterior rim')
-    anterior_width = FloatProperty(default = 8, description = 'Width of anterior rim')
     
-    meta_type = EnumProperty(name = 'Meta Type', items = [('CUBE','CUBE','CUBE'), ('ELLIPSOID', 'ELLIPSOID','ELLIPSOID')], default = 'CUBE')
+    segments = IntProperty(default = 60, description = 'Resolution of the wax elements')
+    posterior_width = FloatProperty(default = 4, description = 'Width of posterior rim')
+    anterior_width = FloatProperty(default = 4, description = 'Width of anterior rim')
+    thickness = FloatProperty(default = 2, description = 'Height of  rim')
+    
+    
+    flare = IntProperty(default = 0, min = -90, max = 90, description = 'Angle off of world Z')
+    meta_type = EnumProperty(name = 'Meta Type', items = [('CUBE','CUBE','CUBE'), 
+                                                          ('ELLIPSOID', 'ELLIPSOID','ELLIPSOID')], default = 'CUBE')
     @classmethod
     def poll(cls, context):
-        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
-        #    return True
-        #else:
-        #    return False
+        
+        if not context.object:
+            return False
+        
+        if context.object.type != 'CURVE':
+            return False
+        
         return True
     
     def execute(self, context):
-        
-        splint = context.scene.odc_splints[0]
-        occlusal = splint.name + "_occlusal"
-        
-        if occlusal not in context.scene.objects:
-            self.report({'ERROR'}, "Need to mark occlusal cusps first")
-            return {'CANCELLED'}
-        
-        shell = bpy.data.objects.get('Splint Shell')
-        if not shell:
-            self.report({'ERROR'}, "Need to calculate splint shell first")
-            return {'CANCELLED'}
-        
-        tracking.trackUsage("D3Splint:RimFromCurve",None)
-        
-        mx_shell = shell.matrix_world
-        imx_shell = mx_shell.inverted()
-        
-        crv_obj = bpy.data.objects.get(occlusal)
+            
+        crv_obj = context.object
         crv_data = crv_obj.data
         mx = crv_obj.matrix_world
         imx = mx.inverted()
         
-        meta_data = bpy.data.metaballs.new('Splint Wax Rim')
-        meta_obj = bpy.data.objects.new('Meta Surface', meta_data)
-        meta_data.resolution = .8
-        meta_data.render_resolution = .8
-        context.scene.objects.link(meta_obj)
         
+        if 'Meta Wax' in bpy.data.objects:
+            meta_obj = bpy.data.obejcts.get('Meta Wax')
+            meta_data = meta_obj.data
+            meta_mx = meta_obj.matrix_world
+            
+        else:
+            meta_data = bpy.data.metaballs.new('Meta Wax')
+            meta_obj = bpy.data.objects.new('Meta Wax', meta_data)
+            meta_data.resolution = .8
+            meta_data.render_resolution = .8
+            context.scene.objects.link(meta_obj)
+            meta_mx = meta_obj.matrix_world
+        
+        meta_imx = meta_mx.inverted()
+            
         me = crv_obj.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
         bme = bmesh.new()
         bme.from_mesh(me)
@@ -2834,7 +2836,7 @@ class D3SPLINT_OT_splint_add_rim_curve(bpy.types.Operator):
         vs0 = [bme.verts[i].co for i in loops[0]]
         
         
-        vs_even_0, eds0 = space_evenly_on_path(vs0, [(0,1),(1,2)], 60)
+        vs_even_0, eds0 = space_evenly_on_path(vs0, [(0,1),(1,2)], self.segments)
         
         
         Z = mx.inverted().to_3x3() * Vector((0,0,1))
@@ -2842,8 +2844,8 @@ class D3SPLINT_OT_splint_add_rim_curve(bpy.types.Operator):
             
         for i in range(1,len(vs_even_0)-1):
             
-            
-            blend = -abs((i-30)/30)+1
+            #factor that tapers end to middle to end
+            blend = -abs((i-self.segments/2)/(self.segments/2))+1
             
             v0_0 = vs_even_0[i]
             v0_p1 = vs_even_0[i+1]
@@ -2855,47 +2857,40 @@ class D3SPLINT_OT_splint_add_rim_curve(bpy.types.Operator):
             X = v0_p1 - v0_m1
             X.normalize()
             
-            Y = Z.cross(X)
-            X_c = Y.cross(Z) #X corrected
+            Qrot = Quaternion(X, math.pi/180 * self.flare)
+            Zprime = Qrot * Z
+            
+            Y = Zprime.cross(X)
+            X_c = Y.cross(Zprime) #X corrected
             
             T = Matrix.Identity(3)
             T.col[0] = X_c
             T.col[1] = Y
-            T.col[2] = Z
+            T.col[2] = Zprime
             quat = T.to_quaternion()
             
-            ray_orig = mx * v0_0
-            ray_target = mx * v0_0 + 5 * Z
-            ok, loc, no, face_ind = shell.ray_cast(imx_shell * ray_orig, imx_shell * ray_target - imx_shell*ray_orig)
+            loc = mx * v0_0
             
-            if ok:
-                zvec = imx * mx_shell * loc - v0_0
-                size_z = .4 * zvec.length
-                
-            else:
-                size_z = .4 * 2
             
             mb = meta_data.elements.new(type = self.meta_type)
             mb.size_y = .5 *  (blend*self.anterior_width + (1-blend)*self.posterior_width)
-            mb.size_z = size_z
+            mb.size_z = self.thickness
             mb.size_x = 1.5
             mb.rotation = quat
             mb.stiffness = 2
-            mb.co = v0_0 + .5 * size_z * Z
+            mb.co = meta_imx * loc
             
-        meta_obj.matrix_world = mx
         
         
-
         context.scene.update()
-        me = meta_obj.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
-        new_ob = bpy.data.objects.new('Flat Plane', me)
-        context.scene.objects.link(new_ob)
-        new_ob.matrix_world = mx
+        #me = meta_obj.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+        #new_ob = bpy.data.objects.new('Flat Plane', me)
+        #context.scene.objects.link(new_ob)
+        #new_ob.matrix_world = mx
 
-        context.scene.objects.unlink(meta_obj)
-        bpy.data.objects.remove(meta_obj)
-        bpy.data.metaballs.remove(meta_data)
+        #context.scene.objects.unlink(meta_obj)
+        #bpy.data.objects.remove(meta_obj)
+        #bpy.data.metaballs.remove(meta_data)
         
         mat = bpy.data.materials.get("Splint Material")
         if mat is None:
@@ -2903,7 +2898,9 @@ class D3SPLINT_OT_splint_add_rim_curve(bpy.types.Operator):
             mat = bpy.data.materials.new(name="Splint Material")
             mat.diffuse_color = Color((0.5, .1, .6))
         
-        new_ob.data.materials.append(mat)
+        
+        if mat.name not in meta_obj.data.materials:
+            meta_obj.data.materials.append(mat)
         
         bme.free()
         #todo remove/delete to_mesh mesh
@@ -4207,6 +4204,7 @@ def register():
     
     bpy.utils.register_class(D3SPLINT_OT_meta_splint_surface)
     bpy.utils.register_class(D3SPLINT_OT_meta_splint_passive_spacer)
+    
     bpy.utils.register_class(D3SPLINT_OT_splint_add_rim)
     bpy.utils.register_class(D3SPLINT_OT_splint_join_rim)
     
@@ -4258,6 +4256,7 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_meta_splint_surface)
     bpy.utils.unregister_class(D3SPLINT_OT_meta_splint_passive_spacer)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_add_rim)
+    
     bpy.utils.unregister_class(D3SPLINT_OT_splint_join_rim)
     
     bpy.utils.unregister_class(D3SPLINT_OT_splint_mount_on_articulator)
@@ -4270,5 +4269,6 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_splint_go_sculpt)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_finish_booleans)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_open_pin_on_articulator)
+
 if __name__ == "__main__":
     register()

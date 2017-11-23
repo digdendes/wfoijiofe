@@ -230,6 +230,7 @@ def register():
     
     import d3classes, odcutils, crown, margin, bridge, splint, implant, panel, help, flexible_tooth, bracket_placement, denture_base, occlusion, ortho, curve_partition, articulator, splint_landmark_fns # , odcmenus, bgl_utils
     import healing_abutment, model_work, tracking, import_export, splint_booleans, splint_face_bow
+    import meta_modelling
     
     #register them
     d3classes.register()
@@ -245,7 +246,7 @@ def register():
     model_work.register()
     import_export.register()
     splint_face_bow.register()
-    
+    meta_modelling.register()
     panel.register()
     
     #register this module
@@ -288,6 +289,7 @@ def unregister():
     model_work.unregister()
     import_export.unregister()
     splint_face_bow.unregister()
+    meta_modelling.unregister()
     #unregister this module
  
 if __name__ == "__main__":

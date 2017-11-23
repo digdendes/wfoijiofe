@@ -332,6 +332,14 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         cons.head_tail = 1
         cons.track_axis = 'TRACK_Y'
         cons.lock_axis = 'LOCK_Z'
+        
+        
+        cons = pboneBow2.constraints.new(type = 'TRACK_TO')
+        cons.target = art_arm
+        cons.subtarget = 'Guide Pin'
+        cons.head_tail = 1
+        cons.track_axis = 'TRACK_Y'
+        cons.up_axis = 'UP_Z'
         #https://blender.stackexchange.com/questions/19602/child-of-constraint-set-inverse-with-python
          
         bpy.ops.object.mode_set(mode = 'OBJECT')
@@ -364,7 +372,18 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         bvh = BVHTree.FromBMesh(bme)
         splint_cache.write_mesh_cache(OppModel, bme, bvh)
         
+        art_arm['bennet_angle'] = self.bennet_angle
+        art_arm['intra_condyly_width'] = self.intra_condyle_width
+        art_arm['incisal_guidance'] = self.incisal_guidance 
+        art_arm['canine_guidance'] =  self.canine_guidance
+        art_arm['condyle_angle'] =  self.condyle_angle
+            
+           
         
+                     
+                     
+                     
+                     
         return {'FINISHED'}
 
     
