@@ -64,6 +64,8 @@ def flood_selection_faces(bme, selected_faces, seed_face, max_iters = 1000):
     seed_face - a face within/out selected_faces loop
     max_iters - maximum recursions to select_neightbors
     
+    returns:
+        -a set of BMFaces
     '''
     total_selection = set([f for f in selected_faces])
     levy = set([f for f in selected_faces])  #it's funny because it stops the flood :-)
@@ -3502,3 +3504,25 @@ def intersect_path_plane(verts, pt, no, mode = 'FIRST'):
         intersects = [None]
         
     return intersects
+
+
+def bme_relax_border_perimeter(bme, edges_non_man, iterations):
+    
+    v_loops_inds = edge_loops_from_bmedges(bmesh, [ed.index for ed in edges_non_man])
+    
+    v_loops = []
+    for vloop in v_loops_inds:
+        if vloop[0] == vloop[-1]:
+            vloop.pop()
+        v_loops += [bme.verts[i] for i in vloop]
+    
+    
+    for vloop in v_loops:
+        surface_deltas = []
+        for v in vloop:
+            n = len(v.link_faces)
+            offset = Vector((0,0,0))
+            for f in v.link_faces:
+                offset += 1/n * (v.co - f.calc_center_median()).normalize()
+            
+    

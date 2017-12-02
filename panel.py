@@ -265,6 +265,16 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         col.operator("d3splint.splint_join_rim", text = "Join rim to Shell", icon = ico)
         
         row = layout.row()
+        row.label('Virtual Wax Tools')
+        
+        row = layout.row()
+        col = row.column()
+        col.operator("d3splint.draw_meta_scaffold_curve", text = 'Draw Wax Curve')
+        col.operator("d3splint.virtual_wax_on_curve", text = 'Add Virtual Wax')
+        col.operator("d3splint.splint_join_meta_shell", text = 'Fuse Virtual Wax')
+        
+        
+        row = layout.row()
         row.prop(prefs, "show_occlusal_mod")
         if get_settings().show_occlusal_mod:
             row = layout.row()
@@ -378,22 +388,61 @@ class VIEW3D_PT_D3SplintModels(bpy.types.Panel):
             row = layout.row()
             row.label(text = "Please Select a Model")
             
-        row = layout.row()    
-        col = row.column(align=True)
-            
+        row = layout.row()
+        row.label('Sculpt/Paint Mode Tools')
+        row = layout.row()
+        col = row.column()    
         col.operator("d3splint.enter_sculpt_paint_mask", text = "Paint Model")
         col.operator("paint.mask_flood_fill", text = "Clear Paint").mode = 'VALUE'
         col.operator("d3splint.delete_sculpt_mask", text = "Delete Painted") #defaults to .value = 0
+        col.operator("d3splint.close_paint_hole", text = 'Close Paint Hole')
         col.operator("d3splint.delete_sculpt_mask_inverse", text = "Keep Only Painted")
         col.operator("d3splint.delete_islands", text = "Delete Small Parts")
         
+        
         if context.mode == 'SCULPT':
-            col.operator("object.mode_set", text = 'Finish Sculpt')
-                
+            col.operator("object.mode_set", text = 'Finish Sculpt/Paint')
+        
+        row = layout.row()
+        row.label('Object Mode Operators')
+        row = layout.row()
+        col = row.column()      
         #col.operator("d3splint.simple_offset_surface", text = "Simple Offset")
         col.operator("d3splint.simple_base", text = "Simple Base")            
-      
-
+        col.operator("d3splint.model_wall_thicken", text = 'Hollow Model')
+        
+        
+class VIEW3D_PT_D3SplintModelText(bpy.types.Panel):
+    bl_space_type = "VIEW_3D"
+    bl_region_type="TOOLS"
+    bl_category = "Dental"
+    bl_label = "Model Text Embossing"
+    bl_context = ""
+    
+    def draw(self, context):
+        sce = bpy.context.scene
+        layout = self.layout
+        
+        row = layout.row()
+        row.label(text = "Model Labelling")
+        #row.operator("wm.url_open", text = "", icon="INFO").url = "https://github.com/patmo141/odc_public/wiki"
+          
+        if context.object != None:
+            row = layout.row()
+            txt = context.object.name
+            row.label(text = "Selected Model: " + txt)
+        
+        else:
+            row = layout.row()
+            row.label(text = "Please Select a Model")
+            
+            row = layout.row()
+            row.label(text = 'SVG Image Workflow')
+            
+        row = layout.row()
+        row.operator("d3splint.place_text_on_model", text = 'Place Text at Cursor')
+        row = layout.row()
+        row.operator("d3tool.remesh_and_emboss_text", text = 'Emboss Text onto Object')
 def register():
     bpy.utils.register_class(SCENE_UL_odc_teeth)
     bpy.utils.register_class(SCENE_UL_odc_implants)
@@ -403,6 +452,7 @@ def register():
     
     bpy.utils.register_class(VIEW3D_PT_D3Splints)
     bpy.utils.register_class(VIEW3D_PT_D3SplintModels)
+    bpy.utils.register_class(VIEW3D_PT_D3SplintModelText)
     
     #bpy.utils.register_module(__name__)
     
@@ -418,6 +468,6 @@ def unregister():
     
     #bpy.utils.unregister_class(VIEW3D_PT_ODCDentures)
     bpy.utils.unregister_class(VIEW3D_PT_D3SplintModels)
-    
+    bpy.utils.unregister_class(VIEW3D_PT_D3SplintModelText)
 if __name__ == "__main__":
     register()

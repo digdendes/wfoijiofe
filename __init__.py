@@ -159,8 +159,35 @@ class D3SplintAddonPreferences(AddonPreferences):
         layout.label(text="D3Splint Preferences and Settings")
         #layout.prop(self, "mat_lib")
         
+        row = layout.row()
+        row.operator("opendental.d3t_critiacal_settings", text = 'Set Mandatory Settings')
         addon_updater_ops.update_settings_ui(self, context)
 
+
+class D3Splint_OT_general_preferences(Operator):
+    """Change several critical settings for optimal D3Tool use"""
+    bl_idname = "opendental.d3t_critiacal_settings"
+    bl_label = "Set D3Tool Critical Blender Settings"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        user_preferences = context.user_preferences
+        
+        #needed to allow articulator drivers to work
+        user_preferences.system.use_scripts_auto_execute = True
+        
+        
+        user_preferences.filepaths.use_relative_paths = False
+        
+        #prevent accidental tweaking when blender responsiveness is slow
+        #common problem once the scene gets complex with boolean modifiers
+        user_preferences.inputs.tweak_threshold = 200
+        
+        #make em stick
+        bpy.ops.wm.save_userpref()
+        
+        return {'FINISHED'}
+    
 class D3Splint_OT_addon_prefs(Operator):
     """Display example preferences"""
     bl_idname = "opendental.odc_addon_pref"
@@ -230,7 +257,7 @@ def register():
     
     import d3classes, odcutils, crown, margin, bridge, splint, implant, panel, help, flexible_tooth, bracket_placement, denture_base, occlusion, ortho, curve_partition, articulator, splint_landmark_fns # , odcmenus, bgl_utils
     import healing_abutment, model_work, tracking, import_export, splint_booleans, splint_face_bow
-    import meta_modelling
+    import meta_modelling, model_labels
     
     #register them
     d3classes.register()
@@ -247,10 +274,12 @@ def register():
     import_export.register()
     splint_face_bow.register()
     meta_modelling.register()
+    model_labels.register()
     panel.register()
     
     #register this module
     bpy.utils.register_class(D3SplintAddonPreferences)
+    bpy.utils.register_class(D3Splint_OT_general_preferences)
     bpy.utils.register_class(D3Splint_OT_addon_prefs)
     
     tracking.register(bl_info)
@@ -266,7 +295,7 @@ def unregister():
                     panel, curve_partition, articulator, 
                     splint_landmark_fns, model_work, tracking, 
                     splint_booleans, import_export,splint_face_bow,
-                    )
+                    meta_modeling)
     
     bpy.app.handlers.save_pre.remove(save_pre_method)
     bpy.app.handlers.load_post.remove(load_post_method)

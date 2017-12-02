@@ -23,7 +23,7 @@ def arch_crv_draw_callback(self, context):
 class D3SPLINT_OT_draw_meta_curve(bpy.types.Operator):
     """Draw a curve on the scene to be used with Meta modelling"""
     bl_idname = "d3splint.draw_meta_scaffold_curve"
-    bl_label = "Draw Meta Curve"
+    bl_label = "Draw Curve for Wax"
     bl_options = {'REGISTER', 'UNDO'}
     
     @classmethod
@@ -144,10 +144,10 @@ class D3SPLINT_OT_draw_meta_curve(bpy.types.Operator):
         tracking.trackUsage("D3Splint:MetaCurveDraw", None)
         return {'RUNNING_MODAL'}
 
-class D3SPLINT_OT_splint_add_rim_curve(bpy.types.Operator):
-    """Create Meta Wax Rim from selected bezier curve"""
-    bl_idname = "d3splint.splint_rim_from_curve"
-    bl_label = "Create Rim from Curve"
+class D3SPLINT_OT_splint_virtual_wax_on_curve(bpy.types.Operator):
+    """Create Virtual Wax Objecyt from selected bezier curve"""
+    bl_idname = "d3splint.virtual_wax_on_curve"
+    bl_label = "Virtual Wax on Curve"
     bl_options = {'REGISTER', 'UNDO'}
     
     
@@ -177,14 +177,14 @@ class D3SPLINT_OT_splint_add_rim_curve(bpy.types.Operator):
         imx = mx.inverted()
         
         
-        if 'Meta Wax' in bpy.data.objects:
-            meta_obj = bpy.data.objects.get('Meta Wax')
+        if 'Virtual Wax' in bpy.data.objects:
+            meta_obj = bpy.data.objects.get('Virtual Wax')
             meta_data = meta_obj.data
             meta_mx = meta_obj.matrix_world
             
         else:
-            meta_data = bpy.data.metaballs.new('Meta Wax')
-            meta_obj = bpy.data.objects.new('Meta Wax', meta_data)
+            meta_data = bpy.data.metaballs.new('Virtual Wax')
+            meta_obj = bpy.data.objects.new('Virtual Wax', meta_data)
             meta_data.resolution = .8
             meta_data.render_resolution = .8
             context.scene.objects.link(meta_obj)
@@ -287,12 +287,53 @@ class D3SPLINT_OT_splint_add_rim_curve(bpy.types.Operator):
         return context.window_manager.invoke_props_dialog(self)
 
 
+class D3SPLINT_OT_splint_join_meta_to_shell(bpy.types.Operator):
+    """Join Meta Element to Shell"""
+    bl_idname = "d3splint.splint_join_meta_shell"
+    bl_label = "Join Virtual Wax to Shell"
+    bl_options = {'REGISTER', 'UNDO'}
     
+
+    @classmethod
+    def poll(cls, context):
+        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
+        #    return True
+        #else:
+        #    return False
+        return True
+    
+    def execute(self, context):
+        
+        
+        Shell = bpy.data.objects.get('Splint Shell')
+        Rim = bpy.data.objects.get('Virtual Wax')
+        
+        if Shell == None:
+            self.report({'ERROR'}, 'Need to calculate splint shell first')
+        
+        if Rim == None:
+            self.report({'ERROR'}, 'Need to calculate rim first')
+            
+        tracking.trackUsage("D3Splint:JoinRim",None)
+        bool_mod = Shell.modifiers.new('Join Rim', type = 'BOOLEAN')
+        bool_mod.operation = 'UNION'
+        bool_mod.object = Rim
+        Rim.hide = True
+        Shell.hide = False
+        
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        splint.ops_string += 'JoinRim:' 
+        return {'FINISHED'}
+    
+        
 def register():
     bpy.utils.register_class(D3SPLINT_OT_draw_meta_curve)
-    bpy.utils.register_class(D3SPLINT_OT_splint_add_rim_curve)
+    bpy.utils.register_class(D3SPLINT_OT_splint_virtual_wax_on_curve)
+    bpy.utils.register_class(D3SPLINT_OT_splint_join_meta_to_shell)
     
 def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_draw_meta_curve)
-    bpy.utils.unregister_class(D3SPLINT_OT_splint_add_rim_curve)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_virtual_wax_on_curve)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_join_meta_to_shell)
     

@@ -81,3 +81,41 @@ def silouette_brute_force(context, ob, view, world = True, smooth = True, debug 
     
     
     return bme
+
+
+def undercut_faces(context, ob, view, threshold = .01, world = True):
+    '''
+    args:
+      ob - mesh object
+      view - Mathutils Vector
+      
+    return:
+       location and radius of undercut faces
+    '''
+        
+    #careful, this can get expensive with multires    
+    bme = bmesh.new()
+    bme.from_object(ob, context.scene)
+    bme.normal_update()
+    
+    #keep track of the world matrix
+    mx = ob.matrix_world
+    
+    
+    if world:
+        #meaning the vector is in world coords
+        #we need to take it back into local
+        i_mx = mx.inverted()
+        view = i_mx.to_quaternion() * view
+    
+       
+    undercut_locations = []
+    undercut_radii = []
+    for f in bme.faces:
+        if f.normal.dot(view) < -threshold:
+            undercut_locations += [f.calc_center_median()]
+            undercut_radii += [2 * f.calc_area()**.5]
+    return undercut_locations, undercut_radii 
+    
+    
+    

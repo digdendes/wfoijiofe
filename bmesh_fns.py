@@ -1,8 +1,56 @@
+import math
+
 import bpy
 import bmesh
 from mathutils import Matrix, Vector, Color
 import loops_tools
 from mathutils.bvhtree import BVHTree
+
+    
+    
+    
+    
+    
+def bme_linked_flat_faces(bme, start_face, angle, iter_max = 10000):
+    '''
+    args:
+        bme - BMesh object
+        start_face = BMFace
+        angl - angle in degrees
+    
+    return:  list of BMFaces
+    '''
+    
+    no = start_face.normal
+    angl_rad = math.pi/180 * angle
+    
+    #intiiate the flat faces
+    flat_faces = set([start_face])
+    
+    #how we detect flat neighbors
+    def flat_neighbors(bmf):
+        neighbors = set()
+        for v in bmf.verts:
+            neighbors.update([f for f in v.link_faces if f not in flat_faces and f != bmf])
+            flat_neighbors = set([f for f in neighbors if f.normal.dot(no) > 0 and f.normal.angle(no) < angl_rad])
+        return flat_neighbors
+    
+    
+    new_faces = flat_neighbors(start_face)
+    
+    iters = 0
+    while len(new_faces) and iters < iter_max:
+        iters += 1
+        flat_faces |= new_faces
+        
+        newer_faces = set()
+        for f in new_faces:
+            newer_faces |= flat_neighbors(f)
+             
+        new_faces = newer_faces
+    
+    return list(flat_faces)
+
 
 def remove_undercuts(context, ob, view, world = True, smooth = True, epsilon = .000001):
     '''
@@ -415,7 +463,10 @@ def join_objects(obs, name = ''):
         else:
             src_bme = bmesh.new()
             if ob.type == 'MESH':
-                src_bme.from_mesh(ob.data)
+                if len(ob.modifiers):
+                    src_bme.from_object(ob, bpy.context.scene)
+                else:
+                    src_bme.from_mesh(ob.data)
             else:
                 me = ob.to_mesh(bpy.context.scene, apply_modifiers = True, settings = 'PREVIEW')
                 src_bme.from_mesh(me)

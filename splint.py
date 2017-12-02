@@ -10,7 +10,7 @@ import bgl
 import blf
 import random
 from mesh_cut import edge_loops_from_bmedges, space_evenly_on_path, flood_selection_faces
-
+from common_utilities import bversion
 #from . 
 import odcutils
 import bmesh_fns
@@ -1282,7 +1282,95 @@ class D3SPLINT_OT_survey_model(bpy.types.Operator):
 
         return {'FINISHED'}
 
+class D3SPLINT_OT_blockout_model_meta(bpy.types.Operator):
+    '''Calculates blockout undercut faces'''
+    bl_idname = 'd3splint.meta_blockout_object'
+    bl_label = "Meta Blockout Object From View"
+    bl_options = {'REGISTER','UNDO'}
+    
+    world = bpy.props.BoolProperty(default = True, name = "Use world coordinate for calculation...almost always should be true.")
+    #smooth = bpy.props.BoolProperty(default = True, name = "Smooth the outline.  Slightly less acuurate in some situations but more accurate in others.  Default True for best results")
+    resolution = FloatProperty(default = 1.5, min = 0.5, max =3, description = 'Mesh resolution. Lower numbers are slower, bigger numbers less accurate')
+    threshold = FloatProperty(default = .09, min = .001, max = .2, description = 'angle to blockout.  .09 is about 5 degrees, .17 is 10degrees.0001 no undercut allowed.')
+    
+    @classmethod
+    def poll(cls, context):
+        #restoration exists and is in scene
+        return  True
 
+    def invoke(self,context, evenet):
+        
+        return context.window_manager.invoke_props_dialog(self)
+    
+    def execute(self, context):
+        tracking.trackUsage("D3Splint:BlockoutUndercuts",None)
+        settings = get_settings()
+        dbg = settings.debug
+        splint = context.scene.odc_splints[0]
+        
+        Model = bpy.data.objects.get(splint.model)
+        if Model == None:
+            self.report('ERROR','Need to set the model first')
+            return {'CANCELLED'}
+        
+        if 'Insertion Axis' in bpy.data.objects:
+            ob = bpy.data.objects.get('Insertion Axis')
+            view_mx = ob.matrix_world.to_quaternion()
+            view = view_mx * Vector((0,0,1))
+            
+        else:    
+            view = context.space_data.region_3d.view_rotation * Vector((0,0,1))
+        
+        locs, radii = survey_utils.undercut_faces(context, Model, view, self.threshold, self.world)
+        
+        mx = Model.matrix_world
+        
+        meta_data = bpy.data.metaballs.new('Blockout Mesh')
+        meta_obj = bpy.data.objects.new('Blockout Mesh', meta_data)
+        meta_data.resolution = self.resolution
+        meta_data.render_resolution = self.resolution
+        context.scene.objects.link(meta_obj)
+        
+        
+        i_mx = mx.inverted()
+        view_local = i_mx.to_quaternion() * view
+        view_local.normalize()
+        for co, radius in zip(locs, radii):
+            
+            
+            mb = meta_data.elements.new(type = 'CAPSULE')
+            mb.co = 10 * (co - 2.2 * view_local)
+            
+            mb.size_x = 10 * 6 #TODO..raycast to find bottom?
+            mb.radius = 10 * radius
+            
+            X = view_local
+            Y = Vector((random.random(), random.random(), random.random()))
+            Yprime = Y - Y.dot(X)*X
+            Yprime.normalize()
+            Z = X.cross(Yprime)
+            
+            #rotation matrix from principal axes
+            T = Matrix.Identity(3)  #make the columns of matrix U, V, W
+            T[0][0], T[0][1], T[0][2]  = X[0] ,Yprime[0],  Z[0]
+            T[1][0], T[1][1], T[1][2]  = X[1], Yprime[1],  Z[1]
+            T[2][0] ,T[2][1], T[2][2]  = X[2], Yprime[2],  Z[2]
+
+            Rotation_Matrix = T.to_4x4()
+            
+            mb.rotation = Rotation_Matrix.to_quaternion()
+        
+        R = mx.to_quaternion().to_matrix().to_4x4()
+        L = Matrix.Translation(mx.to_translation())
+        S = Matrix.Scale(.1, 4)
+           
+        meta_obj.matrix_world =  L * R * S
+
+
+        return {'FINISHED'}
+    
+    
+    
 class D3SPLINT_OT_survey_model_axis(bpy.types.Operator):
     '''Calculates silhouette of of model from the defined insertion axis arrow object'''
     bl_idname = 'd3splint.arrow_silhouette_survey'
@@ -1322,7 +1410,7 @@ class D3SPLINT_OT_survey_model_axis(bpy.types.Operator):
         return {'FINISHED'}
     
     
-class D3SPLINT_OT_blockout_model(bpy.types.Operator):
+class D3SPLINT_OT_blockout_model_view(bpy.types.Operator):
     '''Calculates silhouette of object which surveys convexities AND concavities from the current view axis'''
     bl_idname = 'd3splint.view_blockout_undercuts'
     bl_label = "Blockout Model From View"
@@ -3204,11 +3292,11 @@ class D3SPLINT_OT_splint_open_pin_on_articulator(bpy.types.Operator):
             self.report({'ERROR'}, 'You must set landmarks to get an approximate mounting')
             return {'CANCELLED'}
         
-        opposing = splint.opposing
-        master = splint.model
+        mandible = splint.get_mandible()
+        maxilla = splint.get_maxilla()
         
-        Model = bpy.data.objects.get(opposing)
-        Master = bpy.data.objects.get(master)
+        Model = bpy.data.objects.get(mandible)
+        Master = bpy.data.objects.get(maxilla)
         if not Model:
             self.report({'ERROR'},"Please set opposing model")
             return {'CANCELLED'}
@@ -3221,6 +3309,7 @@ class D3SPLINT_OT_splint_open_pin_on_articulator(bpy.types.Operator):
         if context.scene.frame_current != 0:
             context.scene.frame_current = -1
             context.scene.frame_current = 0
+            context.scene.frame_set(0)
         
         re_mount = False
         
@@ -4173,7 +4262,13 @@ class D3SPLINT_OT_splint_go_sculpt(bpy.types.Operator):
         brush = bpy.data.brushes['Scrape/Peaks']
         scene.tool_settings.sculpt.brush = brush
         scene.tool_settings.sculpt.detail_type_method = 'CONSTANT'
-        scene.tool_settings.sculpt.constant_detail = 50
+        
+        
+        if bversion() < '002.079.000':
+            scene.tool_settings.sculpt.constant_detail = 50
+        else:
+            scene.tool_settings.sculpt.contant_detail_factor = 3
+        
         scene.tool_settings.sculpt.use_symmetry_x = False
         scene.tool_settings.sculpt.use_symmetry_y = False
         scene.tool_settings.sculpt.use_symmetry_z = False
@@ -4193,6 +4288,7 @@ def register():
     
     bpy.utils.register_class(D3SPLINT_OT_survey_model)
     bpy.utils.register_class(D3SPLINT_OT_survey_model_axis)
+    bpy.utils.register_class(D3SPLINT_OT_blockout_model_meta)
     
     bpy.utils.register_class(D3SPLINT_OT_splint_margin)
     bpy.utils.register_class(D3SPLINT_OT_splint_buccal_marks)
@@ -4244,6 +4340,7 @@ def unregister():
     
     bpy.utils.unregister_class(D3SPLINT_OT_survey_model)
     bpy.utils.unregister_class(D3SPLINT_OT_survey_model_axis)
+    bpy.utils.unregister_class(D3SPLINT_OT_blockout_model_meta)
     
     bpy.utils.unregister_class(D3SPLINT_OT_splint_margin)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_buccal_marks)
