@@ -299,11 +299,13 @@ def calculate_splines(interpolation, bm_mod, tknots, knots):
 
 
 # check loops and only return valid ones
-def check_loops(loops, mapping, bm_mod):
+def check_loops(loops, mapping, bm_mod, debug = False):
     valid_loops = []
     for loop, circular in loops:
         # loop needs to have at least 3 vertices
         if len(loop) < 3:
+            if debug:
+                print('loop failed, less than 3 verts')
             continue
         # loop needs at least 1 vertex in the original, non-mirrored mesh
         if mapping:
@@ -313,6 +315,8 @@ def check_loops(loops, mapping, bm_mod):
                     all_virtual = False
                     break
             if all_virtual:
+                if debug:
+                    print('loop failed, all virtual veerts')
                 continue
         # vertices can not all be at the same location
         stacked = True
@@ -322,6 +326,8 @@ def check_loops(loops, mapping, bm_mod):
                 stacked = False
                 break
         if stacked:
+            if debug:
+                print('loop failed, stacked vertices')
             continue
         # passed all tests, loop is valid
         valid_loops.append([loop, circular])
@@ -386,7 +392,7 @@ def dict_vert_faces(bm):
 
 
 # input: list of edge-keys, output: dictionary with vertex-vertex connections
-def dict_vert_verts(edge_keys):
+def dict_vert_verts(edge_keys, debug = False):
     # create connection data
     vert_verts = {}
     for ek in edge_keys:
@@ -430,10 +436,12 @@ def get_connected_input(object, bm, scene, mode):
 
 
 # sorts all edge-keys into a list of loops
-def get_connected_selections(edge_keys):
+def get_connected_selections(edge_keys, debug = False):
     # create connection data
-    vert_verts = dict_vert_verts(edge_keys)
+    vert_verts = dict_vert_verts(edge_keys, debug = debug)
 
+    if debug:
+        print('There are %i vert_verts' % len(vert_verts))
     # find loops consisting of connected selected edges
     loops = []
     while len(vert_verts) > 0:
@@ -4037,17 +4045,29 @@ class Relax(bpy.types.Operator):
         return{'FINISHED'}
 
 #adapted utility
-def relax_loops_util(bme, selected_edges, iterations, influence = .5):
+def relax_loops_util(bme, selected_edges, iterations, influence = .5, override_selection = False, debug = False):
 
     # calculate selected loops
-    edge_keys = [edgekey(edge) for edge in selected_edges if \
-        edge.select and not edge.hide]
-    loops = get_connected_selections(edge_keys)
-
     
-   
-    loops = check_loops(loops, False, bme)
+    if override_selection:
+        edge_keys = [edgekey(edge) for edge in selected_edges]
+    
+    else:
+        edge_keys = [edgekey(edge) for edge in selected_edges if \
+                     edge.select and not edge.hide]
+    
+    if debug:
+        print('There are %i edge_keys' % len(edge_keys))
+    
+    loops = get_connected_selections(edge_keys, debug = debug)
+    
+    if debug:
+        print('There are %i connected loops' % len(loops))
         
+    loops = check_loops(loops, False, bme, debug = debug)
+    
+    if debug:
+        print('There are %i checked loops' % len(loops))   
     knots, points = relax_calculate_knots(loops)
 
     for iteration in range(iterations):

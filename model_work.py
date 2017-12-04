@@ -19,7 +19,164 @@ import odcutils
 from common_utilities import bversion
 from loops_tools import relax_loops_util
 import time
+import bmesh_fns
 
+
+#TODO, put this somewhere logical and useful
+def vector_angle_between(v0, v1, vcross):
+    a = v0.angle(v1)
+    d = v0.cross(v1).dot(vcross)
+    return a if d>0 else 2*math.pi - a
+
+def sort_objects_by_angles(vec_about, l_objs, l_vecs):
+    '''
+    sort a list of objects, around a normal vector,
+    with a corresponding list of vectors.
+    the first object, vector pair will remain the 0th item in the list
+    and others will be sorted relative to it
+    '''
+    if len(l_objs) <= 1:  return l_objs
+    o0,v0 = l_objs[0],l_vecs[0]
+    l_angles = [0] + [vector_angle_between(v0,v1,vec_about) for v1 in l_vecs[1:]]
+    l_inds = sorted(range(len(l_objs)), key=lambda i: l_angles[i])
+    return [l_objs[i] for i in l_inds]
+
+def delta_angles(vec_about, l_vecs):
+    '''
+    will find the difference betwen each element and the next element in the list
+    this is a foward difference.  Eg delta[n] = item[n+1] - item[n]
+    
+    deltas should add up to 2*pi
+    '''
+    
+    v0 = l_vecs[0]
+    l_angles = [0] + [vector_angle_between(v0,v1,vec_about) for v1 in l_vecs[1:]]
+    
+    L = len(l_angles)
+    
+    deltas = [l_angles[n + 1] - l_angles[n] for n in range(0, L-1)] + [2*math.pi - l_angles[-1]]
+    return deltas
+def calc_angle(v):
+                
+    #use link edges and non_man eds
+    eds_non_man = [ed for ed in v.link_edges if len(ed.link_faces) == 1]
+    if len(eds_non_man) == 0:
+        print('this is not a hole perimeter vertex')
+        return 2 * math.pi, None, None
+        
+    eds_all = [ed for ed in v.link_edges]
+    
+    #shift list to start with a non manifold edge if needed
+    base_ind = eds_all.index(eds_non_man[0])
+    eds_all = eds_all[base_ind:] + eds_all[:base_ind]
+    
+    #vector representation of edges
+    eds_vecs = [ed.other_vert(v).co - v.co for ed in eds_all]
+    
+    if len(eds_non_man) != 2:
+        print("more than 2 non manifold edges, loop self intersects or there is a dangling edge")
+        return 2 * math.pi, None, None
+    
+    va = eds_non_man[0].other_vert(v)
+    vb = eds_non_man[1].other_vert(v)
+    
+    
+    
+    Va = va.co - v.co
+    Vb = vb.co - v.co
+    
+    angle = Va.angle(Vb)
+    
+    #check for connectivity
+    if len(eds_all) == 2:
+        if any([ed.other_vert(va) == vb for ed in vb.link_edges]):
+            #already a tri over here
+            print('va and vb connect')
+            return 2 * math.pi, None, None
+    
+        elif any([f in eds_non_man[0].link_faces for f in eds_non_man[1].link_faces]):
+            print('va and vb share face')
+            return 2 * math.pi, None, None
+        
+        else: #completely regular situation
+            
+            if Va.cross(Vb).dot(v.normal) < 0:
+                print('keep normals consistent reverse')
+                return angle, vb, va
+            else:
+                return angle, va, vb
+    
+    elif len(eds_all) > 2:
+        #sort edges ccw by normal, starting at eds_nm[0]
+        eds_sorted = sort_objects_by_angles(v.normal, eds_all, eds_vecs)
+        vecs_sorted = [ed.other_vert(v).co - v.co for ed in eds_sorted]
+        deltas = delta_angles(v.normal, vecs_sorted)
+        ed1_ind = eds_sorted.index(eds_non_man[1])
+        
+        #delta_forward = sum(deltas[:ed1_ind])
+        #delta_reverse = sum(deltas[ed1_ind:])
+        
+        if Va.cross(Vb).dot(v.normal) > 0:
+        
+            if ed1_ind == 1:
+            
+
+                return angle, va, vb
+            
+            elif ed1_ind == (len(eds_sorted) - 1):
+                
+                return 2*math.pi - angle, vb, va
+            
+            else:
+                #PROBLEMS!
+                #print("Sorted angle is %i in the list" % ed1_ind)
+                return angle, va, vb
+        
+        else:
+                
+            if ed1_ind == 1:
+                return 2*math.pi - angle, va, vb
+            
+            elif ed1_ind == (len(eds_sorted) - 1):
+                return angle, vb, va
+            
+            else:
+                #PROBLEMS!
+                print("BIG BIG PROBLEMS")
+                return angle, vb, va
+
+def clockwise_loop(vert_loop, z):
+    
+    
+    vcoords = [v.co for v in vert_loop]
+    vcoords += [vcoords[0], vcoords[1]]
+    l = len(vcoords)
+    curl = 0
+    
+    for n in range(0,l-2):
+        #Vec representation of the two edges
+        V0 = (vcoords[n+1] - vcoords[n])
+        V1 = (vcoords[n+2] - vcoords[n+1])
+        
+        ##XY projection
+        T0 = V0 - V0.project(z)
+        T1 = V1 - V1.project(z)
+        
+        cross = T0.cross(T1)        
+        sign = 1
+        if cross.dot(z) < 0:
+            sign = -1
+        
+        rot = T0.rotation_difference(T1)  
+        ang = rot.angle
+        curl = curl + ang*sign
+        
+
+    if curl < 0:
+        return False
+    else:
+        return True
+             
 class D3SPLINT_OT_paint_model(bpy.types.Operator):
     '''Use sculpt mask to mark parts of model'''
     bl_idname = "d3splint.enter_sculpt_paint_mask"
@@ -434,7 +591,11 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
     bl_label = "Simple model base"
     bl_options = {'REGISTER', 'UNDO'}
     
-    base_height = bpy.props.FloatProperty(name = 'Base Height', default = 10, min = -50, max = 50,  description = 'Base height added in mm')
+    base_height = bpy.props.FloatProperty(name = 'Base Height', default = 3, min = 0, max = 50,  description = 'Base height added in mm')
+    #smooth_zone = bpy.props.FloatProperty(name = 'Smooth Zone', default = .5, min = .2, max = 2.0,  description = 'Width of border smoothing zone in mm')
+    smooth_iterations = bpy.props.IntProperty(name = 'Smooth Iterations', default = 10, min = 0, max = 50,  description = 'Iterations to smooth the smoothing zone')
+    #reverse = bpy.props.BoolProperty(name = 'Reverse Z direction', default = False, description = 'Use if auto detection detects base direction wrong')
+    
     
     @classmethod
     def poll(cls, context):
@@ -443,7 +604,175 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         else:
             return False
         
+    
+        
+    
     def execute(self, context):
+        
+        def clean_geom(bme):
+            #make sure there are no node_verts
+            #make sure no loose triangles
+            
+            #first pass, collect all funky edges
+            funky_edges = [ed for ed in bme.edges if len(ed.link_faces) != 2]
+            
+            
+            degenerate_eds = [ed for ed in funky_edges if len(ed.link_faces) > 2]
+            loose_eds = [ed for ed in funky_edges if len(ed.link_faces) == 0]
+            non_man_eds = [ed for ed in funky_edges if len(ed.link_faces) == 1]
+            
+            if len(degenerate_eds):
+                print('found %i degenerate edges' % len(degenerate_eds))
+                bmesh.ops.split_edges(bme, edges = degenerate_eds, verts = [])
+                
+                #now need to run again, and hopefully delete loose triangles
+                return -1
+                
+            if len(loose_eds):
+                loose_vs = set()
+                for ed in loose_eds:
+                    vs = [v for v in ed.verts if len(v.link_faces) == 0]
+                    loose_vs.update(vs)
+                print('Deleting %i loose edges' % len(loose_eds))    
+                bmesh.ops.delete(bme, geom = loose_eds, context = 4)
+                bmesh.ops.delete(bme, geom = list(loose_vs), context = 1)
+                
+                #deleteing loose eds has no effect on existing perimeter edges
+                #no need to return
+                
+            perim_verts = set()
+            perim_faces = set()
+            for ed in non_man_eds:
+                perim_verts.update([ed.verts[0], ed.verts[1]])
+                if len(ed.link_faces) == 1:
+                    perim_faces.add(ed.link_faces[0])
+            
+            #first check for loose triangles
+            bad_triangles = []
+            for f in perim_faces:
+                check = [ed for ed in f.edges if ed in non_man_eds]
+                if len(check) == 3 or len(check) ==2:
+                    bad_triangles.append(f)
+            
+            if len(bad_triangles):
+                bad_verts = set()
+                bad_edges = set()
+                for f in bad_triangles:
+                    del_verts = [v for v in f.verts if len(v.link_faces) == 1]
+                    del_edges = [ed for ed in f.edges if len(ed.link_faces) == 1]
+                    bad_verts.update(del_verts)
+                    bad_edges.update(del_edges)
+                bmesh.ops.delete(bme, geom = bad_triangles, context = 3)
+                bmesh.ops.delete(bme, geom = list(bad_edges), context = 4)
+                bmesh.ops.delete(bme, geom = list(bad_verts), context = 1)
+                print('Deleting %i loose and flag/dangling triangles' % len(bad_triangles))
+                
+                #this affects the perimeter, will need to do another pass
+                #could also remove bad_fs from perimeter fs...
+                #for now laziness do another pass
+                return -1
+            
+            
+            #fill small angle coves
+            #initiate the front and calc angles
+            angles = {}
+            neighbors = {}
+            for v in perim_verts:
+                ang, va, vb = calc_angle(v)
+                angles[v] = ang
+                neighbors[v] = (va, vb)    
+                 
+            
+            iters = 0 
+            start = time.time()
+            N = len(perim_verts)
+            new_fs = []
+            coved = False
+            while len(perim_verts) > 3 and iters < 2 * N:
+                iters += 1
+                
+                v_small = min(perim_verts, key = angles.get)
+                smallest_angle = angles[v_small]
+                
+                va, vb = neighbors[v_small]
+                
+                vec_a = va.co - v_small.co
+                vec_b = vb.co - v_small.co
+                vec_ab = va.co - vb.co
+                
+                
+                Ra, Rb = vec_a.length, vec_b.length
+                
+                R_13 = .67*Ra + .33*Rb
+                R_12 = .5*Ra + .5*Rb
+                R_23 = .33*Ra + .67*Rb
+
+                vec_a.normalize()
+                vec_b.normalize()
+                v_13 = vec_a.lerp(vec_b, .33) #todo, verify lerp
+                v_12 = vec_a.lerp(vec_b, .5)
+                v_23 = vec_a.lerp(vec_b, .67)
+                
+                v_13.normalize()
+                v_12.normalize()
+                v_23.normalize()
+                
+                if smallest_angle < math.pi/180 * 120:
+                    try:
+                        #f = bme.faces.new((va, v_small, vb))
+                        f = bme.faces.new((vb, v_small, va))
+                        new_fs += [f]
+                        f.normal_update()
+                        coved = True
+                        
+                        #update angles and neighbors
+                        ang_a, vaa, vba = calc_angle(va)
+                        ang_b, vab, vbb = calc_angle(vb)
+                        
+                        angles[va] = ang_a
+                        angles[vb] = ang_b
+                        neighbors[va] = (vaa, vba)
+                        neighbors[vb] = (vab, vbb)
+                        perim_verts.remove(v_small)
+                        
+                    except ValueError:
+                        print('concavity with face on back side')
+                        angles[v_small] = 2*math.pi
+            
+            
+                else:
+                    
+                    print('finished coving all small angle concavities')
+                    print('Coved %i verts' % len(new_fs))
+                    for f in new_fs:
+                        f.select_set(True)
+                    break
+            if coved:
+                print('Coved returning early')
+                return -1
+            
+                     
+            node_verts = []
+            end_verts = []
+            for v in perim_verts:
+                check = [ed for ed in v.link_edges if ed in non_man_eds]
+                if len(check) != 2:
+                    if len(check) > 2:
+                        node_verts.append(v)
+                    elif len(check) == 1:
+                        print("found an endpoint of an unclosed loop")
+                        end_verts.append(v)
+            
+            
+            if len(node_verts):
+                for v in node_verts:
+                    bmesh_fns.bme_rip_vertex(bme, v)
+                
+                #ripping changes the perimeter and topology, try again
+                print('ripping %i node vertices' % len(node_verts))
+                return -1
+    
+    
         
         ob = context.object
         bme = bmesh.new()
@@ -453,32 +782,80 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         bme.edges.ensure_lookup_table()
         bme.faces.ensure_lookup_table()
         
-        non_man_eds = [ed for ed in bme.edges if len(ed.link_faces) ==1]
+
+        clean_iterations = 0
+        test = -1
+        while clean_iterations < 20 and test == -1:
+            print('Cleaning iteration %i' % clean_iterations)
+            clean_iterations += 1
+            test = clean_geom(bme) 
+        
+        #update everything
+        bme.verts.ensure_lookup_table()
+        bme.edges.ensure_lookup_table()
+        bme.faces.ensure_lookup_table()
+        
+        bme.verts.index_update()
+        bme.edges.index_update()
+        bme.faces.index_update()
+        #bme.to_mesh(context.object.data)
+        #context.object.data.update()
+        #bme.free()
+        #return {'FINISHED'}
+        
+        non_man_eds = [ed for ed in bme.edges if len(ed.link_faces) == 1]        
+        
+        for f in bme.faces:
+            f.select_set(False)
+        for ed in non_man_eds:
+            ed.select_set(True)
+        
+        #bme.to_mesh(context.object.data)
+        #context.object.data.update()
+        #bme.free()
+        #return {'FINISHED'}
+        
+        
         non_man_inds = [ed.index for ed in non_man_eds]
-        
-        
         loops = edge_loops_from_bmedges(bme, non_man_inds)
-                
-                
+        
+        
+        #if loops[0][0] != loops[0][-1]:
+        #    print('Not a closed loop!')
+        #    print(loops[0][0:20])
+        #    print(loops[0][len(loops[0])-20:])
+        
+        #if len(loops[0]) != len(set(loops[0])):
+        #    print('doubles in the loop')
+        #    seen = set()
+        #    uniq = []
+        #    for x in loops[0]:
+        #        if x not in seen:
+        #            uniq.append(x)
+        #            seen.add(x)
+
         if len(loops)>1:
             biggest_loop = max(loops, key = len)
-            self.report({'WARNING'}, 'There are multiple holes in mesh, may want to UNDO and use override if model is 2 parts, /n Otherwise repair holes first')
+            self.report({'WARNING'}, 'There are multiple holes in mesh')
+            
+            for l in loops:
+                if l != biggest_loop:
+                    print(l)
         else:
             biggest_loop = loops[0]
             
-        
         if biggest_loop[0] != biggest_loop[-1]:
-            
             print('Biggest loop not a hole!')
             bme.free() 
-            
             return {'FINISHED'}
         
         biggest_loop.pop()
-        
         final_eds = [ed for ed in non_man_eds if all([v.index in biggest_loop for v in ed.verts])]
-        relax_loops_util(bme, final_eds, iterations = 10, influence = .5)
         
+        print('relaxing the loop')
+        print('there are %i eds in final loop' % len(final_eds))
+        relax_loops_util(bme, final_eds, iterations = 3, influence = .5, override_selection = True, debug = True)
+          
         loop_verts = [bme.verts[i] for i in biggest_loop]
         minv = min(loop_verts, key = lambda x: x.co[2])
         maxv = max(loop_verts, key = lambda x: x.co[2])
@@ -491,23 +868,41 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         r_pos = maxv.co[2] - bmax[2]
         
         
-        if abs(r_neg) > abs(r_pos):
+        direction = 0
+        for f in bme.faces:
+            direction += f.normal.dot(Vector((0,0,1)))
+        
+        if direction > 0:            
+            Zflat = minv.co[2]
+            Z = Vector((0,0,-1))
+            zz = -1    
+
+        else:
             Zflat = maxv.co[2]
             Z = Vector((0,0,1))
             zz = 1
-        else:
-            Zflat = minv.co[2]
-            Z = Vector((0,0,-1))
-            zz = -1
+            
+        #select one extra boundary of verts to smooth
+        smooth_verts = set(loop_verts)
+        for v in loop_verts:
+            neighbors = [ed.other_vert(v) for ed in v.link_edges]
+            smooth_verts.update(neighbors)
+            
         
-        
-        gdict = bmesh.ops.extrude_edge_only(bme, edges = non_man_eds)
+        gdict = bmesh.ops.extrude_edge_only(bme, edges = final_eds)
         bme.edges.ensure_lookup_table()
         newer_edges = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMEdge)]
         newer_verts = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMVert)]
-        
+    
         for v in newer_verts:
-            v.co[2] = Zflat + .1 *zz
+            v.co[2] += .1 *zz
+    
+        
+        bme.verts.ensure_lookup_table()
+        bme.edges.ensure_lookup_table()
+        bme.faces.ensure_lookup_table()
+        relax_loops_util(bme, newer_edges, iterations = 10, influence = .5, override_selection = True, debug = True)
+            
             
         gdict = bmesh.ops.extrude_edge_only(bme, edges = newer_edges)
         bme.edges.ensure_lookup_table()
@@ -518,7 +913,8 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
             v.co[2] = Zflat + self.base_height * zz 
             
         
-        loops = edge_loops_from_bmedges(bme, [ed.index for ed in new_edges])
+        loops = edge_loops_from_bmedges(bme, [ed.index for ed in new_edges])  
+            
         loops[0].pop()
         f = bme.faces.new([bme.verts[i] for i in loops[0]])
         
@@ -529,8 +925,22 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         
         
         bme.to_mesh(context.object.data)
-        bme.free()
-        context.object.data.update()             
+        context.object.data.update()
+        
+        if 'Smooth Base' not in context.object.vertex_groups:
+            sgroup = context.object.vertex_groups.new('Smooth Base')
+        else:
+            sgroup = context.object.vertex_groups.get('Smooth Base')
+        sgroup.add([v.index for v in smooth_verts], 1, type = 'REPLACE')
+        
+        if 'Smoooth Base' not in context.object.modifiers:
+            smod = context.object.modifiers.new('Smooth Base', type = 'SMOOTH')
+        else:
+            smod = context.object.modifiers['Smooth Base']
+        smod.vertex_group = 'Smooth Base'
+        smod.iterations = self.smooth_iterations
+        
+        bme.free()      
         return {'FINISHED'}
         
 class D3PLINT_OT_ortho_model_base(bpy.types.Operator):
@@ -858,6 +1268,7 @@ class D3Splint_OT_model_thicken(bpy.types.Operator):
         ob_bme.faces.ensure_lookup_table()
         
         
+        
         bvh = BVHTree.FromBMesh(ob_bme)
         if self.base_at_cursor:
             start = time.time()
@@ -1005,7 +1416,7 @@ class D3Splint_OT_model_thicken(bpy.types.Operator):
         
         if self.base_at_cursor:
             
-            '''
+            
             gdict = bmesh.ops.bisect_plane(ob_bme, geom = ob_bme.faces[:]+ob_bme.edges[:]+ob_bme.verts[:], 
                                plane_co = pt - .1 * no, 
                                plane_no = no,
@@ -1019,6 +1430,63 @@ class D3Splint_OT_model_thicken(bpy.types.Operator):
             cap_eds = [ele for ele in cut_geom if isinstance(ele, bmesh.types.BMEdge)]
             
             
+            ob_bme.verts.ensure_lookup_table()
+            ob_bme.edges.ensure_lookup_table()
+            ob_bme.faces.ensure_lookup_table()
+            
+            loops = edge_loops_from_bmedges(ob_bme, [ed.index for ed in cap_eds])
+            
+            if len(loops) == 2:
+                loop0 = max(loops, key = len)
+                loop1 = min(loops, key = len)
+                
+                loop0.pop()
+                loop1.pop()
+                
+                bv_loop0 = [ob_bme.verts[i] for i in loop0]
+                bv_loop1 = [ob_bme.verts[i] for i in loop1]
+                
+                #get the loops in the same direction
+                if clockwise_loop(bv_loop0, Vector((0,0,1))) != clockwise_loop(bv_loop1, Vector((0,0,1))):
+                    bv_loop1.reverse()
+                
+                
+                best_v = min(bv_loop1, key = lambda x: (x.co - bv_loop0[0].co).length)
+                
+                ind = bv_loop1.index(best_v)
+                bv_loop1 = bv_loop1[ind:] + bv_loop1[0:ind]
+                
+                ind_1 = 0
+                for i, v0 in enumerate(bv_loop0):
+                    
+                    v1 = bv_loop1[ind_1]
+                    
+                    if ind_1 != len(bv_loop1) -1:
+                        v11 = bv_loop1[ind_1 + 1]
+                    else:
+                        v11 = bv_loop1[0]
+                   
+                    if i != len(bv_loop0) -1: 
+                        v01 = bv_loop0[i + 1]
+                    else:
+                        v01 = bv_loop0[0]
+                        
+                    if (v11.co - v01.co).length < (v1.co - v01.co).length:
+                        
+                        f = ob_bme.faces.new([v01, v0, v1, v11])
+                        
+                        if f.normal.dot(no) < 0:
+                            f.normal_flip()
+                        if ind_1 < len(bv_loop1) -1:
+                            ind_1 += 1
+                        
+                    else:
+                        f = ob_bme.faces.new([v01, v0, v1])
+                        if f.normal.dot(no) < 0:
+                            f.normal_flip()
+                #walk along each loop, bri
+                
+                
             #bmesh.ops.smooth_vert(ob_bme, verts = cap_verts, factor = 1)
             
             
@@ -1050,6 +1518,7 @@ class D3Splint_OT_model_thicken(bpy.types.Operator):
             plane_bme.to_mesh(plane_me)
             context.scene.objects.link(plane_ob)
             plane_ob.matrix_world = mx
+            '''
             
         ob_bme.to_mesh(ob.data)
           

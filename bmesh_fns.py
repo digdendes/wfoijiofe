@@ -9,6 +9,23 @@ from mathutils.bvhtree import BVHTree
     
     
     
+def bme_rip_vertex(bme, bmvert):
+    
+    fs = [f for f in bmvert.link_faces]
+    
+    for f in fs:
+        vs = [v for v in f.verts]  #these come in order
+        new_v = bme.verts.new(bmvert.co)
+        
+        #find the ripping vert
+        ind = vs.index(bmvert)
+        #replace it with the new vertex
+        vs[ind] = new_v
+        
+        #create a new face
+        new_f = bme.faces.new(vs)
+        
+    bmesh.ops.delete(bme, geom = [bmvert], context = 1)
     
     
 def bme_linked_flat_faces(bme, start_face, angle, iter_max = 10000):
