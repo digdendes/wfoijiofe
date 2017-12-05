@@ -1544,6 +1544,215 @@ class D3Splint_OT_model_thicken(bpy.types.Operator):
     def invoke(self, context, event):
         
         return context.window_manager.invoke_props_dialog(self)
+
+class D3Splint_OT_model_thicken2(bpy.types.Operator):
+    """Create Inner Thickness to save  3d printing resin"""
+    bl_idname = "d3splint.model_wall_thicken2"
+    bl_label = "Thicken Model Wall2"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    radius = bpy.props.FloatProperty(default = 2.5, description = 'Thickness Offset', min = 1.0, max = 5.0)
+    resolution = bpy.props.FloatProperty(default = .7, description = 'Mesh resolution.  1 coarse, .6 medium to .3 high_res')
+    finalize = bpy.props.BoolProperty(default = True, description = 'Will Apply Modifier and delete inner object, uncheck to help diagnose problems')
+    
+    @classmethod
+    def poll(cls, context):
+        if context.mode == "OBJECT" and context.object != None:
+            return True
+        else:
+            return False
+        
+    def execute(self, context):
+        global_start = time.time()
+        start = time.time()
+        
+        ob = context.object
+        mx = ob.matrix_world
+        imx = mx.inverted()
+        
+        #we will use this bmesh to extend the base, and create a scaffold
+        ob_bme = bmesh.new()
+        ob_bme.from_mesh(ob.data)
+        ob_bme.verts.ensure_lookup_table()
+        ob_bme.edges.ensure_lookup_table()
+        ob_bme.faces.ensure_lookup_table()
+        
+        #use this for snapping cursor, later for interatve mode
+        bvh = BVHTree.FromBMesh(ob_bme)
+        
+        start = time.time()
+        loc = context.scene.cursor_location
+        if bversion() < '002.077.000':
+            pt, no, seed, dist = bvh.find(imx * loc)
+        else:
+            pt, no, seed, dist = bvh.find_nearest(imx * loc)
+                    
+        if (mx * pt - loc).length > 1:
+            self.report({'ERROR'}, 'Need to place 3D cursor on model base and make sure model is selected')
+            return {'CANCELLED'}
+            
+        base_faces = bme_linked_flat_faces(ob_bme, ob_bme.faces[seed], angle = 3)
+        base_verts = set()
+        for f in base_faces:
+            base_verts.update(f.verts)
+            
+        base_verts = list(base_verts)
+        for v in base_verts:
+            v.co += 1.5 * self.radius * no
+        
+        print('took %f seconds to find flat base faces and extrude' % (time.time() - start))
+        start = time.time()
+        
+        #We push the extruded flat base into a temporary object
+        tmp_me = bpy.data.meshes.new('Tmp Scaffold')
+        tmp_ob = bpy.data.objects.new('Tmp Scaffold', tmp_me)
+        tmp_ob.matrix_world = mx
+        ob_bme.to_mesh(tmp_me)
+        context.scene.objects.link(tmp_ob)
+        
+        
+        print('took %f seconds to initiate temp model' % (time.time() - start))
+        start = time.time()
+        
+        tmp_ob.select = True
+        context.scene.objects.active = tmp_ob
+        tmp_ob.select = True
+        
+        mod = tmp_ob.modifiers.new('Remesh', type = 'REMESH')
+        mod.octree_depth = 6
+        mod.mode = 'SMOOTH'
+        bpy.ops.object.modifier_apply(modifier = 'Remesh')
+        
+        print('took %f seconds to remesh temp model' % (time.time() - start))
+        #start = time.time()
+        
+        #bpy.ops.object.mode_set(mode = 'SCULPT')
+        #if not tmp_ob.use_dynamic_topology_sculpting:
+        #    bpy.ops.sculpt.dynamic_topology_toggle()
+            
+        #go to sculpt mode and use detail flood
+        #context.scene.tool_settings.sculpt.detail_type_method = 'CONSTANT'
+        
+ 
+        #if bversion() < '002.079.000':
+        #    context.scene.tool_settings.sculpt.constant_detail = self.resolution * 5
+        #else:
+        #    context.scene.tool_settings.sculpt.constant_detail_resolution = 1.2/self.resolution
+        
+        #bpy.ops.sculpt.detail_flood_fill()
+        
+        #print('took %f seconds to unify mesh density' % (time.time() - start))
+        #bpy.ops.object.mode_set(mode = 'OBJECT')
+        start = time.time()
+        
+        meta_data = bpy.data.metaballs.new('Meta Mesh')
+        meta_obj = bpy.data.objects.new('Meta Surface', meta_data)
+        meta_data.resolution = self.resolution
+        meta_data.render_resolution = self.resolution
+        context.scene.objects.link(meta_obj)
+            
+        for v in tmp_ob.data.vertices:
+            mb = meta_data.elements.new(type = 'BALL')
+            mb.radius = self.radius
+            mb.co = v.co
+            
+        meta_obj.matrix_world = mx
+        context.scene.update()
+        
+        
+        me = meta_obj.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+        new_ob = bpy.data.objects.new('MetaSurfaceMesh', me)
+        context.scene.objects.link(new_ob)
+        new_ob.matrix_world = mx
+        
+        print('took %f seconds to do volumetric offset' % (time.time() - start))
+        start = time.time()
+        
+        #clean the outer shell off
+        bme = bmesh.new()
+        bme.from_object(new_ob, context.scene)
+        bme.verts.ensure_lookup_table()
+        bme.edges.ensure_lookup_table()
+        bme.faces.ensure_lookup_table()
+        
+        total_faces = set(bme.faces[:])
+        islands = []
+        iters = 0
+        while len(total_faces) and iters < 100:
+            iters += 1
+            seed = total_faces.pop()
+            island = flood_selection_faces(bme, {}, seed, max_iters = 10000)
+            islands += [island]
+            total_faces.difference_update(island)
+        
+        
+        
+        #TODO, actually ray_cast a sample of each island to determine if it's inside or outside
+        #TODO, calculate the bbox size of each island
+        islands.sort(key = lambda x: len(x))
+        
+        if len(islands) != 2:
+            print('there are %i islands' % len(islands))
+        if len(islands) == 1:
+            self.report({'ERROR'}, 'Model too small relative to offset')
+            return {'CANCELLED'}
+        elif len(islands) > 2:
+            self.report({'WARNING'}, 'There may be interior voids that will fill with resin')
+            
+        bmesh.ops.delete(bme, geom = list(islands[-1]), context = 3)
+        del_verts = []
+        for v in bme.verts:
+            if all([f in islands[-1] for f in v.link_faces]):
+                del_verts += [v]        
+        bmesh.ops.delete(bme, geom = del_verts, context = 1)    
+        
+        
+        print('took %f seconds to detect and delete outer shell' % (time.time() - start))
+        start = time.time()
+        
+        
+        for f in bme.faces:
+            f.normal_flip()
+            
+        bme.to_mesh(new_ob.data)
+        new_ob.data.update()
+        
+        bool_mod = ob.modifiers.new('Boolean', type = 'BOOLEAN')
+        bool_mod.operation = 'DIFFERENCE'
+        bool_mod.solver = 'CARVE'
+        bool_mod.object = new_ob
+        
+        context.scene.objects.active = ob
+        
+        if self.finalize:
+            bpy.ops.object.modifier_apply(mod = 'Boolean')
+            context.scene.objects.unlink(new_ob)
+            bpy.data.objects.remove(new_ob)
+            bpy.data.meshes.remove(me)
+             
+        print('Finished the boolean operation in %f seconds' % (time.time() - start)) 
+        start = time.time()
+        
+        context.scene.objects.unlink(meta_obj)
+        bpy.data.objects.remove(meta_obj)
+        bpy.data.metaballs.remove(meta_data)
+        
+        
+        context.scene.objects.unlink(tmp_ob)
+        bpy.data.objects.remove(tmp_ob)
+        bpy.data.meshes.remove(tmp_me)
+
+        
+        bme.free()
+        ob_bme.free()
+        
+        print('took %f seconds to delete temp obs' % (time.time() - start))
+        print('took %f seconds for the whole operation' % (time.time() - global_start))  
+        return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        
+        return context.window_manager.invoke_props_dialog(self)
     
 def register():
     bpy.utils.register_class(D3SPLINT_OT_paint_model)
@@ -1556,6 +1765,7 @@ def register():
     bpy.utils.register_class(D3PLINT_OT_ortho_model_base_former)
     bpy.utils.register_class(D3SPLINT_OT_close_painted_hole)
     bpy.utils.register_class(D3Splint_OT_model_thicken)
+    bpy.utils.register_class(D3Splint_OT_model_thicken2)
 def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_paint_model)
     bpy.utils.unregister_class(D3SPLINT_OT_delete_sculpt_mask)
@@ -1567,6 +1777,7 @@ def unregister():
     bpy.utils.unregister_class(D3PLINT_OT_ortho_model_base_former)
     bpy.utils.unregister_class(D3SPLINT_OT_close_painted_hole)
     bpy.utils.unregister_class(D3Splint_OT_model_thicken)
+    bpy.utils.unregister_class(D3Splint_OT_model_thicken2)
     
 if __name__ == "__main__":
     register()

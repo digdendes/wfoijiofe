@@ -410,6 +410,7 @@ class VIEW3D_PT_D3SplintModels(bpy.types.Panel):
         #col.operator("d3splint.simple_offset_surface", text = "Simple Offset")
         col.operator("d3splint.simple_base", text = "Simple Base")            
         col.operator("d3splint.model_wall_thicken", text = 'Hollow Model')
+        col.operator("d3splint.model_wall_thicken2", text = 'Hollow Model2')
         
         
 class VIEW3D_PT_D3SplintModelText(bpy.types.Panel):
@@ -443,6 +444,8 @@ class VIEW3D_PT_D3SplintModelText(bpy.types.Panel):
         row.operator("d3splint.place_text_on_model", text = 'Place Text at Cursor')
         row = layout.row()
         row.operator("d3tool.remesh_and_emboss_text", text = 'Emboss Text onto Object')
+        
+        
 def register():
     bpy.utils.register_class(SCENE_UL_odc_teeth)
     bpy.utils.register_class(SCENE_UL_odc_implants)

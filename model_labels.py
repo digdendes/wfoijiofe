@@ -48,8 +48,6 @@ class D3Splint_place_text_on_model(bpy.types.Operator):
     def execute(self, context):
         context.scene.update()
         
-    
-        
         t_base = context.object
         #t_base = context.object
         
@@ -60,6 +58,11 @@ class D3Splint_place_text_on_model(bpy.types.Operator):
         cursor_loc = context.scene.cursor_location
         
         ok, new_loc, no, ind = t_base.closest_point_on_mesh(imx * cursor_loc)
+        
+        
+        if (mx * new_loc - cursor_loc).length > 1:
+            self.report('ERROR', "Cursor not close to active object.  Right click model to select, Left click to place cursor, then Re-Do")
+            return {'CANCELLED'}
         
         v3d = context.space_data
         rv3d = v3d.region_3d
@@ -81,7 +84,7 @@ class D3Splint_place_text_on_model(bpy.types.Operator):
         
         if 'Emboss Boss' in bpy.data.curves:    
             txt_crv = bpy.data.curves.get('Emboss Boss')
-            txt_ob = bpy.data.objets.get('Emboss Boss')
+            txt_ob = bpy.data.objects.get('Emboss Boss')
             txt_crv.body = self.message
         
         else:
