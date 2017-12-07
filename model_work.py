@@ -1753,6 +1753,219 @@ class D3Splint_OT_model_thicken2(bpy.types.Operator):
     def invoke(self, context, event):
         
         return context.window_manager.invoke_props_dialog(self)
+ 
+ 
+def landmarks_draw_callback(self, context):  
+    self.crv.draw(context)
+    self.help_box.draw()  
+    
+class D3Tool_OT_model_vertical_base(bpy.types.Operator):
+    """Click Landmarks to Add Base on Back Side of Object"""
+    bl_idname = "d3tool.model_vertical_base"
+    bl_label = "Vertical Print Base"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls,context):
+        return True
+    
+    def modal_nav(self, event):
+        events_nav = {'MIDDLEMOUSE', 'WHEELINMOUSE','WHEELOUTMOUSE', 'WHEELUPMOUSE','WHEELDOWNMOUSE'} #TODO, better navigation, another tutorial
+        handle_nav = False
+        handle_nav |= event.type in events_nav
+
+        if handle_nav: 
+            return 'nav'
+        return ''
+    
+    def modal_main(self,context,event):
+        # general navigation
+        nmode = self.modal_nav(event)
+        if nmode != '':
+            return nmode  #stop here and tell parent modal to 'PASS_THROUGH'
+
+        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+            
+            
+            x, y = event.mouse_region_x, event.mouse_region_y
+            
+            if len(self.crv.b_pts) == 0:
+                txt = "Posterior Side 1"
+                help_txt = "Left click on back of model near one side"
+                self.help_box.raw_text = help_txt
+                self.help_box.format_and_wrap_text()
+                self.crv.click_add_point(context, x,y, label = txt)
+                return 'main'
+        
+            elif len(self.crv.b_pts) == 1:
+                txt = "Posterior Side 2"
+                help_txt = "Left Click on back of model on other side"
+                self.help_box.raw_text = help_txt
+                self.help_box.format_and_wrap_text()
+                self.crv.click_add_point(context, x,y, label = txt)
+                return 'main'
+        
+        
+            elif len(self.crv.b_pts) == 2:
+                txt = "Vertical Orientation"
+                help_txt = "Click to place vertical orientation"
+                self.help_box.raw_text = help_txt
+                self.help_box.format_and_wrap_text()
+                self.crv.click_add_point(context, x,y, label = txt)
+                return 'main'
+        
+            else:
+                self.orient_vertical(self, context)
+                return 'main'
+                    
+            return 'main'
+        
+        if event.type == 'DEL' and event.value == 'PRESS':
+            self.crv.click_delete_point()
+            return 'main'
+            
+        if event.type == 'RET' and event.value == 'PRESS':
+            if len(self.crv.b_pts) != 3:
+                return 'main'
+            self.finish(context)
+            return 'finish'
+            
+        elif event.type == 'ESC' and event.value == 'PRESS':
+            return 'cancel' 
+
+        return 'main'
+    
+        
+    def modal(self, context, event):
+        context.area.tag_redraw()
+        
+        FSM = {}    
+        FSM['main']    = self.modal_main
+        FSM['nav']     = self.modal_nav
+        
+        nmode = FSM[self.mode](context, event)
+        
+        if nmode == 'nav': 
+            return {'PASS_THROUGH'}
+        
+        if nmode in {'finish','cancel'}:
+            context.space_data.show_manipulator = True
+            
+            if nmode == 'finish':
+                context.space_data.transform_manipulators = {'TRANSLATE', 'ROTATE'}
+            else:
+                context.space_data.transform_manipulators = {'TRANSLATE'}
+            #clean up callbacks
+            bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+            return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
+        
+        if nmode: self.mode = nmode
+        
+        return {'RUNNING_MODAL'}
+
+    def invoke(self,context, event):
+        n = context.scene.odc_splint_index
+        self.splint = context.scene.odc_splints[n]    
+        
+        model = self.splint.get_maxilla()
+           
+        if model != '' and model in bpy.data.objects:
+            Model = bpy.data.objects[model]
+            for ob in bpy.data.objects:
+                ob.select = False
+                ob.hide = True
+            Model.select = True
+            Model.hide = False
+            context.scene.objects.active = Model
+            
+            bpy.ops.view3d.viewnumpad(type = 'FRONT')
+            
+            bpy.ops.view3d.view_selected()
+            self.crv = PointPicker(context,snap_type ='OBJECT', snap_object = Model)
+            context.space_data.show_manipulator = False
+            context.space_data.transform_manipulators = {'TRANSLATE'}
+            v3d = bpy.context.space_data
+            v3d.pivot_point = 'MEDIAN_POINT'
+        else:
+            self.report({'ERROR'}, "Need to mark the UpperJaw model first!")
+            return {'CANCELLED'}
+        
+        #TODO, tweak the modifier as needed
+        help_txt = "DRAW LANDMARK POINTS\n Click on the Patient's Right Molar Occlusal Surface"
+        self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
+        self.help_box.snap_to_corner(context, corner = [1,1])
+        self.mode = 'main'
+        self._handle = bpy.types.SpaceView3D.draw_handler_add(landmarks_draw_callback, (self, context), 'WINDOW', 'POST_PIXEL')
+        context.window_manager.modal_handler_add(self) 
+        return {'RUNNING_MODAL'}
+
+    def finish(self, context):
+
+        v_ant = self.crv.b_pts[2] #midline
+        v_R = self.crv.b_pts[0] #R molar
+        v_L = self.crv.b_pts[1] #L molar
+        
+        center = .5 *(.5*(v_R + v_L) + v_ant)
+        
+        #vector pointing from left to right
+        vec_R = v_R - v_L
+        vec_R.normalize()
+        
+        #vector pointing straight anterior
+        vec_ant = v_ant - center
+        vec_ant.normalize()
+        
+        Z = vec_R.cross(vec_ant)
+        X = v_ant - center
+        X.normalize()
+                
+        Y = Z.cross(X)
+        
+        R = Matrix.Identity(3)  #make the columns of matrix U, V, W
+        R[0][0], R[0][1], R[0][2]  = X[0] ,Y[0],  Z[0]
+        R[1][0], R[1][1], R[1][2]  = X[1], Y[1],  Z[1]
+        R[2][0] ,R[2][1], R[2][2]  = X[2], Y[2],  Z[2]
+        
+        R = R.to_4x4()
+
+        T = Matrix.Translation(center)
+        
+        #Lets Calculate the matrix transform for an
+        #8 degree Fox plane cant.
+        Z_w = Vector((0,0,1))
+        X_w = Vector((1,0,0))
+        Y_w = Vector((0,1,0))
+        Fox_R = Matrix.Rotation(8 * math.pi /180, 3, 'Y')
+        Z_fox = Fox_R * Z_w
+        X_fox = Fox_R * X_w
+        
+        R_fox = Matrix.Identity(3)  #make the columns of matrix U, V, W
+        R_fox[0][0], R_fox[0][1], R_fox[0][2]  = X_fox[0] ,Y_w[0],  Z_fox[0]
+        R_fox[1][0], R_fox[1][1], R_fox[1][2]  = X_fox[1], Y_w[1],  Z_fox[1]
+        R_fox[2][0] ,R_fox[2][1], R_fox[2][2]  = X_fox[2], Y_w[2],  Z_fox[2]
+
+        
+        Model =  bpy.data.objects[self.splint.get_maxilla()]
+     
+        mx_final = T * R
+        mx_inv = mx_final.inverted()
+        
+        #average distance from campers plane to occlusal
+        #plane is 30 mm
+        #file:///C:/Users/Patrick/Downloads/CGBCC4_2014_v6n6_483.pdf
+        incisal_final = Vector((90, 0, -30))
+        
+        T2 = Matrix.Translation(incisal_final - mx_inv * v_ant)
+        mx_mount = T2 * R_fox.to_4x4()
+        
+        Model.data.transform(mx_inv)
+        #Model.matrix_world = Matrix.Identity(4)
+        Model.matrix_world = mx_mount
+        
+        
+         
+        
+        #tracking.trackUsage("D3Tool:VertPrintBase",None)
     
 def register():
     bpy.utils.register_class(D3SPLINT_OT_paint_model)

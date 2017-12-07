@@ -1593,8 +1593,15 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         new_me = margin.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
         bme = bmesh.new()
         bme.from_mesh(new_me)
-        new_ob = bpy.data.objects.new('Margin Cut', new_me)
         
+        if 'Margin Cut' not in bpy.data.objects:
+            new_ob = bpy.data.objects.new('Margin Cut', new_me)
+            context.scene.objects.link(new_ob)
+        else:
+            new_ob = bpy.data.objects.get('Margin Cut')
+            new_ob.data = new_me
+            
+            
         bme.verts.ensure_lookup_table()
         bme.edges.ensure_lookup_table()
         
@@ -1751,15 +1758,15 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         
         new_bme.verts.ensure_lookup_table()
         new_bme.faces.ensure_lookup_table()
-        context.scene.objects.link(new_ob)
+        
         
         Master = bpy.data.objects.get(splint.model)
         #new_ob.parent = Master
-        
-        cons = new_ob.constraints.new('CHILD_OF')
-        cons.target = Master
-        cons.inverse_matrix = Master.matrix_world.inverted()
-        new_ob.hide = True
+        if not len(new_ob.constraints):
+            cons = new_ob.constraints.new('CHILD_OF')
+            cons.target = Master
+            cons.inverse_matrix = Master.matrix_world.inverted()
+            new_ob.hide = True
         
         bvh = BVHTree.FromBMesh(new_bme)
         trimmed_bme = bmesh.new()
@@ -1901,15 +1908,20 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
                 if res[0] != None:
                     v.co = mx2.inverted() * res[0]
         
-        trimmed_model = bpy.data.meshes.new('Trimmed_Model')
-        trimmed_obj = bpy.data.objects.new('Trimmed_Model', trimmed_model)
+        if 'Trimmed_Model' in bpy.data.objects:
+            trimmed_obj = bpy.data.objects.get('Trimmed_Model')
+            trimmed_model = trimmed_obj.data
+        else:
+            
+            trimmed_model = bpy.data.meshes.new('Trimmed_Model')
+            trimmed_obj = bpy.data.objects.new('Trimmed_Model', trimmed_model)
+            context.scene.objects.link(trimmed_obj)
         
-        cons = trimmed_obj.constraints.new('COPY_TRANSFORMS')
-        cons.target = bpy.data.objects.get(splint.model)
+            cons = trimmed_obj.constraints.new('COPY_TRANSFORMS')
+            cons.target = bpy.data.objects.get(splint.model)
         
         trimmed_bme.to_mesh(trimmed_model)
         trimmed_obj.matrix_world = mx2
-        context.scene.objects.link(trimmed_obj)
         trimmed_obj.hide = True
                     
         trimmed_bme.verts.ensure_lookup_table()
@@ -1960,18 +1972,29 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         trimmed_bme.verts.ensure_lookup_table()
         trimmed_bme.edges.ensure_lookup_table()
         trimmed_bme.faces.ensure_lookup_table()
-                  
-        based_model = bpy.data.meshes.new('Based_Model')
-        based_obj = bpy.data.objects.new('Based_Model', based_model)
+              
+        if    'Based_Model' in bpy.data.objects:
+            
+            based_obj = bpy.data.objects.get('Based_Model')
+            based_model = based_obj.data
+        else:
+            based_model = bpy.data.meshes.new('Based_Model')
+            based_obj = bpy.data.objects.new('Based_Model', based_model)
+            
+            based_obj.matrix_world = mx2
+            context.scene.objects.link(based_obj)
+                
+            cons = based_obj.constraints.new('CHILD_OF')
+            cons.target = Master
+            cons.inverse_matrix = Master.matrix_world.inverted()
+        
+        
         trimmed_bme.to_mesh(based_model)
-        based_obj.matrix_world = mx2
-        context.scene.objects.link(based_obj)
+        
+        
         Model.hide = True
         based_obj.hide = False
         
-        cons = based_obj.constraints.new('CHILD_OF')
-        cons.target = Master
-        cons.inverse_matrix = Master.matrix_world.inverted()
         
         bme.free()
         new_bme.free()
@@ -3590,19 +3613,11 @@ class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
         Shell.select = True
         context.scene.objects.active = Shell
         for mod in Shell.modifiers:
+            if mod.name in {'Remove Teeth', 'Passive Fit'}: 
+                continue
             bpy.ops.object.modifier_apply(modifier = mod.name)
             
-        #Plane.location += Vector((0,0,.05))
-        #thick = Plane.modifiers.new('Thicken', 'SOLIDIFY')
-        #thick.offset = 1
-        #thick.thickness = 4
-        
-        #bool_mod = Shell.modifiers.new('Trim Edge ', type = 'BOOLEAN')
-        #bool_mod.operation = 'DIFFERENCE'
-        #bool_mod.solver = 'CARVE'
-        #bool_mod.object = Plane
-        #Plane.hide = True
-        
+
         bme = bmesh.new()
         bme.from_mesh(Base.data)
         bme.faces.ensure_lookup_table()
@@ -3964,24 +3979,30 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
         
         context.scene.update()
         me = meta_obj.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
-        new_ob = bpy.data.objects.new('Splint Shell', me)
-        context.scene.objects.link(new_ob)
-        new_ob.matrix_world = mx
         
-        cons = new_ob.constraints.new('COPY_TRANSFORMS')
-        cons.target = bpy.data.objects.get(splint.model)
         
-        mat = bpy.data.materials.get("Splint Material")
-        if mat is None:
-            # create material
-            mat = bpy.data.materials.new(name="Splint Material")
-            mat.diffuse_color = Color((0.5, .1, .6))
+        if 'Splint Shell' not in bpy.data.objects:
+            new_ob = bpy.data.objects.new('Splint Shell', me)
+            context.scene.objects.link(new_ob)
+            new_ob.matrix_world = mx
+            
+            cons = new_ob.constraints.new('COPY_TRANSFORMS')
+            cons.target = bpy.data.objects.get(splint.model)
+            
+            mat = bpy.data.materials.get("Splint Material")
+            if mat is None:
+                # create material
+                mat = bpy.data.materials.new(name="Splint Material")
+                mat.diffuse_color = Color((0.5, .1, .6))
+            
+            new_ob.data.materials.append(mat)
+            
+            mod = new_ob.modifiers.new('Smooth', type = 'SMOOTH')
+            mod.iterations = 2
+            mod.factor = .8
+        else:
+            new_ob.data = me
         
-        new_ob.data.materials.append(mat)
-        
-        mod = new_ob.modifiers.new('Smooth', type = 'SMOOTH')
-        mod.iterations = 2
-        mod.factor = .8
             
         context.scene.objects.unlink(meta_obj)
         bpy.data.objects.remove(meta_obj)

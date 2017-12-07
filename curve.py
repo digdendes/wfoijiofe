@@ -595,13 +595,36 @@ class CurveDataManager(object):
         will create a new bezier object, with all auto
         handles. Links it to scene
         '''
-        self.crv_data = bpy.data.curves.new(name,'CURVE')
-        self.crv_data.splines.new('BEZIER')
-        self.crv_data.splines[0].bezier_points[0].handle_left_type = 'AUTO'
-        self.crv_data.splines[0].bezier_points[0].handle_right_type = 'AUTO'
-        self.crv_data.dimensions = '3D'
-        self.crv_obj = bpy.data.objects.new(name,self.crv_data)
-        context.scene.objects.link(self.crv_obj)
+        
+
+        self.name = name
+        
+        if name in bpy.data.objects:
+            self.crv_obj = bpy.data.objects.get(name)
+            self.crv_obj.hide = False
+            self.crv_data = self.crv_obj.data
+            
+            mx = self.crv_obj.matrix_world
+            self.b_pts = [mx * bpt.co for bpt in self.crv_data.splines[0].bezier_points]
+            if len(self.b_pts):
+                self.started = True
+            
+            self.cyclic = self.crv_data.splines[0].use_cyclic_u
+            
+            
+                
+        else:
+            self.crv_data = bpy.data.curves.new(name,'CURVE')
+            self.crv_data.splines.new('BEZIER')
+            self.crv_data.splines[0].bezier_points[0].handle_left_type = 'AUTO'
+            self.crv_data.splines[0].bezier_points[0].handle_right_type = 'AUTO'
+            self.crv_data.dimensions = '3D'
+            self.crv_obj = bpy.data.objects.new(name,self.crv_data)
+            context.scene.objects.link(self.crv_obj)
+            
+            self.cyclic = cyclic
+            self.started = False
+            self.b_pts = []  #vectors representing locations of be
         
         self.snap_type = snap_type  #'SCENE' 'OBJECT'
         self.snap_ob = snap_object
@@ -612,9 +635,7 @@ class CurveDataManager(object):
             mod.use_keep_above_surface = True
             #mod.use_apply_on_spline = True
         
-        self.cyclic = cyclic
-        self.started = False
-        self.b_pts = []  #vectors representing locations of be
+        
         self.selected = -1
         self.hovered = [None, -1]
         
@@ -809,7 +830,7 @@ class CurveDataManager(object):
                           
     def update_blender_curve_data(self):
         #this may crash blender
-        crv_data = bpy.data.curves.new('Outline','CURVE')
+        crv_data = bpy.data.curves.new(self.name,'CURVE')
         crv_data.splines.new('BEZIER')
         crv_data.dimensions = '3D'
         #set any matrix stuff here
