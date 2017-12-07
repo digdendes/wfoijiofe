@@ -79,15 +79,12 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
     
     incisal_guidance = FloatProperty(default = 10, description = 'Incisal Guidance Angle')
     canine_guidance = FloatProperty(default = 10, description = 'Canine Lateral Guidance Angle')
-    guideance_delay_ant = FloatProperty(default = .1, description = 'Anteior movement before guidance starts')
+    guideance_delay_ant = FloatProperty(default = .1, description = 'Anterior movement before guidance starts')
     guideance_delay_lat = FloatProperty(default = .1, description = 'Lateral movement before guidance starts')
     
     auto_mount = BoolProperty(default = True, description = 'Use if Upper and Lower casts are already in mounted position')
     @classmethod
     def poll(cls, context):
-        
-        if 'Articulator' in bpy.data.objects:
-            return False
         
         return True
     
@@ -101,15 +98,47 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         context.scene.frame_set(0)
         
         #add 2 bezier paths named right and left condyle, move them to the condyle width
-        rcp = bpy.data.curves.new('Right Condyle Path', type = 'CURVE')
-        lcp = bpy.data.curves.new('Left Condyle Path', type = 'CURVE')
+        if 'Articulator' in bpy.data.objects:
+            #start fresh
+            art_arm = bpy.data.objects.get('Articulator')
+            n = context.scene.odc_splint_index
+            splint = context.scene.odc_splints[n]
+            opposing = splint.get_mandible()
+            Model = bpy.data.objects.get(opposing)
+            if Model:
+                for cons in Model.constraints:
+                    if cons.type == 'CHILD_OF' and cons.target == art_arm:
+                        Model.constraints.remove(cons)
+            
+            context.scene.objects.unlink(art_arm)
+            art_data = art_arm.data
+            
+            bpy.data.objects.remove(art_arm)
+            bpy.data.armatures.remove(art_data)
+            
+        if 'Right Condyle Path' in bpy.data.curves:
+            rcp_obj = bpy.data.objects.get("RCP")
+            lcp_obj = bpy.data.objects.get("LCP")
+            
+            rcp = bpy.data.curves.get('Right Condyle Path')
+            lcp = bpy.data.curves.get('Left Condyle Path')
+            
+        else:
+            rcp = bpy.data.curves.new('Right Condyle Path', type = 'CURVE')
+            lcp = bpy.data.curves.new('Left Condyle Path', type = 'CURVE')
         
         
-        rcp.splines.new('BEZIER')
-        lcp.splines.new('BEZIER')
+            rcp.splines.new('BEZIER')
+            lcp.splines.new('BEZIER')
         
-        rcp.splines[0].bezier_points.add(count = 1)
-        lcp.splines[0].bezier_points.add(count = 1)
+            rcp.splines[0].bezier_points.add(count = 1)
+            lcp.splines[0].bezier_points.add(count = 1)
+        
+            rcp_obj = bpy.data.objects.new("RCP",rcp)
+            lcp_obj = bpy.data.objects.new("LCP",lcp)
+            
+            context.scene.objects.link(rcp_obj)
+            context.scene.objects.link(lcp_obj)
         
         
         rcp.splines[0].bezier_points[0].handle_left_type = 'AUTO'
@@ -133,8 +162,7 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         
         rcp.dimensions = '3D'
         lcp.dimensions = '3D'
-        rcp_obj = bpy.data.objects.new("RCP",rcp)
-        lcp_obj = bpy.data.objects.new("LCP",lcp)
+        
         
         rcp_obj.location = Vector((0, -0.5 * self.intra_condyle_width, 0))
         lcp_obj.location = Vector((0, 0.5 * self.intra_condyle_width, 0))
@@ -145,8 +173,6 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         lcp_obj.rotation_euler[2] = -self.bennet_angle/180 * math.pi
         rcp_obj.rotation_euler[2] = self.bennet_angle/180 * math.pi
         
-        context.scene.objects.link(rcp_obj)
-        context.scene.objects.link(lcp_obj)
         
         
         ant_guidance = Vector((math.cos(self.incisal_guidance*math.pi/180), 0, -math.sin(self.incisal_guidance*math.pi/180)))
@@ -188,14 +214,22 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         bme.faces.new((vs[4], vs[10],vs[11],vs[5]))
         bme.faces.new((vs[7], vs[1],vs[2],vs[8]))
         
-        
-        guide_data = bpy.data.meshes.new('Guide Table')
-        guide_object = bpy.data.objects.new('Guide Table', guide_data)
-        context.scene.objects.link(guide_object)
-        guide_object.location = Vector((99.9, 0, -60))  #TODO, incisal edge location
+        if 'Guide Table' in bpy.data.objects:
+            guide_object = bpy.data.objects.get('Guide Table')
+            guide_data = guide_object.data
+            
+        else:
+            guide_data = bpy.data.meshes.new('Guide Table')
+            guide_object = bpy.data.objects.new('Guide Table', guide_data)
+            context.scene.objects.link(guide_object)
+            guide_object.location = Vector((99.9, 0, -60))  #TODO, incisal edge location
         
         bme.to_mesh(guide_data)
         
+        
+        
+        
+            
         art_data = bpy.data.armatures.new('Articulator')
         art_data.draw_type = 'STICK'
         art_arm = bpy.data.objects.new('Articulator',art_data)
@@ -378,12 +412,6 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         art_arm['canine_guidance'] =  self.canine_guidance
         art_arm['condyle_angle'] =  self.condyle_angle
             
-           
-        
-                     
-                     
-                     
-                     
         return {'FINISHED'}
 
     
