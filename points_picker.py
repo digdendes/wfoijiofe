@@ -21,8 +21,7 @@ class PointPicker(object):
     '''
     def __init__(self,context,snap_type ='SCENE', snap_object = None):
         '''
-        will create a new bezier object, with all auto
-        handles. Links it to scene
+        Simple base class for adding,deleting, transforming points in 3d space
         '''
         
         
@@ -161,7 +160,7 @@ class PointPicker(object):
         if self.hovered[0] == None:  #adding in a new point
             self.b_pts.append(mx * loc)
             self.labels.append(label)
-                
+            return True    
         if self.hovered[0] == 'POINT':
             self.selected = self.hovered[1]
             return

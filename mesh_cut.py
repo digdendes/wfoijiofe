@@ -56,12 +56,13 @@ def face_neighbors_by_vert(bmface):
         
     return neighbors
 
-def flood_selection_faces(bme, selected_faces, seed_face, max_iters = 1000):
+def flood_selection_faces(bme, selected_faces, seed_face, expansion_mode = 'VERTEX', max_iters = 1000):
     '''
     bme - bmesh
     selected_faces - should create a closed face loop to contain "flooded" selection
     if an empty set, selection will grow to non manifold boundaries
-    seed_face - a face within/out selected_faces loop
+    seed_face - a BMFace within/out selected_faces loop, or a LIST of faces
+    expansion_mode = 'VERTEX' or 'EDGE' will epxand based on edge.link_faces or v.link_faces
     max_iters - maximum recursions to select_neightbors
     
     returns:
@@ -70,13 +71,28 @@ def flood_selection_faces(bme, selected_faces, seed_face, max_iters = 1000):
     total_selection = set([f for f in selected_faces])
     levy = set([f for f in selected_faces])  #it's funny because it stops the flood :-)
 
-    new_faces = set(face_neighbors(seed_face)) - levy
+    if expansion_mode == 'VERTEX':
+        neighbor_fn = face_neighbors_by_vert
+    else:
+        neighbor_fn = face_neighbors
+        
+        
+    if isinstance(seed_face, bmesh.types.BMFace):
+        new_faces = set(neighbor_fn(seed_face)) - levy
+        
+    elif isinstance(seed_face, list):
+        new_candidates = set()
+        for f in seed_face:
+            new_candidates.update(neighbor_fn(f))   
+        new_faces = new_candidates - total_selection
+        total_selection |= new_faces
+        
     iters = 0
     while iters < max_iters and new_faces:
         iters += 1
         new_candidates = set()
         for f in new_faces:
-            new_candidates.update(face_neighbors(f))
+            new_candidates.update(neighbor_fn(f))
             
         new_faces = new_candidates - total_selection
         
@@ -86,6 +102,40 @@ def flood_selection_faces(bme, selected_faces, seed_face, max_iters = 1000):
         print('max iterations reached')    
     return total_selection
 
+
+def contract_selection_faces(bme, selected_faces, expansion_mode = 'VERTEX', max_iters = 1000):
+    '''
+    bme - bmesh
+    selected_faces - should create a closed face loop to contain "flooded" selection
+    if an empty set, selection will grow to non manifold boundaries
+    seed_face - a BMFace within/out selected_faces loop, or a LIST of faces
+    max_iters - maximum recursions to select_neightbors
+    
+    returns:
+        -a set of BMFaces
+    '''
+    if isinstance(selected_faces, list):
+        total_selection = set([f for f in selected_faces])
+    else:
+        total_selection = selected_faces.copy()
+    
+    if expansion_mode == 'VERTEX':
+        neighbor_fn = face_neighbors_by_vert
+    else:
+        neighbor_fn = face_neighbors
+          
+    iters = 0
+    while iters < max_iters and len(total_selection):
+        iters += 1
+        to_remove = set()
+        for f in total_selection:
+            if not all([bmf in total_selection for bmf in neighbor_fn(f)]):
+                to_remove.add(f)
+            
+        total_selection -= to_remove   
+    if iters == max_iters:
+        print('max iterations reached')    
+    return total_selection
 
 def flood_selection_faces_limit(bme, selected_faces, seed_face, limit_faces, max_iters = 1000):
     '''
@@ -100,8 +150,19 @@ def flood_selection_faces_limit(bme, selected_faces, seed_face, limit_faces, max
     total_selection = set([f for f in selected_faces])
     levy = set([f for f in selected_faces])  #it's funny because it stops the flood :-)
 
-    new_faces = set(face_neighbors_by_vert(seed_face)) - levy
-    iters = 0
+    if isinstance(seed_face, bmesh.types.BMFace):
+        new_faces = set(face_neighbors_by_vert(seed_face)) - levy
+        iters = 0
+        
+    elif isinstance(seed_face, list):
+        new_candidates = set()
+        for f in seed_face:
+            new_candidates.update(face_neighbors_by_vert(f))
+            
+        new_candidates.intersection_update(limit_faces)
+        new_faces = new_candidates - total_selection
+        iters = 1
+        
     while iters < max_iters and new_faces:
         iters += 1
         new_candidates = set()

@@ -1066,6 +1066,7 @@ def scene_verification(scene, debug = False):
                     if debug > 2:
                         print(values)
                     for n in range(0,len(keys)):
+                        if not isinstance(values[n], str): continue
                         if keys[n] not in exclusion_props and values[n] not in bpy.data.objects:
                             if debug:
                                 print('cant find %s = %s in blender data, removing prop' % (keys[n], values[n]))

@@ -11,7 +11,8 @@ import bmesh
 from mathutils.bvhtree import BVHTree
 
 from mesh_cut import flood_selection_faces, edge_loops_from_bmedges,\
-    space_evenly_on_path, bound_box
+    space_evenly_on_path, bound_box, contract_selection_faces, \
+    face_neighbors_by_vert, flood_selection_faces_limit
 
 from bmesh_fns import join_bmesh, bme_linked_flat_faces    
 from mathutils import Vector, Matrix
@@ -20,8 +21,12 @@ from common_utilities import bversion
 from loops_tools import relax_loops_util
 import time
 import bmesh_fns
-
-
+import bgl_utils
+from points_picker import PointPicker
+from textbox import TextBox
+from bpy_extras import view3d_utils
+from mathutils.geometry import intersect_point_line, intersect_line_plane
+import random
 #TODO, put this somewhere logical and useful
 def vector_angle_between(v0, v1, vcross):
     a = v0.angle(v1)
@@ -264,15 +269,24 @@ class D3SPLINT_OT_delete_sculpt_mask(bpy.types.Operator):
         bme = bmesh.new()
             
         bme.from_mesh(context.object.data)
-        mask = bme.verts.layers.paint_mask.verify()
+        
+        print('got a bmesh.')
         bme.verts.ensure_lookup_table()
+        mask = bme.verts.layers.paint_mask.verify()
+            
+        
+        bme.verts.ensure_lookup_table()
+        
+        print('There are %i verts in the bmesh' % len(bme.verts))
         delete = []
         for v in bme.verts:
             if v[mask] > 0:
                 delete.append(v)
 
+        print('Deleting %i verts' % len(delete))
         bmesh.ops.delete(bme, geom = delete, context = 1)
         
+        print('Doing the deleting')
         bme.to_mesh(context.object.data)
         bme.free()
         context.object.data.update()
@@ -280,6 +294,35 @@ class D3SPLINT_OT_delete_sculpt_mask(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class D3SPLINT_OT_sculpt_model_undo(bpy.types.Operator):
+    '''Special undo because of sculpt mode'''
+    bl_idname = "d3splint.sculpt_maodel_undo"
+    bl_label = "Undo Model Modification"
+    bl_options = {'REGISTER','UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        
+        if not context.object:
+            return False
+        
+        c1 = context.object.type == 'MESH'
+        c2 = context.mode == 'SCULPT'
+        return c1 & c2
+    
+    def execute(self, context):
+        #remember where we are..because the undo can change it
+        ob = context.object
+        bpy.ops.object.mode_set(mode = 'OBJECT')
+        bpy.ops.ed.undo()
+        bpy.ops.object.select_all(action = 'DESELECT')
+        ob.select = True
+        context.scene.objects.active = ob
+        ob.select = True
+        bpy.ops.d3splint.enter_sculpt_paint_mask()
+        return {'FINISHED'}
+    
+    
 class D3SPLINT_OT_close_painted_hole(bpy.types.Operator):
     '''Paint a hole to close it'''
     bl_idname = "d3splint.close_paint_hole"
@@ -585,6 +628,144 @@ class D3SPLINT_OT_delete_islands(bpy.types.Operator):
         
         return {'FINISHED'}
 
+
+class D3SPLINT_OT_remove_ragged_edges(bpy.types.Operator):
+    '''Remove small peninsulas by an expansion and contraction selection'''
+    bl_idname = "d3splint.ragged_edges"
+    bl_label = "Improve Ragged Border"
+    bl_options = {'REGISTER','UNDO'}
+
+    
+    
+    iterations = bpy.props.IntProperty(name = 'Expansion/Dilation Iterations', default = 20, min = 3, max = 100)
+    
+    preview_selection = bpy.props.IntProperty(name = 'Previoew Selection', default = 0, min = 0, max = 10)
+    
+    @classmethod
+    def poll(cls, context):
+        
+        if not context.object:
+            return False
+        c1 = context.object.type == 'MESH'
+        c2 = context.mode != 'EDIT'
+        return c1 & c2
+    
+    def execute(self, context):
+        
+        start_global = time.time()
+        start = start_global
+        
+        
+        bme = bmesh.new()
+        bme.from_mesh(context.object.data)
+        
+        bme.edges.ensure_lookup_table()
+        bme.verts.ensure_lookup_table()
+        bme.faces.ensure_lookup_table()
+        
+        
+        print('Took %f seconds to initiate bmesh' % (time.time() - start))
+        start = time.time()
+        
+        non_man_eds = [ed for ed in bme.edges if len(ed.link_faces) == 1]
+        
+        print('Took %f seconds to find non manifold edges' % (time.time() - start))
+        start = time.time()
+        
+        loops = edge_loops_from_bmedges(bme, [ed.index for ed in non_man_eds])
+
+        if len(loops)>1:
+            biggest_loop = max(loops, key = len)
+            self.report({'WARNING'}, 'There are multiple holes in mesh')
+            
+        else:
+            biggest_loop = loops[0]
+            
+        print('Took %f seconds to find mesh perimeter' % (time.time() - start))
+        start = time.time()
+        
+        perim_faces =  set()
+        for i in biggest_loop:
+            perim_faces.update(bme.verts[i].link_faces)
+        
+        perim_faces = list(perim_faces)    
+        print('Took %f seconds to initiate perimeter faces' % (time.time() - start))
+        start = time.time()
+        
+        expansion = flood_selection_faces(bme, perim_faces, perim_faces, max_iters = self.iterations)
+        
+        print('Took %f seconds to dilate selection' % (time.time() - start))
+        start = time.time() 
+        
+        
+        expansion_perimeter = [f for f in expansion if not all([bmf in expansion for bmf in face_neighbors_by_vert(f)])]
+        
+        #contraction = contract_selection_faces(bme, expansion, expansion_mode = 'EDGE', max_iters = self.iterations -1)    
+        
+        print('Took %f seconds to identify epxansion border' % (time.time() - start))
+        start = time.time() 
+        
+        
+        reverse_expansion = flood_selection_faces(bme, expansion_perimeter, expansion_perimeter, max_iters = self.iterations)
+        
+        
+        final_faces = expansion- reverse_expansion
+        
+        print('Took %f seconds to epxand in reverse' % (time.time() - start))
+        start = time.time() 
+        
+        
+        #all_verts = set()
+        #delete_edges = set()
+        #for f in final_faces:
+        #    all_verts.update(f.verts)
+        
+        #    for ed in f.edges:
+        #        if ed in delete_edges: continue
+        #        if all([bmf in final_faces for bmf in ed.link_faces]):
+        #            delete_edges.add(ed)
+        #delete_verts = []
+        #for v in all_verts:      
+        #    if all(bmf in final_faces for bmf in v.link_faces):
+        #        delete_verts += [v]
+        
+        bmesh.ops.delete(bme, geom = list(final_faces), context = 5)
+        #bmesh.ops.delete(bme, geom = list(delete_edges), context = 2)
+        #bmesh.ops.delete(bme, geom = delete_verts, context = 1)
+        
+        
+        
+        for f in bme.faces:
+            f.select_set(False)
+            
+        
+        print('Took %f seconds to delete' % (time.time() - start))
+        start = time.time() 
+        
+        #if self.preview_selection == 0:
+        #    preview = perim_faces
+        #elif self.preview_selection == 1:
+        #    preview = expansion
+        #elif self.preview_selection == 2:
+        #    preview = expansion_perimeter
+        #elif self.preview_selection == 3:
+        #    preview = reverse_expansion
+        #else:
+        #    preview = final_faces
+            
+        #for f in preview:
+        #    f.select_set(True)
+        
+        bme.to_mesh(context.object.data)
+        bme.free()
+        context.object.data.update()
+        
+        print('Took %f seconds to finish entire operator' % (time.time() - start_global))
+        start = time.time() 
+        
+        return {'FINISHED'}
+    
+    
 class D3PLINT_OT_simple_model_base(bpy.types.Operator):
     """Simple ortho base with height 5 - 50mm """
     bl_idname = "d3splint.simple_base"
@@ -596,6 +777,8 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
     smooth_iterations = bpy.props.IntProperty(name = 'Smooth Iterations', default = 10, min = 0, max = 50,  description = 'Iterations to smooth the smoothing zone')
     #reverse = bpy.props.BoolProperty(name = 'Reverse Z direction', default = False, description = 'Use if auto detection detects base direction wrong')
     
+    mode_items = {('BEST_FIT','BEST_FIT','BEST_FIT'), ('LOCAL_Z','LOCAL_Z','LOCAL_Z'),('WORLD_Z','WORLD_Z','WORLD_Z')}
+    mode = bpy.props.EnumProperty(name = 'Base Mode', items = mode_items)
     
     @classmethod
     def poll(cls, context):
@@ -774,7 +957,12 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
     
     
         
+        start_global = time.time()
+        
         ob = context.object
+        mx = ob.matrix_world
+        imx = mx.inverted()
+        
         bme = bmesh.new()
         bme.from_mesh(context.object.data)
         
@@ -783,12 +971,17 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         bme.faces.ensure_lookup_table()
         
 
+        start = time.time()
         clean_iterations = 0
         test = -1
         while clean_iterations < 20 and test == -1:
             print('Cleaning iteration %i' % clean_iterations)
             clean_iterations += 1
             test = clean_geom(bme) 
+        
+        
+        print('took %f seconds to clean geometry and edges' % (time.time() - start))
+        start = time.time()
         
         #update everything
         bme.verts.ensure_lookup_table()
@@ -852,36 +1045,62 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         biggest_loop.pop()
         final_eds = [ed for ed in non_man_eds if all([v.index in biggest_loop for v in ed.verts])]
         
-        print('relaxing the loop')
-        print('there are %i eds in final loop' % len(final_eds))
+        
+        print('took %f seconds to identify single perimeter loop' % (time.time() - start))
+        start = time.time()
+        
         relax_loops_util(bme, final_eds, iterations = 3, influence = .5, override_selection = True, debug = True)
-          
+        
+        #get the total median point of model
+        total_com = Vector((0,0,0))
+        for v in bme.verts:
+            total_com += v.co
+        total_com *= 1/len(bme.verts)
+        
         loop_verts = [bme.verts[i] for i in biggest_loop]
-        minv = min(loop_verts, key = lambda x: x.co[2])
-        maxv = max(loop_verts, key = lambda x: x.co[2])
         
-        bbox = [Vector(v) for v in ob.bound_box]
-        bmax = max(bbox,  key = lambda x: x[2])
-        bmin = min(bbox,  key = lambda x: x[2])
+        locs = [v.co for v in loop_verts]
+        com = Vector((0,0,0))
+        for v in locs:
+            com += v
+        com *= 1/len(locs)
+            
+        if self.mode == 'BEST_FIT':
+            
+            plane_vector = com - total_com
+            no = odcutils.calculate_plane(locs, itermax = 500, debug = False)
+            if plane_vector.dot(no) < 0:
+                no *= -1
+            
+            Z = no
+            
+            print('took %f seconds to calculate best fit plane' % (time.time() - start))
+            start = time.time()
         
-        r_neg = minv.co[2] - bmin[2]
-        r_pos = maxv.co[2] - bmax[2]
+        elif self.mode == 'WORLD_Z':
+            Z = imx.to_3x3() * Vector((0,0,1))
+        else:
+            Z = Vector((0,0,1))
         
-        
+        #Z should point toward the occlusal always
         direction = 0
         for f in bme.faces:
-            direction += f.normal.dot(Vector((0,0,1)))
+            direction += f.calc_area() * f.normal.dot(Z)
         
-        if direction > 0:            
-            Zflat = minv.co[2]
-            Z = Vector((0,0,-1))
-            zz = -1    
-
-        else:
-            Zflat = maxv.co[2]
-            Z = Vector((0,0,1))
-            zz = 1
-            
+        if direction < 0:
+            #flip Z            
+            Z *= -1
+                
+    
+        print('took %f seconds to identify average face normal' % (time.time() - start))
+        start = time.time()
+        
+        Z.normalize()
+        minv = min(loop_verts, key = lambda x: (x.co - com).dot(Z))
+        
+        print('took %f seconds to identify average smallest vert' % (time.time() - start))
+        start = time.time()
+          
         #select one extra boundary of verts to smooth
         smooth_verts = set(loop_verts)
         for v in loop_verts:
@@ -895,7 +1114,8 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         newer_verts = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMVert)]
     
         for v in newer_verts:
-            v.co[2] += .1 *zz
+            v.co += -.1 * Z
+            
     
         
         bme.verts.ensure_lookup_table()
@@ -909,8 +1129,13 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         bme.verts.ensure_lookup_table()
         new_verts = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMVert)]
         new_edges = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMEdge)]
+        
+        
         for v in new_verts:
-            v.co[2] = Zflat + self.base_height * zz 
+            
+            co_flat = v.co +  (minv.co - v.co).dot(Z) * Z
+            
+            v.co = co_flat - self.base_height * Z
             
         
         loops = edge_loops_from_bmedges(bme, [ed.index for ed in new_edges])  
@@ -919,8 +1144,9 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         f = bme.faces.new([bme.verts[i] for i in loops[0]])
         
         
+        #base face should point away from occlusal
         f.normal_update()
-        if f.normal.dot(Z) < 0:
+        if f.normal.dot(Z) > 0:
             f.normal_flip()
         
         
@@ -940,7 +1166,10 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         smod.vertex_group = 'Smooth Base'
         smod.iterations = self.smooth_iterations
         
-        bme.free()      
+        bme.free()
+        
+        print('Took %f seconds to finish entire operator' % (time.time() - start_global))
+         
         return {'FINISHED'}
         
 class D3PLINT_OT_ortho_model_base(bpy.types.Operator):
@@ -1610,7 +1839,7 @@ class D3Splint_OT_model_thicken2(bpy.types.Operator):
         ob_bme.to_mesh(tmp_me)
         context.scene.objects.link(tmp_ob)
         
-        
+        ob_bme.free()
         print('took %f seconds to initiate temp model' % (time.time() - start))
         start = time.time()
         
@@ -1715,6 +1944,8 @@ class D3Splint_OT_model_thicken2(bpy.types.Operator):
             f.normal_flip()
             
         bme.to_mesh(new_ob.data)
+        bme.free()
+        
         new_ob.data.update()
         
         bool_mod = ob.modifiers.new('Boolean', type = 'BOOLEAN')
@@ -1724,14 +1955,19 @@ class D3Splint_OT_model_thicken2(bpy.types.Operator):
         
         context.scene.objects.active = ob
         
+        print('Finished the boolean operation in %f seconds' % (time.time() - start)) 
+        start = time.time()
+        
         if self.finalize:
-            bpy.ops.object.modifier_apply(mod = 'Boolean')
+            bpy.ops.object.modifier_apply(modifier = 'Boolean')
             context.scene.objects.unlink(new_ob)
             bpy.data.objects.remove(new_ob)
             bpy.data.meshes.remove(me)
              
-        print('Finished the boolean operation in %f seconds' % (time.time() - start)) 
-        start = time.time()
+                    
+            print('Applied the boolean operation in %f seconds' % (time.time() - start)) 
+            start = time.time()
+        
         
         context.scene.objects.unlink(meta_obj)
         bpy.data.objects.remove(meta_obj)
@@ -1742,22 +1978,429 @@ class D3Splint_OT_model_thicken2(bpy.types.Operator):
         bpy.data.objects.remove(tmp_ob)
         bpy.data.meshes.remove(tmp_me)
 
-        
-        bme.free()
-        ob_bme.free()
-        
         print('took %f seconds to delete temp obs' % (time.time() - start))
+        start = time.time() 
+        
+        context.scene.update()
+        
+        print('took %f seconds to update the scene' % (time.time() - start))
         print('took %f seconds for the whole operation' % (time.time() - global_start))  
+        
         return {'FINISHED'}
     
     def invoke(self, context, event):
         
         return context.window_manager.invoke_props_dialog(self)
  
- 
+
+
+class VerticaBasePoints(PointPicker): 
+    def __init__(self,context,snap_type ='SCENE', snap_object = None):
+        
+        PointPicker.__init__(self, context, snap_type, snap_object)
+        
+        self.plane_ob = None
+        
+        mx = snap_object.matrix_world
+        bme = bmesh.new()
+        bme.from_mesh(snap_object.data)
+        bme.verts.ensure_lookup_table()
+        bme.edges.ensure_lookup_table()
+        bme.faces.ensure_lookup_table()
+        
+        
+        
+        self.plane_center = Vector((0,0,0))
+        
+        
+        self.bvh = BVHTree.FromBMesh(bme)
+        
+        #if len(bme.verts) < 10000:
+        #    local_sample = [v.co for v in bme.verts]
+        #    global_sample = [mx * co for co in local_sample]
+        #else:
+        #    sample_verts = random.sample(bme.verts[:], 10000)
+        #    local_sample = [v.co for v in sample_verts]
+        #    global_sample = [mx * co for co in local_sample]
+        
+        self.bme = bme
+        
+        #self.local_sample = local_sample
+        #self.global_sample = global_sample
+        
+        
+        #self.projected_points = []
+            
+            
+        
+    def add_vertical_point(self,context,x,y, label = None):
+        
+        if len(self.b_pts) != 2:
+            return
+        
+        if not self.click_add_point(context, x, y, label = 'Plane Control'):
+            return
+        
+        
+        
+        
+        region = context.region
+        rv3d = context.region_data
+        coord = x, y
+        view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
+        ray_origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, coord)
+        ray_target = ray_origin + (view_vector * 1000)
+        view_direction = rv3d.view_rotation * Vector((0,0,-1))
+        
+        
+        view_pt = .5 * (self.b_pts[0] + self.b_pts[1])
+        
+        #intersect at plane perpendicular to the view
+        loc = intersect_line_plane(ray_origin, ray_target,view_pt, view_direction)
+        self.plane_center = view_pt
+        Z = self.b_pts[2] - view_pt
+        Z.normalize()
+        
+        #bring down the plane point
+        #r0 = self.b_pts[0] - self.plane_center
+        #r1 = self.b_pts[1] - self.plane_center
+        
+        #if r0.dot(Z) < r1.dot(Z):
+        #    self.plane_center += r0.dot(Z) * Z
+        #else:
+        #    self.plane_center += r1.dot(Z) * Z
+        
+        
+        #constrain to plane  
+        X = self.b_pts[0] - self.b_pts[1]
+        L = X.length
+        X = X - X.dot(Z) * Z
+        X.normalize()
+        
+        Y = Z.cross(X)
+        
+        #rotation matrix from principal axes
+        R = Matrix.Identity(4)  #make the columns of matrix U, V, W
+        R[0][0], R[0][1], R[0][2]  = X[0] ,Y[0],  Z[0]
+        R[1][0], R[1][1], R[1][2]  = X[1], Y[1],  Z[1]
+        R[2][0] ,R[2][1], R[2][2]  = X[2], Y[2],  Z[2]
+        
+        T = Matrix.Translation(self.plane_center)
+        
+        S = Matrix.Identity(3)
+        S[0][0] = .5 * L + 20
+        S[1][1] = 15
+        
+        #create bmesh
+        grid_bme = bmesh.new()
+        bmesh.ops.create_grid(grid_bme, x_segments = 200, y_segments = 60, size = 1, matrix = S)
+        
+        
+        #new_object
+        if 'Distal Cut' not in bpy.data.objects:
+            me = bpy.data.meshes.new('Distal Cut')
+            ob = bpy.data.objects.new('Distal Cut', me)
+            context.scene.objects.link(ob)
+        
+        else:
+            ob = bpy.data.objects.get('Distal Cut')
+            ob.hide = False
+        
+        grid_bme.to_mesh(ob.data)
+        grid_bme.free()
+        
+        self.plane_ob = ob    
+        #link_to_scene
+        
+        ob.matrix_world = T * R
+        #trannslate to center
+        
+    
+    def orient_pane_ob(self):
+        
+        if self.plane_ob == None: return
+        
+        #constrain to plane  
+        X = self.b_pts[0] - self.b_pts[1]
+
+        
+        Z = self.b_pts[2] - self.plane_center
+        
+        Z.normalize()
+        
+        #enforce X perpendicular to Z
+        X = X - X.dot(Z) * Z
+        X.normalize()
+        
+        Y = Z.cross(X)
+        
+        #rotation matrix from principal axes
+        R = Matrix.Identity(4)  #make the columns of matrix U, V, W
+        R[0][0], R[0][1], R[0][2]  = X[0] ,Y[0],  Z[0]
+        R[1][0], R[1][1], R[1][2]  = X[1], Y[1],  Z[1]
+        R[2][0] ,R[2][1], R[2][2]  = X[2], Y[2],  Z[2]
+        
+        T = Matrix.Translation(self.plane_center)
+
+        self.plane_ob.matrix_world = T * R
+        
+        
+    def orient_vertical_point(self,context,x,y, label = None):
+        
+        if len(self.b_pts) != 3:
+            return
+        
+        region = context.region
+        rv3d = context.region_data
+        coord = x, y
+        view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
+        ray_origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, coord)
+        ray_target = ray_origin + (view_vector * 1000)
+
+
+        view_direction = rv3d.view_rotation * Vector((0,0,-1))
+        view_pt = self.b_pts[2]
+        
+        #intersect at plane perpendicular to the view
+        loc = intersect_line_plane(ray_origin, ray_target,view_pt, view_direction)
+        
+        #constrain to plane  
+        #V = self.b_pts[0] - self.b_pts[1]
+        #V.normalize()
+        #pt = .5 * (self.b_pts[0] + self.b_pts[1])
+        #loc = intersect_line_plane(ray_origin, ray_target,pt, V)
+        
+        self.b_pts[2]  = loc
+        
+        
+        self.orient_pane_ob()
+        
+        
+    def project_sample(self):
+        
+        start = time.time()
+        
+        mx = self.plane_ob.matrix_world
+        imx = mx.inverted()
+        
+        pt = .5 * (self.b_pts[0] + self.b_pts[1])
+        Z = self.b_pts[2] - pt
+        Z.normalize()
+        
+        Zlocal = imx.to_3x3() * Z
+        
+        #local_projected_sample = []
+        #start = time.time()
+        #for co in self.local_sample:
+        #    ok, loc, no, face_ind = self.plane_ob.ray_cast(co, -Zlocal)
+        #    if ok:
+        #        local_projected_sample += [mx * loc]
+            
+         
+        #print('finished ray cast method in %f seconds' % (time.time() - start))
+        #start = time.time()
+        
+        world_projected_sample = []
+        #for co in self.global_sample:
+        #    r = co - pt
+        #    r_proj = co - r.dot(Z)*Z
+        #    world_projected_sample += [r_proj]
+        
+        
+        
+        self.projected_points = world_projected_sample
+        
+        return
+    
+    def translate_up(self):
+        
+        pt = self.plane_center
+        Z = self.b_pts[2] - pt
+        Z.normalize()
+        
+        self.plane_center += Z
+        self.b_pts[2] += Z
+        self.orient_pane_ob()
+        
+    def translate_down(self):
+        
+        pt = self.plane_center
+        Z = self.b_pts[2] - pt
+        Z.normalize()
+        
+        self.plane_center -= Z
+        self.b_pts[2] -= Z
+        
+        self.orient_pane_ob()
+        
+    def make_base(self, context):
+        
+        
+        if 'Meta Base' in bpy.data.objects:
+            meta_obj = bpy.data.objects.get('Meta Base')
+            meta_data = meta_obj.data
+        else:
+            
+            meta_data = bpy.data.metaballs.new('Meta Base')
+            meta_obj = bpy.data.objects.new('Meta Base', meta_data)
+            meta_data.resolution = 1
+            meta_data.render_resolution = 1
+            context.scene.objects.link(meta_obj)
+               
+        meta_obj.matrix_world = self.plane_ob.matrix_world
+        
+        mx = self.snap_ob.matrix_world
+        imx = mx.inverted()
+        
+        pmx = self.plane_ob.matrix_world
+        ipmx = pmx.inverted()
+        
+        #points in the Model local space
+        p0 = imx * self.b_pts[0]
+        p1 = imx * self.b_pts[1]
+        
+        pt = imx * self.plane_center
+        
+        #Plane Normal represented in Model Local coordinates 
+        Zp = imx.to_3x3() * pmx.to_3x3() * Vector((0,0,1))
+        
+        #locations returned in MODEL local space
+        locs0 = self.bvh.find_nearest_range(p0, 10)
+        locs1 = self.bvh.find_nearest_range(p1, 10)
+        
+        
+        #world location of 10mm sphere, within 2mm height of point
+        flat_locs = []
+        for ele in locs0:
+            r = ele[0] - p0
+            z = r.dot(Zp)
+            r_total = ele[0] - pt
+            z_total = r_total.dot(Zp)
+            
+            if z**2 < 4 and z < 0 and z_total > 2.5:
+                flat_locs += [mx * (ele[0] - 1.5*Zp)]
+        
+        for ele in locs1:
+            r = ele[0] - p1
+            z = r.dot(Zp)
+            r_total = ele[0] - pt
+            z_total = r_total.dot(Zp)
+            if z**2 < 4 and z < 0 and z_total > 2.5:
+                flat_locs += [mx * (ele[0] - 1.5*Zp)]
+                
+        #closest_grid_poitns:
+        grid_inds = []
+        vertical_locations = []
+        for v in self.plane_ob.data.vertices:
+            co = v.co
+            loc, no, ind, d =  self.bvh.find_nearest(imx * pmx * co)
+            if loc:
+                if d < 3:
+                    grid_inds += [v.index]
+                    continue
+            
+            #only allows 8 mm of extension up to model base    
+            loc, no, ind, d = self.bvh.ray_cast(imx * pmx * co, Zp, 8)
+            if loc:
+                grid_inds += [v.index]
+                
+                
+        print('Found %i grid indices' % len(grid_inds))
+        
+        final_inds = []
+        #now going to fill in the grid
+        for i in range(0, 60):
+            start = None
+            end = None
+            for j in range(0,200):
+                ind = i*200 + j
+                
+                if ind in grid_inds:
+                    if not start:
+                        start = ind
+                    else:
+                        end = ind
+            
+            if start and end:
+                final_inds += [m for m in range(start, end+1)]
+        
+                        
+        #location of the intersection of the plane and the model
+        #cut at the cursor location
+        #gdict = bmesh.ops.bisect_plane(self.bme, geom = self.bme.faces[:]+self.bme.edges[:]+self.bme.verts[:], 
+        #                       plane_co = pt, 
+        #                       plane_no = Zp,
+        #                       clear_inner = False)
+                               
+   
+
+        
+       
+        #cut_geom = gdict['geom_cut']
+        #cut_verts = [ele for ele in cut_geom if isinstance(ele, bmesh.types.BMVert)]
+        
+        
+        
+        #Plane projection in WORLD space
+        pt = .5 * (self.b_pts[0] + self.b_pts[1])
+        Z = self.b_pts[2] - pt
+        Z.normalize()
+        X = self.b_pts[0] - self.b_pts[1]
+        X.normalize()
+        Y = Z.cross(X)
+        
+        world_projected_sample = []
+        #for ele in locs0:
+        #    co = ele[0]
+        #    r = co - pt
+        #    r_proj = co - r.dot(Z)*Z
+        #    world_projected_sample += [r_proj]
+        
+        #for ele in locs1:
+        #    co = ele[0]
+        #    r = co - pt
+        #    r_proj = co - r.dot(Z)*Z
+        #    world_projected_sample += [r_proj]
+            
+        #for v in cut_verts:
+        #    world_projected_sample += [mx * v.co]
+        
+        for ind in final_inds:
+            world_projected_sample += [pmx * self.plane_ob.data.vertices[ind].co]    
+        #Now add metaballs into Metaball coordinate space which
+        #is oriented in the same way was the Clipping plane
+        
+        for co in world_projected_sample:
+            mb = meta_data.elements.new(type = 'BALL')
+            mb.radius = 2
+            mb.co = ipmx * co
+            
+        for co in flat_locs:
+            mb = meta_data.elements.new(type = 'BALL')
+            mb.radius = 2
+            mb.co = ipmx * co
+            
+        return
+    def draw_extra(self, context):
+
+        if len(self.b_pts) != 3: return
+     
+    
+        bgl_utils.draw_polyline_from_coordinates(context, [self.plane_center, self.b_pts[2]], 2, color = (.1,1,.1,1))
+        bgl_utils.draw_polyline_from_coordinates(context, [self.b_pts[0], self.b_pts[1]], 2, color = (.1,1,.1,1))
+        
+        #if len(self.projected_points):
+        #    bgl_utils.draw_3d_points(context, self.projected_points, 1, color = (.1, .1, .1, 1))        
+        #elif len(self.global_sample):
+        #    bgl_utils.draw_3d_points(context, self.global_sample, 1, color = (.1, .1, .1, 1))
+        
+        return
+    
 def landmarks_draw_callback(self, context):  
     self.crv.draw(context)
-    self.help_box.draw()  
+    self.crv.draw_extra(context)
+    self.help_box.draw()
+     
     
 class D3Tool_OT_model_vertical_base(bpy.types.Operator):
     """Click Landmarks to Add Base on Back Side of Object"""
@@ -1784,14 +2427,22 @@ class D3Tool_OT_model_vertical_base(bpy.types.Operator):
         if nmode != '':
             return nmode  #stop here and tell parent modal to 'PASS_THROUGH'
 
-        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+        
+        if event.type == 'UP_ARROW' and event.value == 'PRESS':
+            self.crv.translate_up()
+            return 'main'
+        
+        elif event.type == 'DOWN_ARROW' and event.value == 'PRESS':
+            self.crv.translate_down()
+            return 'main'
+        elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
             
             
             x, y = event.mouse_region_x, event.mouse_region_y
             
             if len(self.crv.b_pts) == 0:
                 txt = "Posterior Side 1"
-                help_txt = "Left click on back of model near one side"
+                help_txt = "Left click on back of model on side A"
                 self.help_box.raw_text = help_txt
                 self.help_box.format_and_wrap_text()
                 self.crv.click_add_point(context, x,y, label = txt)
@@ -1799,7 +2450,7 @@ class D3Tool_OT_model_vertical_base(bpy.types.Operator):
         
             elif len(self.crv.b_pts) == 1:
                 txt = "Posterior Side 2"
-                help_txt = "Left Click on back of model on other side"
+                help_txt = "Left Click on back of model on side B"
                 self.help_box.raw_text = help_txt
                 self.help_box.format_and_wrap_text()
                 self.crv.click_add_point(context, x,y, label = txt)
@@ -1811,11 +2462,11 @@ class D3Tool_OT_model_vertical_base(bpy.types.Operator):
                 help_txt = "Click to place vertical orientation"
                 self.help_box.raw_text = help_txt
                 self.help_box.format_and_wrap_text()
-                self.crv.click_add_point(context, x,y, label = txt)
+                self.crv.add_vertical_point(context, x,y, label = txt)
                 return 'main'
         
             else:
-                self.orient_vertical(self, context)
+                self.crv.orient_vertical_point(context, x,y)
                 return 'main'
                     
             return 'main'
@@ -1833,6 +2484,16 @@ class D3Tool_OT_model_vertical_base(bpy.types.Operator):
         elif event.type == 'ESC' and event.value == 'PRESS':
             return 'cancel' 
 
+        elif event.type == 'P' and event.value == 'PRESS':
+            self.crv.project_sample()
+            
+            return 'main'
+        
+        elif event.type == 'B' and event.value == 'PRESS':
+            self.crv.make_base(context)
+            
+            return 'main'
+        
         return 'main'
     
         
@@ -1864,34 +2525,11 @@ class D3Tool_OT_model_vertical_base(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def invoke(self,context, event):
-        n = context.scene.odc_splint_index
-        self.splint = context.scene.odc_splints[n]    
         
-        model = self.splint.get_maxilla()
-           
-        if model != '' and model in bpy.data.objects:
-            Model = bpy.data.objects[model]
-            for ob in bpy.data.objects:
-                ob.select = False
-                ob.hide = True
-            Model.select = True
-            Model.hide = False
-            context.scene.objects.active = Model
-            
-            bpy.ops.view3d.viewnumpad(type = 'FRONT')
-            
-            bpy.ops.view3d.view_selected()
-            self.crv = PointPicker(context,snap_type ='OBJECT', snap_object = Model)
-            context.space_data.show_manipulator = False
-            context.space_data.transform_manipulators = {'TRANSLATE'}
-            v3d = bpy.context.space_data
-            v3d.pivot_point = 'MEDIAN_POINT'
-        else:
-            self.report({'ERROR'}, "Need to mark the UpperJaw model first!")
-            return {'CANCELLED'}
-        
+        model = context.object
+        self.crv = VerticaBasePoints(context,snap_type ='OBJECT', snap_object = model)   
         #TODO, tweak the modifier as needed
-        help_txt = "DRAW LANDMARK POINTS\n Click on the Patient's Right Molar Occlusal Surface"
+        help_txt = "Distal Plane Cut/Base"
         self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
         self.help_box.snap_to_corner(context, corner = [1,1])
         self.mode = 'main'
@@ -1979,6 +2617,10 @@ def register():
     bpy.utils.register_class(D3SPLINT_OT_close_painted_hole)
     bpy.utils.register_class(D3Splint_OT_model_thicken)
     bpy.utils.register_class(D3Splint_OT_model_thicken2)
+    bpy.utils.register_class(D3SPLINT_OT_remove_ragged_edges)
+    bpy.utils.register_class(D3Tool_OT_model_vertical_base)
+    #bpy.utils.register_class(D3SPLINT_OT_sculpt_model_undo)
+    
 def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_paint_model)
     bpy.utils.unregister_class(D3SPLINT_OT_delete_sculpt_mask)
@@ -1991,6 +2633,9 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_close_painted_hole)
     bpy.utils.unregister_class(D3Splint_OT_model_thicken)
     bpy.utils.unregister_class(D3Splint_OT_model_thicken2)
+    bpy.utils.unregister_class(D3SPLINT_OT_remove_ragged_edges)
+    bpy.utils.unregister_class(D3Tool_OT_model_vertical_base)
+    #bpy.utils.unregister_class(D3SPLINT_OT_sculpt_model_undo)
     
 if __name__ == "__main__":
     register()

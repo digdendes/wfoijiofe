@@ -3824,6 +3824,7 @@ class D3SPLINT_OT_splint_reset_functional_surface(bpy.types.Operator):
             
             
         bme.to_mesh(Plane.data)
+        Plane.data.update()
         return {'FINISHED'}
     
     
@@ -3980,7 +3981,12 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
         context.scene.update()
         me = meta_obj.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
         
-        
+        mat = bpy.data.materials.get("Splint Material")
+        if mat is None:
+            # create material
+            mat = bpy.data.materials.new(name="Splint Material")
+            mat.diffuse_color = Color((0.5, .1, .6))
+            
         if 'Splint Shell' not in bpy.data.objects:
             new_ob = bpy.data.objects.new('Splint Shell', me)
             context.scene.objects.link(new_ob)
@@ -3989,11 +3995,7 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
             cons = new_ob.constraints.new('COPY_TRANSFORMS')
             cons.target = bpy.data.objects.get(splint.model)
             
-            mat = bpy.data.materials.get("Splint Material")
-            if mat is None:
-                # create material
-                mat = bpy.data.materials.new(name="Splint Material")
-                mat.diffuse_color = Color((0.5, .1, .6))
+            
             
             new_ob.data.materials.append(mat)
             
@@ -4001,8 +4003,17 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
             mod.iterations = 2
             mod.factor = .8
         else:
+            new_ob = bpy.data.objects.get('Splint Shell')
             new_ob.data = me
-        
+            new_ob.data.materials.append(mat)
+            
+            to_remove = []
+            for mod in new_ob.modifiers:
+                if mod.name in {'Remove Teeth', 'Passive Fit'}:
+                    to_remove += [mod]
+                
+            for mod in to_remove:
+                new_ob.modifiers.remove(mod)
             
         context.scene.objects.unlink(meta_obj)
         bpy.data.objects.remove(meta_obj)
@@ -4288,7 +4299,7 @@ class D3SPLINT_OT_splint_go_sculpt(bpy.types.Operator):
         if bversion() < '002.079.000':
             scene.tool_settings.sculpt.constant_detail = 50
         else:
-            scene.tool_settings.sculpt.contant_detail_factor = 3
+            scene.tool_settings.sculpt.constant_detail_resolution = 3
         
         scene.tool_settings.sculpt.use_symmetry_x = False
         scene.tool_settings.sculpt.use_symmetry_y = False

@@ -408,6 +408,7 @@ class VIEW3D_PT_D3SplintModels(bpy.types.Panel):
         row = layout.row()
         col = row.column()      
         #col.operator("d3splint.simple_offset_surface", text = "Simple Offset")
+        col.operator("d3splint.ragged_edges", text = "Remove Ragged Edges")
         col.operator("d3splint.simple_base", text = "Simple Base")            
         col.operator("d3splint.model_wall_thicken", text = 'Hollow Model')
         col.operator("d3splint.model_wall_thicken2", text = 'Hollow Model2')

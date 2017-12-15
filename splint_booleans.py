@@ -7,7 +7,7 @@ from cork.cork_fns import cork_boolean
 from cork.lib import get_cork_filepath, validate_executable
 from cork.exceptions import *
    
-class D3SPLINT_OT_splint_boolean_(Operator):
+class D3SPLINT_OT_splint_cork_boolean(Operator):
     """"""
     bl_idname = "d3guard.splint_cork_boolean"
     bl_label = "Splint Cork Boolean"
@@ -73,8 +73,8 @@ class D3SPLINT_OT_splint_boolean_(Operator):
 
 def register():
     # the order here determines the UI order
-    bpy.utils.register_class(D3SPLINT_OT_splint_boolean_)
+    bpy.utils.register_class(D3SPLINT_OT_splint_cork_boolean)
 
 
 def unregister():
-    bpy.utils.unregister_class(D3SPLINT_OT_splint_boolean_)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_cork_boolean)
