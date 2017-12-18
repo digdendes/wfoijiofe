@@ -312,6 +312,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         col.operator("d3splint.splint_animate_articulator", text = "Generate Functional Surface", icon = ico)
         col.operator("d3splint.stop_surface_calculation", text = "Stop Surface Calculation")
         col.operator("d3splint.start_surface_calculation", text = "Re-Start Surface Calculation")
+        col.operator("d3splint.reset_functional_surface", text = "Re-set Functional Surface")
         if splint and "SubtractSurface" in splint.ops_string: 
             ico = 'FILE_TICK'
         else:

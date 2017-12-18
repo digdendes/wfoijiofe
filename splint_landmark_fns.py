@@ -276,28 +276,34 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
             return nmode  #stop here and tell parent modal to 'PASS_THROUGH'
 
         if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
-            if len(self.crv.b_pts) >= 3: return 'main' #can't add more
+            if len(self.crv.b_pts) >= 4: return 'main' #can't add more
             
             x, y = event.mouse_region_x, event.mouse_region_y
             
             if len(self.crv.b_pts) == 0:
                 txt = "Right Molar"
-                help_txt = "DRAW LANDMARK POINTS\n Click on Symmetric Patient Left Side Molar Occlusal Surface"
+                help_txt = "DRAW LANDMARK POINTS\n Left Click on Symmetric Patient Left Side Molar"
                 self.help_box.raw_text = help_txt
                 self.help_box.format_and_wrap_text()
                 
             elif len(self.crv.b_pts) == 1:
                 txt = "Left Molar"
-                help_txt = "DRAW LANDMARK POINTS\n Left Click Midline near Incisal Edge"
+                help_txt = "DRAW LANDMARK POINTS\n Left Click Incisal Edge In Anterior"
                 self.help_box.raw_text = help_txt
                 self.help_box.format_and_wrap_text()
                     
-            else:
-                txt = "Incisal Midline"
-                help_txt = "DRAW LANDMARK POINTS\n Press Enter to Finish"
+            elif len(self.crv.b_pts) == 2:
+                txt = "Incisal Edge"
+                help_txt = "DRAW LANDMARK POINTS\n Left Click Midline (Embrasure or Papilla)l"
                 self.help_box.raw_text = help_txt
                 self.help_box.format_and_wrap_text()
                 
+            else:
+                txt = "Midline"
+                help_txt = "DRAW LANDMARK POINTS\n Press Enter to Finish"
+                self.help_box.raw_text = help_txt
+                self.help_box.format_and_wrap_text()
+            
             self.crv.click_add_point(context, x,y, label = txt)
             
             return 'main'
@@ -307,7 +313,7 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
             return 'main'
             
         if event.type == 'RET' and event.value == 'PRESS':
-            if len(self.crv.b_pts) != 3:
+            if len(self.crv.b_pts) != 4:
                 return 'main'
             self.finish(context)
             return 'finish'
@@ -350,27 +356,50 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         self.splint = context.scene.odc_splints[n]    
         
         model = self.splint.get_maxilla()
-           
-        if model != '' and model in bpy.data.objects:
-            Model = bpy.data.objects[model]
-            for ob in bpy.data.objects:
-                ob.select = False
-                ob.hide = True
-            Model.select = True
-            Model.hide = False
-            context.scene.objects.active = Model
-            
-            bpy.ops.view3d.viewnumpad(type = 'FRONT')
-            
-            bpy.ops.view3d.view_selected()
-            self.crv = PointPicker(context,snap_type ='OBJECT', snap_object = Model)
-            context.space_data.show_manipulator = False
-            context.space_data.transform_manipulators = {'TRANSLATE'}
-            v3d = bpy.context.space_data
-            v3d.pivot_point = 'MEDIAN_POINT'
-        else:
+        mand_model = self.splint.get_mandible()
+        
+        
+        if model == '' or model not in bpy.data.objects:
             self.report({'ERROR'}, "Need to mark the UpperJaw model first!")
             return {'CANCELLED'}
+        
+        if mand_model == '' or mand_model not in bpy.data.objects:
+            self.report({'WARNING'}, "Consider marking Mandibular model first!")  
+            
+        
+        Model = bpy.data.objects[model]
+        Mand_Model = bpy.data.objects.get(mand_model)
+        
+        #if Model and Mand_Model:
+            #Make both models have same origin if they don't
+        #    loc = Model.location
+        #    loc1 = Mand_Model.location
+            
+        #    r = loc - loc1
+        #    if r.length > .0001:
+        #        T = Matrix.Translation(r)
+        #        iT = T.inverted()
+        #        Mand_Model.data.transform(iT)
+        #        mmx = Mand_Model.matrix_world
+        #        Mand_Model.matrix_world = T * mmx
+            
+               
+        for ob in bpy.data.objects:
+            ob.select = False
+            ob.hide = True
+        Model.select = True
+        Model.hide = False
+        context.scene.objects.active = Model
+        
+        bpy.ops.view3d.viewnumpad(type = 'FRONT')
+        
+        bpy.ops.view3d.view_selected()
+        self.crv = PointPicker(context,snap_type ='OBJECT', snap_object = Model)
+        context.space_data.show_manipulator = False
+        context.space_data.transform_manipulators = {'TRANSLATE'}
+        v3d = bpy.context.space_data
+        v3d.pivot_point = 'MEDIAN_POINT'
+        
         
         #TODO, tweak the modifier as needed
         help_txt = "DRAW LANDMARK POINTS\n Click on the Patient's Right Molar Occlusal Surface"
@@ -382,36 +411,64 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def finish(self, context):
-
-        v_ant = self.crv.b_pts[2] #midline
-        v_R = self.crv.b_pts[0] #R molar
-        v_L = self.crv.b_pts[1] #L molar
+        Model =  bpy.data.objects[self.splint.get_maxilla()]
+        mx = Model.matrix_world
+        imx = mx.inverted()
         
-        center = .5 *(.5*(v_R + v_L) + v_ant)
+        
+        Mand_Model = bpy.data.objects.get(self.splint.get_mandible())
+        
+        #get the local points
+        
+        v_R = imx * self.crv.b_pts[0] #R molar
+        v_L = imx * self.crv.b_pts[1] #L molar 
+        v_I = imx * self.crv.b_pts[2] #Incisal Edge
+        v_M = imx * self.crv.b_pts[3] #midline
+        
+        
+        center = 1/3 * (v_R + v_L + v_I)
+        
+        
+        
         
         #vector pointing from left to right
-        vec_R = v_R - v_L
+        vec_R =  v_R - v_L
         vec_R.normalize()
+        vec_L = v_L - v_R
+        vec_L.normalize()
+        vec_I = v_I - v_R
+        vec_I.normalize()
+        vec_M = v_M -v_R
+        vec_M.normalize()
         
-        #vector pointing straight anterior
-        vec_ant = v_ant - center
-        vec_ant.normalize()
-        
-        Z = vec_R.cross(vec_ant)
-        X = v_ant - center
-        X.normalize()
+        Z = vec_I.cross(vec_L)
+        Z.normalize()
                 
-        Y = Z.cross(X)
+        ##Option 2
+        X = v_M - center
+        X = X - X.dot(Z) * Z
+       
         
+        X.normalize()    
+        Y = Z.cross(X)
+        Y.normalize()
+        
+        
+        v_M_corrected = v_I - (v_I - center).dot(Y) * Y
+         
+         
         R = Matrix.Identity(3)  #make the columns of matrix U, V, W
         R[0][0], R[0][1], R[0][2]  = X[0] ,Y[0],  Z[0]
         R[1][0], R[1][1], R[1][2]  = X[1], Y[1],  Z[1]
-        R[2][0] ,R[2][1], R[2][2]  = X[2], Y[2],  Z[2]
-        
+        R[2][0] ,R[2][1], R[2][2]  = X[2], Y[2],  Z[2] 
         R = R.to_4x4()
-
-        T = Matrix.Translation(center)
-        
+        iR = R.inverted()
+        #Now we have the rotation matrix that got us where we wanted
+        Model.data.transform(iR)
+        #Model.matrix_world = Identity is implied, we will reset the matrix later
+        if Mand_Model:
+            Mand_Model.data.transform(iR)
+              
         #Lets Calculate the matrix transform for an
         #8 degree Fox plane cant.
         Z_w = Vector((0,0,1))
@@ -425,56 +482,60 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         R_fox[0][0], R_fox[0][1], R_fox[0][2]  = X_fox[0] ,Y_w[0],  Z_fox[0]
         R_fox[1][0], R_fox[1][1], R_fox[1][2]  = X_fox[1], Y_w[1],  Z_fox[1]
         R_fox[2][0] ,R_fox[2][1], R_fox[2][2]  = X_fox[2], Y_w[2],  Z_fox[2]
-
-        
-        Model =  bpy.data.objects[self.splint.get_maxilla()]
-     
-        mx_final = T * R
-        mx_inv = mx_final.inverted()
+        R_fox = R_fox.to_4x4()
         
         #average distance from campers plane to occlusal
         #plane is 30 mm
         #file:///C:/Users/Patrick/Downloads/CGBCC4_2014_v6n6_483.pdf
+        
+        center = R_fox * iR * center
+        v_ant = R_fox * iR * v_M_corrected
         incisal_final = Vector((90, 0, -30))
+        T_incisal = Matrix.Translation(iR * v_M_corrected)
         
-        T2 = Matrix.Translation(incisal_final - mx_inv * v_ant)
-        mx_mount = T2 * R_fox.to_4x4()
         
-        Model.data.transform(mx_inv)
-        #Model.matrix_world = Matrix.Identity(4)
-        Model.matrix_world = mx_mount
+        T = Matrix.Translation(incisal_final-v_ant)
+        Model.matrix_world =  T * R_fox
         
-        Opposing = bpy.data.objects.get(self.splint.get_mandible())
-        if Opposing:
-            Opposing.data.transform(mx_inv)
-            #Opposing.matrix_world = Matrix.Identity(4)
-            Opposing.matrix_world = mx_mount
-            Opposing.hide = False
+        mx_mount = T * R_fox
         
+        if 'Incisal' not in bpy.data.objects:
+            empty = bpy.data.objects.new('Incisal', None)
+            context.scene.objects.link(empty)
+            #now it stays with Model forever
+            empty.parent = Model
+            empty.matrix_world = Matrix.Translation(incisal_final)
+            
+            
+        if Mand_Model:
             #todo..check to move lower jaw after landmarks?    
-            if len(Opposing.constraints):
-                for cons in Opposing.constraints:
-                    Opposing.constraints.remove(cons)
-                    
-            cons = Opposing.constraints.new('CHILD_OF')
+            if len(Mand_Model.constraints):
+                for cons in Mand_Model.constraints:
+                    Mand_Model.constraints.remove(cons)
+
+            Mand_Model.matrix_world = T * R_fox
+            Mand_Model.hide = False
+                
+            cons = Mand_Model.constraints.new('CHILD_OF')
             cons.target = Model
             cons.inverse_matrix = Model.matrix_world.inverted()
         
         if "Trim Surface" in bpy.data.objects:
             trim_ob = bpy.data.objects['Trim Surface']
-            trim_ob.data.transform(mx_inv)
+            trim_ob.data.transform(iR)
             trim_ob.matrix_world = mx_mount
             trim_ob.hide = True
         
         buccal = self.splint.name + '_buccal'
         if buccal in bpy.data.objects:
             bobj = bpy.data.objects[buccal]
-            bobj.data.transform(mx_inv)
+            bobj.data.transform(iR)
             bobj.matrix_world = mx_mount
             bobj.hide = True
+            
         if "Trimmed_Model" in bpy.data.objects:
             trim_ob = bpy.data.objects["Trimmed_Model"]
-            trim_ob.data.transform(mx_inv)
+            trim_ob.data.transform(iR)
             trim_ob.matrix_word = mx_mount
             trim_ob.hide = True
         

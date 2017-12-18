@@ -1177,12 +1177,7 @@ class D3SPLINT_OT_survey_model(bpy.types.Operator):
     def poll(cls, context):
         #restoration exists and is in scene
         C0 = context.space_data.type == 'VIEW_3D'
-        C1 = context.object != None
-        if C1:
-            C2 = context.object.type == 'MESH'
-        else:
-            C2 = False
-        return  C0 and C1 and C2
+        return  C0
 
     def execute(self, context):
         tracking.trackUsage("D3Splint:SurveyModelView",None)
@@ -1196,9 +1191,7 @@ class D3SPLINT_OT_survey_model(bpy.types.Operator):
             return {'CANCELLED'}
         
         loc = Model.location
-        
         view = context.space_data.region_3d.view_rotation * Vector((0,0,1))
-        
         odcutils.silouette_brute_force(context, Model, view, self.world)
         #bme = survey_utils.silouette_brute_force(context, Model, view, self.world)
         
@@ -3563,7 +3556,7 @@ class D3SPLINT_OT_splint_subtract_surface(bpy.types.Operator):
             shrink_mod.use_project_z = True
             shrink_mod.target = Plane
         Plane.hide = True
-        
+        Shell.hide = False
         
         splint.ops_string += 'SubtractSurface:'
         return {'FINISHED'}

@@ -181,6 +181,7 @@ class D3SPLINT_OT_splint_virtual_wax_on_curve(bpy.types.Operator):
             meta_obj = bpy.data.objects.get('Virtual Wax')
             meta_data = meta_obj.data
             meta_mx = meta_obj.matrix_world
+            meta_obj.hide = False
             
         else:
             meta_data = bpy.data.metaballs.new('Virtual Wax')
@@ -249,7 +250,7 @@ class D3SPLINT_OT_splint_virtual_wax_on_curve(bpy.types.Operator):
                 mb.rotation = quat
             
             else:
-                mb.radius = self.thickness
+                mb.radius = self.thickness/2
                 
             mb.stiffness = 2
             mb.co = meta_imx * loc
@@ -314,16 +315,24 @@ class D3SPLINT_OT_splint_join_meta_to_shell(bpy.types.Operator):
         if Rim == None:
             self.report({'ERROR'}, 'Need to calculate rim first')
             
-        tracking.trackUsage("D3Splint:JoinRim",None)
+        tracking.trackUsage("D3Splint:JoinVirtualWax",None)
+        
+        
+        rim_me = Rim.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW' )
+        rim_ob = bpy.data.objects.new('Virtual Wax Mesh', rim_me)
+        rim_ob.matrix_world = Rim.matrix_world
+        
+        context.scene.objects.link(rim_ob)
         bool_mod = Shell.modifiers.new('Join Rim', type = 'BOOLEAN')
         bool_mod.operation = 'UNION'
-        bool_mod.object = Rim
+        bool_mod.object = rim_ob
         Rim.hide = True
+        rim_ob.hide = True
         Shell.hide = False
         
         n = context.scene.odc_splint_index
         splint = context.scene.odc_splints[n]
-        splint.ops_string += 'JoinRim:' 
+        splint.ops_string += 'JoinRim:VirtualWax' 
         return {'FINISHED'}
     
         
