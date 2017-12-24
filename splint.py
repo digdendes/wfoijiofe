@@ -3579,7 +3579,12 @@ class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
     
     def execute(self, context):
         
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
         
+        if splint.finalize_splint:
+            self.report({'WARNING'}, 'You have already finalized, this will remove existing modifiers and try again')
+            
         Shell = bpy.data.objects.get('Splint Shell')
         #Plane = bpy.data.objects.get('Trim Surface')
         Base = bpy.data.objects.get('Based_Model')
@@ -3628,6 +3633,7 @@ class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
         bme.to_mesh(Base.data)
         bme.free()
         
+        
         bool_mod = Shell.modifiers.new('Remove Teeth', type = 'BOOLEAN')
         bool_mod.operation = 'DIFFERENCE'
         bool_mod.object = Base
@@ -3639,8 +3645,7 @@ class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
         bool_mod.solver = 'CARVE'
         Passive.hide = True 
         
-        n = context.scene.odc_splint_index
-        splint = context.scene.odc_splints[n]
+        
         splint.finalize_splint = True
         return {'FINISHED'}
     

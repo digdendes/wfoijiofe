@@ -89,7 +89,10 @@ class D3SplintExportSplint(Operator, ExportHelper, IOSTLOrientationHelper):
 
         scene = context.scene
         
-        Shell = bpy.data.objects.get('Splint Shell')
+        Shell = bpy.data.objects.get('Final Splint')  #Check for CORK created Shell
+        if not Shell:
+            Shell = bpy.data.objects.get('Splint Shell')
+        
         if not Shell:
             self.report({'ERROR'}, 'You have not created your splint yet')
             return {'CANCEL'}

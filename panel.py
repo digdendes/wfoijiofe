@@ -363,6 +363,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
             ico = 'CHECKBOX_DEHLT'
         col = row.column()
         col.operator("d3splint.splint_finish_booleans", text = "Finalize The Splint", icon = ico)
+        col.operator("d3guard.splint_cork_boolean", text = "Finalize Splint (CORK EGINE)")
         col.operator("d3splint.export_splint_stl", text = "Export Splint STL")
           
 class VIEW3D_PT_D3SplintModels(bpy.types.Panel):
