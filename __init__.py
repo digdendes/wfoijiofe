@@ -257,7 +257,7 @@ def register():
     
     import d3classes, odcutils, crown, margin, bridge, splint, implant, panel, help, flexible_tooth, bracket_placement, denture_base, occlusion, ortho, curve_partition, articulator, splint_landmark_fns # , odcmenus, bgl_utils
     import healing_abutment, model_work, tracking, import_export, splint_booleans, splint_face_bow
-    import meta_modelling, model_labels
+    import meta_modelling, model_labels, splint_occlusal_surfaces
     
     #register them
     d3classes.register()
@@ -275,6 +275,7 @@ def register():
     splint_face_bow.register()
     meta_modelling.register()
     model_labels.register()
+    splint_occlusal_surfaces.register()
     panel.register()
     
     #register this module

@@ -10,7 +10,7 @@ import bgl
 import blf
 import random
 from mesh_cut import edge_loops_from_bmedges, space_evenly_on_path, flood_selection_faces
-from common_utilities import bversion
+from common_utilities import bversion, showErrorMessage
 #from . 
 import odcutils
 import bmesh_fns
@@ -598,6 +598,9 @@ class D3SPLINT_OT_splint_buccal_marks(bpy.types.Operator):
             return 'main'
             
         if event.type == 'RET' and event.value == 'PRESS':
+            if not self.crv.crv_data.splines[0].use_cyclic_u:
+                showErrorMessage('You have not closed the loop, please click the first (YELLOW or BLUE) point to close the loop')
+                return 'main'
             self.splint.splint_outline = True
             return 'finish'
             
@@ -3672,7 +3675,7 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
         Model = bpy.data.objects.get(splint.opposing)
         Master = bpy.data.objects.get(splint.model)
         if Model == None:
-            self.resport({'ERROR'}, 'No Opposing Model')
+            self.report({'ERROR'}, 'No Opposing Model')
             return {'CANCELLED'}
         
         if not splint_cache.is_object_valid(Model):
@@ -3690,12 +3693,12 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
         #filter the occlusal surface verts
         Plane = bpy.data.objects.get('Occlusal Plane')
         if Plane == None:
-            self.resport({'ERROR'}, 'Need to mark occlusal curve on opposing object to get reference plane')
+            self.report({'ERROR'}, 'Need to mark occlusal curve on opposing object to get reference plane')
             return {'CANCELLED'}
         
         Shell = bpy.data.objects.get('Splint Shell')
         if Shell == None:
-            self.resport({'WARNING'}, 'There is no splint shell, however this OK.')
+            self.report({'WARNING'}, 'There is no splint shell, however this OK.')
             
         if Shell:
             bme_shell = bmesh.new()
@@ -3805,10 +3808,9 @@ class D3SPLINT_OT_splint_reset_functional_surface(bpy.types.Operator):
         #filter the occlusal surface verts
         Plane = bpy.data.objects.get('Occlusal Plane')
         if Plane == None:
-            self.resport({'ERROR'}, 'Need to mark occlusal curve on opposing object to get reference plane')
+            self.report({'ERROR'}, 'Need to mark occlusal curve on opposing object to get reference plane')
             return {'CANCELLED'}
         
-    
         bme_shell = bmesh.new()
         
         bme = bmesh.new()
@@ -3897,10 +3899,10 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
     bl_label = "Create Splint Outer Surface"
     bl_options = {'REGISTER', 'UNDO'}
     
-    radius = FloatProperty(default = 2.5, description = 'Thickness of splint')
-    finalize = BoolProperty(default = False, description = 'Will convert meta to mesh and remove meta object')
+    radius = FloatProperty(default = 2.5, min = 1, max = 4, description = 'Thickness of splint')
     resolution = FloatProperty(default = .8, description = '0.5 to 1.5 seems to be good')
-    n_verts = IntProperty(default = 1000)
+    finalize = BoolProperty(default = False, description = 'Will convert meta to mesh and remove meta object')
+    
     @classmethod
     def poll(cls, context):
         if "Trimmed_Model" in bpy.data.objects:
@@ -4026,9 +4028,8 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
         return {'FINISHED'}
     
     def invoke(self, context, event):
-        
-        self.n_verts = len(bpy.data.objects['Trimmed_Model'].data.vertices)
         return context.window_manager.invoke_props_dialog(self)
+    
     
     def draw(self,context):
         

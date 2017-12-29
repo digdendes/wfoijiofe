@@ -13,7 +13,7 @@ from cork.lib import get_cork_filepath, validate_executable
 from cork.exceptions import *
    
 class D3SPLINT_OT_splint_cork_boolean(Operator):
-    """"""
+    """Use external boolean engine when fast Blender solver has errors"""
     bl_idname = "d3guard.splint_cork_boolean"
     bl_label = "Splint Cork Boolean"
     bl_description = ""
