@@ -1046,7 +1046,7 @@ def scene_verification(scene, debug = False):
     if debug:
         start = time.time()
     #remember the props we dont watnt to test
-    exclusion_props = ['','name','log','in_bridge','rest_type','teeth','implants','connectors',"tooth_string","implant_string"]
+    exclusion_props = ['','name','log','in_bridge','rest_type','teeth','implants','connectors',"tooth_string","implant_string", "ops_string"]
     #splint_props = ['']
     #bridge_props_exclude=['']
     

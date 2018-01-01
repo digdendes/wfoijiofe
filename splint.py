@@ -1918,6 +1918,17 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         
         trimmed_bme.to_mesh(trimmed_model)
         trimmed_obj.matrix_world = mx2
+        
+        context.scene.objects.active = trimmed_obj
+        trimmed_obj.select = True
+        trimmed_obj.hide = False
+        bpy.ops.object.mode_set(mode = 'SCULPT')
+        if not trimmed_obj.use_dynamic_topology_sculpting:
+            bpy.ops.sculpt.dynamic_topology_toggle()
+        context.scene.tool_settings.sculpt.constant_detail_resolution = 5.5
+        bpy.ops.sculpt.detail_flood_fill()
+        bpy.ops.object.mode_set(mode = 'OBJECT')
+        
         trimmed_obj.hide = True
                     
         trimmed_bme.verts.ensure_lookup_table()
@@ -1930,15 +1941,16 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
             for v in new_verts:
                 v.co += .4 * Z
         
-        loops = edge_loops_from_bmedges(trimmed_bme, [ed.index for ed in new_edges])
-        print('there are %i loops' % len(loops))
-        for loop in loops:
-            if loop[0] != loop[-1]:continue
-            loop.pop()
-            f = [trimmed_bme.verts[i] for i in loop]
-            trimmed_bme.faces.new(f)
+        #loops = edge_loops_from_bmedges(trimmed_bme, [ed.index for ed in new_edges])
+        #print('there are %i loops' % len(loops))
+        #for loop in loops:
+        #    if loop[0] != loop[-1]:continue
+        #    loop.pop()
+        #    f = [trimmed_bme.verts[i] for i in loop]
+        #    trimmed_bme.faces.new(f)
             
-        bmesh.ops.recalc_face_normals(trimmed_bme,faces = trimmed_bme.faces[:])
+        #
+        #bmesh.ops.recalc_face_normals(trimmed_bme,faces = trimmed_bme.faces[:])
             
         #TODO, make small islands a bmesh util
         #clean loose verts
@@ -1970,7 +1982,6 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         trimmed_bme.faces.ensure_lookup_table()
               
         if    'Based_Model' in bpy.data.objects:
-            
             based_obj = bpy.data.objects.get('Based_Model')
             based_model = based_obj.data
         else:
@@ -1987,6 +1998,21 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         
         trimmed_bme.to_mesh(based_model)
         
+        
+        context.scene.objects.active = based_obj
+        based_obj.select = True
+        based_obj.hide = False
+        bpy.ops.object.mode_set(mode = 'SCULPT')
+        if not based_obj.use_dynamic_topology_sculpting:
+            bpy.ops.sculpt.dynamic_topology_toggle()
+        context.scene.tool_settings.sculpt.constant_detail_resolution = 5.5
+        bpy.ops.sculpt.detail_flood_fill()
+        bpy.ops.object.mode_set(mode = 'OBJECT')
+        
+        if 'Displace' not in based_obj.modifers:
+            mod = based_obj.modifiers.new('Displace', type = 'DISPLACE')
+            mod.mid_level = 0.85
+            mod.strength = -1
         
         Model.hide = True
         based_obj.hide = False
@@ -2917,7 +2943,7 @@ class D3SPLINT_OT_splint_add_rim_curve(bpy.types.Operator):
         
         
         if 'Meta Wax' in bpy.data.objects:
-            meta_obj = bpy.data.obejcts.get('Meta Wax')
+            meta_obj = bpy.data.objects.get('Meta Wax')
             meta_data = meta_obj.data
             meta_mx = meta_obj.matrix_world
             
@@ -3570,7 +3596,11 @@ class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
     bl_label = "Finalize the Splint"
     bl_options = {'REGISTER', 'UNDO'}
     
-    
+    solver = EnumProperty(
+        description="Boolean Method",
+        items=(("BMESH", "Bmesh", "Faster/More Errors"),
+               ("CARVE", "Carve", "Slower/Less Errors")),
+        default = "BMESH")
     
     @classmethod
     def poll(cls, context):
@@ -3586,22 +3616,15 @@ class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
         splint = context.scene.odc_splints[n]
         
         if splint.finalize_splint:
-            self.report({'WARNING'}, 'You have already finalized, this will remove existing modifiers and try again')
+            self.report({'WARNING'}, 'You have already finalized, this will remove or alter existing modifiers and try again')
             
         Shell = bpy.data.objects.get('Splint Shell')
-        #Plane = bpy.data.objects.get('Trim Surface')
-        Base = bpy.data.objects.get('Based_Model')
         Passive = bpy.data.objects.get('Passive Spacer')
         
         if Shell == None:
             self.report({'ERROR'}, 'Need to calculate splint shell first')
             return {'CANCELLED'}
-        #if Plane == None:
-        #    self.report({'ERROR'}, 'Need to generate functional surface first')
-        #    return {'CANCELLED'}
-        if Base == None:
-            self.report({'ERROR'}, 'Need to trim model first')
-            return {'CANCELLED'}
+        
         if Passive == None:
             self.report({'ERROR'}, 'Need to make passive spacer first')    
             return {'CANCELLED'}
@@ -3609,44 +3632,71 @@ class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
             bpy.ops.object.mode_set(mode = 'OBJECT')
         
         tracking.trackUsage("D3Splint:FinishBoolean",None)    
-        Shell.hide = False
-        bpy.ops.object.select_all(action = 'DESELECT')
-        Shell.select = True
-        context.scene.objects.active = Shell
-        for mod in Shell.modifiers:
-            if mod.name in {'Remove Teeth', 'Passive Fit'}: 
-                continue
-            bpy.ops.object.modifier_apply(modifier = mod.name)
+        
+        
+        #don't add multiple boolean modifiers
+        if 'Passive Fit' not in Shell.modifiers:
+            bool_mod = Shell.modifiers.new('Passive Fit', type = 'BOOLEAN')
+            bool_mod.operation = 'DIFFERENCE'
+        
+        bool_mod.solver = self.solver
             
-
+        #update in case they changed the spacer
+        bool_mod.object = Passive
+        Passive.hide = True 
+        
         bme = bmesh.new()
-        bme.from_mesh(Base.data)
+        bme.from_object(Shell, context.scene)
         bme.faces.ensure_lookup_table()
         bme.verts.ensure_lookup_table()
-        f = max(bme.faces, key = lambda x: len(x.verts))
-        splint = context.scene.odc_splints[0]
+        total_faces = set(bme.faces[:])
+        islands = []
+        iters = 0
+        while len(total_faces) and iters < 100:
+            iters += 1
+            seed = total_faces.pop()
+            island = flood_selection_faces(bme, {}, seed, max_iters = 10000)
+            islands += [island]
+            total_faces.difference_update(island)
+            
+        best = max(islands, key = len)
         
-        if splint.jaw_type == 'MAXILLA':
-            vmax = max(f.verts, key = lambda x: x.co[2])
+        total_faces = set(bme.faces[:])
+        del_faces = total_faces - best
         
+        bmesh.ops.delete(bme, geom = list(del_faces), context = 3)
+        del_verts = []
+        for v in bme.verts:
+            if all([f in del_faces for f in v.link_faces]):
+                del_verts += [v]        
+        bmesh.ops.delete(bme, geom = del_verts, context = 1)
+        
+        
+        del_edges = []
+        for ed in bme.edges:
+            if len(ed.link_faces) == 0:
+                del_edges += [ed]
+        bmesh.ops.delete(bme, geom = del_edges, context = 4) 
+        
+        
+        if 'Final Splint' not in bpy.data.objects:
+            me = bpy.data.meshes.new('Final Splint')
+            ob = bpy.data.objects.new('Final Splint', me)
+            context.scene.objects.link(ob)
+            ob.matrix_world = Shell.matrix_world
         else:
-            vmax = min(f.verts, key = lambda x: x.co[2])
-        for v in f.verts:
-            v.co[2] = vmax.co[2]
-        bme.to_mesh(Base.data)
+            ob = bpy.data.objects.get('Final Splint')
+            me = ob.data
+            
+        bme.to_mesh(me)
         bme.free()
         
-        
-        bool_mod = Shell.modifiers.new('Remove Teeth', type = 'BOOLEAN')
-        bool_mod.operation = 'DIFFERENCE'
-        bool_mod.object = Base
-        Base.hide = True 
-        
-        bool_mod = Shell.modifiers.new('Passive Fit', type = 'BOOLEAN')
-        bool_mod.operation = 'DIFFERENCE'
-        bool_mod.object = Passive
-        bool_mod.solver = 'CARVE'
-        Passive.hide = True 
+        for obj in context.scene.objects:
+            obj.hide = True
+            
+        context.scene.objects.active = ob
+        ob.select = True
+        ob.hide = False
         
         
         splint.finalize_splint = True
@@ -3899,8 +3949,8 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
     bl_label = "Create Splint Outer Surface"
     bl_options = {'REGISTER', 'UNDO'}
     
-    radius = FloatProperty(default = 2.5, min = 1, max = 4, description = 'Thickness of splint')
-    resolution = FloatProperty(default = .8, description = '0.5 to 1.5 seems to be good')
+    radius = FloatProperty(default = 2.5, min = .75, max = 4, description = 'Thickness of splint')
+    resolution = FloatProperty(default = .4, description = '0.5 to 1.5 seems to be good')
     finalize = BoolProperty(default = False, description = 'Will convert meta to mesh and remove meta object')
     
     @classmethod
@@ -3911,6 +3961,15 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
             return False
         
     def execute(self, context):
+        
+        #fit data from inputs to outputs with metaball
+        #r_final = .901 * r_input - 0.0219
+        
+        #rinput = 1/.901 * (r_final + .0219)
+        
+        
+        R_prime = 1/.901 * (self.radius + .0219)
+        
         splint = context.scene.odc_splints[0]
         self.bme = bmesh.new()
         ob = bpy.data.objects.get('Trimmed_Model')
@@ -3944,7 +4003,7 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
             
             loc, ind, r = kd.find(v.co)
             
-            if r and r < .8 * self.radius:
+            if r and r < .8 * R_prime:
                 
                 mb = meta_data.elements.new(type = 'BALL')
                 mb.co = v.co
@@ -3969,11 +4028,11 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
     
                 #mb.rotation = Rotation_Matrix.to_quaternion()
                 
-            elif r and r < 0.2 * self.radius:
+            elif r and r < 0.2 * R_prime:
                 continue
             else:
                 mb = meta_data.elements.new(type = 'BALL')
-                mb.radius = self.radius
+                mb.radius = R_prime
                 mb.co = v.co
             
         meta_obj.matrix_world = mx
@@ -4000,8 +4059,8 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
             new_ob.data.materials.append(mat)
             
             mod = new_ob.modifiers.new('Smooth', type = 'SMOOTH')
-            mod.iterations = 2
-            mod.factor = .8
+            mod.iterations = 1
+            mod.factor = .5
         else:
             new_ob = bpy.data.objects.get('Splint Shell')
             new_ob.data = me
@@ -4035,18 +4094,18 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
         
         layout = self.layout
         
-        row = layout.row()
-        row.label(text = "%i metaballs will be added" % self.n_verts)
+        #row = layout.row()
+        #row.label(text = "%i metaballs will be added" % self.n_verts)
         
-        if self.n_verts > 10000:
-            row = layout.row()
-            row.label(text = "WARNING, THIS SEEMS LIKE A LOT")
-            row = layout.row()
-            row.label(text = "Consider CANCEL/decimating more or possible long processing time")
+        #if self.n_verts > 10000:
+        #    row = layout.row()
+        #    row.label(text = "WARNING, THIS SEEMS LIKE A LOT")
+        #    row = layout.row()
+        #    row.label(text = "Consider CANCEL/decimating more or possible long processing time")
         
         row = layout.row()
         row.prop(self, "radius")
-        row.prop(self,"resolution")
+        
         
 class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
     """Create Meta Offset Surface discs on verts, good for thin offsets .075 to 1mm"""
@@ -4054,9 +4113,9 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
     bl_label = "Create Splint Spacer"
     bl_options = {'REGISTER', 'UNDO'}
     
-    radius = FloatProperty(default = .15 , min = .075, max = 1, description = 'Thickness of Offset')
+    radius = FloatProperty(default = .12 , min = .07, max = 1, description = 'Thickness of Offset')
     resolution = FloatProperty(default = 1.5, description = 'Mesh resolution. 1.5 seems ok?')
-    n_verts = IntProperty(default = 1000)
+    scale = FloatProperty(default = 10, description = 'Scale up to make it better')
     
     @classmethod
     def poll(cls, context):
@@ -4066,14 +4125,29 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
             return False
         
     def execute(self, context):
+        start = time.time()
+        interval_start = start
+        
         self.bme = bmesh.new()
         ob = bpy.data.objects.get('Based_Model')
-        
+        ob1 = bpy.data.objects.get('Trimmed_Model')
         if not ob:
             self.report({'ERROR'}, 'Must trim the upper model first')
             return {'CANCELLED'}
         
-        self.bme.from_object(ob, context.scene)
+        if not ob1:
+            self.report({'ERROR'}, 'Must trim the upper model first')
+            return {'CANCELLED'}
+        
+        if not ob.modifiers.get('Displace'):
+            self.report({'ERROR'}, 'New version requires you to Trim the Model again')
+            return {'CANCELLED'}
+        
+        
+        splint = context.scene.odc_splints[0]
+        splint.passive_value = self.radius
+        
+        self.bme.from_object(ob, context.scene)  #this object should have a displace modifier
         self.bme.verts.ensure_lookup_table()
         
         mx = ob.matrix_world
@@ -4084,119 +4158,185 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         meta_data.render_resolution = self.resolution
         context.scene.objects.link(meta_obj)
         
-            
+        n_elipse = 0
+        n_ball = 0    
         for v in self.bme.verts:
             co = v.co
             R = .5 * max([ed.calc_length() for ed in v.link_edges])
             
             
-            Z = v.normal 
-            Z.normalize()
-            
-            mb = meta_data.elements.new(type = 'ELLIPSOID')
-            mb.co = 10 * co
-            mb.size_x = 10 * R
-            mb.size_y = 10 * R
-            mb.size_z = 10 * (self.radius - .025)
-            
-            v_other = v.link_edges[0].other_vert(v)
-            x_prime = v_other.co - v.co
-            x_prime.normalize()
-            Y = Z.cross(x_prime)
-            X = Y.cross(Z)
-            
-            #rotation matrix from principal axes
-            T = Matrix.Identity(3)  #make the columns of matrix U, V, W
-            T[0][0], T[0][1], T[0][2]  = X[0] ,Y[0],  Z[0]
-            T[1][0], T[1][1], T[1][2]  = X[1], Y[1],  Z[1]
-            T[2][0] ,T[2][1], T[2][2]  = X[2], Y[2],  Z[2]
+            if True:  ## R > .25 * self.radius:
+                n_elipse += 1
+                Z = v.normal 
+                Z.normalize()
+                
+                mb = meta_data.elements.new(type = 'ELLIPSOID')
+                mb.co = self.scale * co
+                mb.size_x = self.scale * R
+                mb.size_y = self.scale * R
+                mb.size_z = self.scale * (self.radius - .025 + .15)  #surface is pre negatively offset by .15
+                
+                v_other = v.link_edges[0].other_vert(v)
+                x_prime = v_other.co - v.co
+                x_prime.normalize()
+                Y = Z.cross(x_prime)
+                X = Y.cross(Z)
+                
+                #rotation matrix from principal axes
+                T = Matrix.Identity(3)  #make the columns of matrix U, V, W
+                T[0][0], T[0][1], T[0][2]  = X[0] ,Y[0],  Z[0]
+                T[1][0], T[1][1], T[1][2]  = X[1], Y[1],  Z[1]
+                T[2][0] ,T[2][1], T[2][2]  = X[2], Y[2],  Z[2]
+    
+                Rotation_Matrix = T.to_4x4()
+                
+                mb.rotation = Rotation_Matrix.to_quaternion()
+            else:
+                n_ball += 1
+                mb = meta_data.elements.new(type = 'BALL')
+                mb.co = self.scale * co
+                mb.radius = self.scale * (self.radius - .025 + .151)  #base mesh is pre-offset by .15
 
-            Rotation_Matrix = T.to_4x4()
-            
-            mb.rotation = Rotation_Matrix.to_quaternion()
-        
-        #thickness data
-        #.2 to .32
-        #.1 to .21
-           
-        for f in []:        
-        #for f in self.bme.faces:
-            
-            #co = f.calc_center_bounds()
-            #vmax = min(f.verts, key = lambda x: (co - x.co).length)
-            #R = (co - vmax.co).length
-            
-            co = f.calc_center_median()
-            #R = 2 * f.calc_area() / f.calc_perimeter()
-            R = .5 * f.calc_area()**.5
-            
-            mb = meta_data.elements.new(type = 'CUBE')
-            mb.co = 10 * co
-            mb.size_x = 10 * .9 * R
-            mb.size_y = 10 * .9 * R
-            mb.size_z = 10 * self.radius
-            
-            Z = f.normal
-            Y = f.verts[0].co - f.verts[1].co
-            #Y = f.verts[0].co - co
-            
-            Y.normalize()
-            X = Y.cross(Z)
-            
-            #rotation matrix from principal axes
-            T = Matrix.Identity(3)  #make the columns of matrix U, V, W
-            T[0][0], T[0][1], T[0][2]  = X[0] ,Y[0],  Z[0]
-            T[1][0], T[1][1], T[1][2]  = X[1], Y[1],  Z[1]
-            T[2][0] ,T[2][1], T[2][2]  = X[2], Y[2],  Z[2]
 
-            Rotation_Matrix = T.to_4x4()
-            
-            mb.rotation = Rotation_Matrix.to_quaternion()
+        print('finished adding metaballs at %f' % (time.time() - start))   
+        print('added %i elipses and %i balls' % (n_elipse, n_ball))
             
         R = mx.to_quaternion().to_matrix().to_4x4()
         L = Matrix.Translation(mx.to_translation())
-        S = Matrix.Scale(.1, 4)
+        S = Matrix.Scale(1/self.scale, 4)
            
         meta_obj.matrix_world =  L * R * S
         
-        
+        print('transformed the meta ball object %f' % (time.time() - start))
         context.scene.update()
+        print('updated the scene %f' % (time.time() - start))
+        
+
         me = meta_obj.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
-        new_ob = bpy.data.objects.new('Passive Spacer', me)
-        context.scene.objects.link(new_ob)
+        
+        if 'Passive Spacer' in bpy.data.objects:
+            new_ob = bpy.data.objects.get('Passive Spacer')
+            old_data = new_ob.data
+            new_ob.data = me
+            old_data.user_clear()
+            bpy.data.meshes.remove(old_data)
+        else:
+            new_ob = bpy.data.objects.new('Passive Spacer', me)
+            context.scene.objects.link(new_ob)
+        
         new_ob.matrix_world = L * R * S
-        
-        
         mat = bpy.data.materials.get("Spacer Material")
         if mat is None:
             # create material
             mat = bpy.data.materials.new(name="Spacer Material")
             mat.diffuse_color = Color((0.8, .5, .1))
-        new_ob.data.materials.append(mat)
-        
-        mod = new_ob.modifiers.new('Smooth', type = 'SMOOTH')
-        mod.factor = 1
-        mod.iterations = 8
         
         
-        mod = new_ob.modifiers.new('Decimate', type = 'DECIMATE')
-        mod.ratio = 0.15
+        if len(new_ob.material_slots) == 0:
+            new_ob.data.materials.append(mat)
         
-        new_bme = bmesh.new()
-        new_bme.from_object(new_ob, context.scene)
+        interval_start = time.time()
+        if 'Smooth' not in new_ob.modifiers:
+            mod = new_ob.modifiers.new('Smooth', type = 'SMOOTH')
+            mod.factor = 1
+            mod.iterations = 4
         
-         
+        else:
+            mod = new_ob.modifiers.get('Smooth')
+            
+        context.scene.objects.active = new_ob
+        new_ob.select = True
+        bpy.ops.object.modifier_apply(modifier = 'Smooth')
+        
+        print('Took %f seconds to smooth BMesh' % (time.time() - interval_start))
+        interval_start = time.time()
+        
+                
+        mx = new_ob.matrix_world
+        imx = mx.inverted()
+        bme = bmesh.new()
+        bme.from_object(new_ob, context.scene)
+        bme.verts.ensure_lookup_table()
+        
+        mx_check = ob1.matrix_world
+        imx_check = mx_check.inverted()
+        bme_check = bmesh.new()
+        bme_check.from_mesh(ob1.data)
+        bme_check.verts.ensure_lookup_table()
+        bme_check.edges.ensure_lookup_table()
+        bme_check.faces.ensure_lookup_table()
+        bvh = BVHTree.FromBMesh(bme_check)
+        
+        
+        boundary_inds = set()
+        for ed in bme_check.edges:
+            if len(ed.link_faces) == 1:
+                for v in ed.verts:
+                    for f in v.link_faces:
+                        boundary_inds.add(f.index)
+        
+        bme_check.free()
+        
+
+        
+        print('Took %f seconds to initialize BMesh and build BVH' % (time.time() - interval_start))
+        interval_start = time.time()
+            
+        n_corrected = 0
+        n_normal = 0
+        n_loc = 0
+        n_too_far = 0
+        n_boundary = 0
+        for v in bme.verts:
+            #check the distance in trimmed model space
+            co = imx_check * mx * v.co
+            loc, no, ind, d = bvh.find_nearest(co)
+            
+            if not loc: continue
+            
+            if d < self.radius:
+                if ind in boundary_inds:
+                    n_boundary += 1
+                    continue
+                n_corrected += 1
+                R = co - loc
+                
+                R.normalize()
+                
+                if R.dot(no) > 0:
+                    delta = self.radius - d + .002
+                    co += delta * R
+                    n_loc += 1
+                else:
+                    co = loc + (self.radius + .002) * no
+                    n_normal += 1
+                    
+                v.co = imx * mx_check * co
+                v.select_set(True)
+            
+            elif d > self.radius and d < (self.radius + .02):
+                co = loc + (self.radius + .002) * no
+                n_too_far += 1
+                
+            else:
+                v.select_set(False)        
+        print('corrected %i verts too close offset' % n_corrected)
+        print('corrected %i verts using normal method' % n_normal)
+        print('corrected %i verts using location method' % n_loc)
+        print('corrected %i verts using too far away' % n_too_far)
+        print('ignored %i verts clsoe to trim boundary' % n_boundary)
+        
+        print('Took %f seconds to correct verts' % (time.time() - interval_start))
+        interval_start = time.time()
         for mod in new_ob.modifiers:
             new_ob.modifiers.remove(mod)
         
-        new_bme.to_mesh(new_ob.data)
-        new_bme.free()
         
-        splint = context.scene.odc_splints[0]
-        Master = bpy.data.objects.get(splint.model)
-        cons = new_ob.constraints.new('CHILD_OF')
-        cons.target = Master
-        cons.inverse_matrix = Master.matrix_world.inverted()
+        if 'Child Of' not in new_ob.constraints:
+            Master = bpy.data.objects.get(splint.model)
+            cons = new_ob.constraints.new('CHILD_OF')
+            cons.target = Master
+            cons.inverse_matrix = Master.matrix_world.inverted()
          
         context.scene.objects.unlink(meta_obj)
         bpy.data.objects.remove(meta_obj)
@@ -4208,15 +4348,16 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         for ob in context.scene.objects:
             ob.hide = True
         
+        bme.to_mesh(new_ob.data)
+        bme.free()
         new_ob.hide = False    
         context.scene.objects.active = new_ob
         new_ob.select = True
         
-            
-        
         ob = bpy.data.objects.get('Based_Model')
         ob.hide = False
         
+        print('processed in %f seconds' % (time.time() - start))
         bpy.ops.view3d.viewnumpad(type = 'RIGHT')
         tracking.trackUsage("D3Splint:PassiveOffset",self.radius)
         n = context.scene.odc_splint_index
@@ -4227,9 +4368,6 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
     
     def invoke(self, context, event):
         
-        
-        self.n_verts = len(bpy.data.objects['Trimmed_Model'].data.vertices)
-        
         return context.window_manager.invoke_props_dialog(self)
     
     def draw(self,context):
@@ -4237,19 +4375,130 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         layout = self.layout
         
         row = layout.row()
-        row.label(text = "%i metaballs will be added" % self.n_verts)
-        
-        if self.n_verts > 90000:
-            row = layout.row()
-            row.label(text = "WARNING, THIS SEEMS LIKE A LOT")
-            row = layout.row()
-            row.label(text = "Consider CANCEL/decimating more or possible long processing time")
-        
-        row = layout.row()
         row.prop(self, "radius")
-        row.prop(self,"resolution")
- 
- 
+        #row.prop(self,"resolution")
+        #row.prop(self,"scale")
+
+
+class D3SPLINT_OT_meta_splint_passive_spacer_refine(bpy.types.Operator):
+    """Check the spacer for bind points and correct them"""
+    bl_idname = "d3splint.passive_spacer_correct"
+    bl_label = "Refine Splint Spacer"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+
+    @classmethod
+    def poll(cls, context):
+        if "Trimmed_Model" in bpy.data.objects:
+            return True
+        else:
+            return False
+        
+    def execute(self, context):
+        start = time.time()
+        self.bme = bmesh.new()
+        ob = bpy.data.objects.get('Passive Spacer')
+        ob1 = bpy.data.objects.get('Trimmed_Model')
+        
+        if not ob:
+            self.report({'ERROR'}, 'Must Create Passive Spacer First')
+            return {'CANCELLED'}
+        
+        
+        start = time.time()
+        interval_start = start
+        
+        splint = context.scene.odc_splints[0]
+        r = splint.passive_value
+        
+        mx = ob.matrix_world
+        imx = mx.inverted()
+        bme = bmesh.new()
+        bme.from_object(ob, context.scene)
+        bme.verts.ensure_lookup_table()
+        
+        bme_check = bmesh.new()
+        bme_check.from_mesh(ob1.data)
+        bme_check.verts.ensure_lookup_table()
+        bme_check.edges.ensure_lookup_table()
+        bme_check.faces.ensure_lookup_table()
+        bvh = BVHTree.FromBMesh(bme_check)
+        
+        
+        
+        boundary_inds = set()
+        for ed in bme_check.edges:
+            if len(ed.link_faces) == 1:
+                for v in ed.verts:
+                    for f in v.link_faces:
+                        boundary_inds.add(f.index)
+        
+        bme_check.free()
+        
+        mx_check = ob1.matrix_world
+        imx_check = mx_check.inverted()
+        
+        print('Took %f seconds to initialize BMesh and build BVH' % (time.time() - interval_start))
+        interval_start = time.time()
+            
+        n_corrected = 0
+        n_normal = 0
+        n_loc = 0
+        n_boundary = 0
+        for v in bme.verts:
+            #check the distance in trimmed model space
+            co = imx_check * mx * v.co
+            loc, no, ind, d = bvh.find_nearest(co)
+            
+            if not loc: continue
+            
+            if d < r:
+                if ind in boundary_inds:
+                    n_boundary += 1
+                    continue
+                n_corrected += 1
+                R = co - loc
+                
+                R.normalize()
+                
+                if R.dot(no) > 0:
+                    delta = r - d + .002
+                    co += delta * R
+                    n_loc += 1
+                else:
+                    co = loc + (r + .002) * no
+                    n_normal += 1
+                    
+                v.co = imx * mx_check * co
+                v.select_set(True)
+            
+            elif d > r and d < (r + .01):
+                co = loc + (r + .002) * no
+                n_normal += 1
+                
+            else:
+                v.select_set(False)        
+        print('corrected %i verts too close offset' % n_corrected)
+        print('corrected %i verts using normal method' % n_normal)
+        print('corrected %i verts using location method' % n_loc)
+        print('ignored %i verts clsoe to trim boundary' % n_boundary)
+        
+        print('Took %f seconds to correct verts' % (time.time() - interval_start))
+        interval_start = time.time()
+        for mod in ob.modifiers:
+            ob.modifiers.remove(mod)
+            
+        bme.to_mesh(ob.data)
+        bme.free()
+        print('Took %f seconds to update the object data' % (time.time() - interval_start))
+        interval_start = time.time()
+        
+        print('Took %f seconds to do the whole thing' % (time.time() - start))
+        interval_start = time.time()  
+         
+        return {'FINISHED'}
+    
+         
 class D3SPLINT_OT_splint_go_sculpt(bpy.types.Operator):
     '''Enter sculpt mode with good settings to start sculpting'''
     bl_idname = "d3splint.splint_start_sculpt"
@@ -4331,6 +4580,7 @@ def register():
     
     bpy.utils.register_class(D3SPLINT_OT_meta_splint_surface)
     bpy.utils.register_class(D3SPLINT_OT_meta_splint_passive_spacer)
+    bpy.utils.register_class(D3SPLINT_OT_meta_splint_passive_spacer_refine)
     
     bpy.utils.register_class(D3SPLINT_OT_splint_add_rim)
     bpy.utils.register_class(D3SPLINT_OT_splint_join_rim)
@@ -4383,6 +4633,7 @@ def unregister():
 
     bpy.utils.unregister_class(D3SPLINT_OT_meta_splint_surface)
     bpy.utils.unregister_class(D3SPLINT_OT_meta_splint_passive_spacer)
+    bpy.utils.unregister_class(D3SPLINT_OT_meta_splint_passive_spacer_refine)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_add_rim)
     
     bpy.utils.unregister_class(D3SPLINT_OT_splint_join_rim)
