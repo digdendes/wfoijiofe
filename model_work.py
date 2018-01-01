@@ -1578,10 +1578,12 @@ class D3Splint_OT_model_thicken(bpy.types.Operator):
         meta_data.resolution = self.resolution
         meta_data.render_resolution = self.resolution
         context.scene.objects.link(meta_obj)
+        
+        R_prime = 1/.901 * (self.radius + .0219)
             
         for v in tmp_ob.data.vertices:
             mb = meta_data.elements.new(type = 'BALL')
-            mb.radius = self.radius
+            mb.radius = R_prime
             mb.co = v.co
             
         meta_obj.matrix_world = mx
@@ -1879,10 +1881,12 @@ class D3Splint_OT_model_thicken2(bpy.types.Operator):
         meta_data.resolution = self.resolution
         meta_data.render_resolution = self.resolution
         context.scene.objects.link(meta_obj)
+        
+        R_prime = 1/.901 * (self.radius + .0219)
             
         for v in tmp_ob.data.vertices:
             mb = meta_data.elements.new(type = 'BALL')
-            mb.radius = self.radius
+            mb.radius = R_prime
             mb.co = v.co
             
         meta_obj.matrix_world = mx

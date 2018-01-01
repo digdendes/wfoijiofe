@@ -1925,6 +1925,7 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         bpy.ops.object.mode_set(mode = 'SCULPT')
         if not trimmed_obj.use_dynamic_topology_sculpting:
             bpy.ops.sculpt.dynamic_topology_toggle()
+        context.scene.tool_settings.sculpt.detail_type_method = 'CONSTANT'
         context.scene.tool_settings.sculpt.constant_detail_resolution = 5.5
         bpy.ops.sculpt.detail_flood_fill()
         bpy.ops.object.mode_set(mode = 'OBJECT')
@@ -2005,6 +2006,7 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         bpy.ops.object.mode_set(mode = 'SCULPT')
         if not based_obj.use_dynamic_topology_sculpting:
             bpy.ops.sculpt.dynamic_topology_toggle()
+        context.scene.tool_settings.sculpt.detail_type_method = 'CONSTANT'
         context.scene.tool_settings.sculpt.constant_detail_resolution = 5.5
         bpy.ops.sculpt.detail_flood_fill()
         bpy.ops.object.mode_set(mode = 'OBJECT')
