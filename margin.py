@@ -850,7 +850,7 @@ class OPENDENTAL_OT_trace_walking(bpy.types.Operator):
             tracer.select = True
             context.scene.objects.active = tracer
             
-            #mod = tracer.modifers['Shrinkwrap']  #going to need to do some checking for dumb scenarios
+            #mod = tracer.modifiers['Shrinkwrap']  #going to need to do some checking for dumb scenarios
             #self.target = mod.target
                       
             vec = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)

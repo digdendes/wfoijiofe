@@ -430,6 +430,7 @@ class VIEW3D_PT_D3SplintModels(bpy.types.Panel):
         col.operator("d3splint.simple_base", text = "Simple Base")            
         col.operator("d3splint.model_wall_thicken", text = 'Hollow Model')
         col.operator("d3splint.model_wall_thicken2", text = 'Hollow Model2')
+        col.operator("d3tool.model_vertical_base", text = 'Vertical Base')
         
         
 class VIEW3D_PT_D3SplintModelText(bpy.types.Panel):

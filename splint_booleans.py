@@ -11,7 +11,9 @@ import cork
 from cork.cork_fns import cork_boolean
 from cork.lib import get_cork_filepath, validate_executable
 from cork.exceptions import *
-   
+
+import tracking
+  
 class D3SPLINT_OT_splint_cork_boolean(Operator):
     """Use external boolean engine when fast Blender solver has errors"""
     bl_idname = "d3guard.splint_cork_boolean"
@@ -29,13 +31,12 @@ class D3SPLINT_OT_splint_cork_boolean(Operator):
         except Exception as e:
             print('error in line 24')
             self.report({'ERROR'}, str(e))
+            tracking.trackUsage("D3Splint:FAILEDCorkBoolean")
             return {'CANCELLED'}
 
-        
         bme.verts.ensure_lookup_table()
         bme.edges.ensure_lookup_table()
         bme.faces.ensure_lookup_table()
-        
         
         #clean loose verts
         to_delete = []
@@ -108,6 +109,7 @@ class D3SPLINT_OT_splint_cork_boolean(Operator):
         ob.select = True
         ob.hide = False
         
+        tracking.trackUsage("D3Splint:SplintBooleanCORK")
         return {'FINISHED'}
 
     def invoke(self, context, event):

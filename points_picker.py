@@ -29,16 +29,19 @@ class PointPicker(object):
         self.snap_ob = snap_object
         self.started = False
         self.b_pts = []  #vectors representing locations of points
+        self.normals = []
         self.labels = [] #strings to be drawn above points
         self.selected = -1
         self.hovered = [None, -1]
         
         self.grab_undo_loc = None
+        self.grab_undo_no = None
         self.mouse = (None, None)
     
     def grab_initiate(self):
         if self.selected != -1:
             self.grab_undo_loc = self.b_pts[self.selected]
+            self.grab_undo_mp = self.normals[self.selected]
             return True
         
         else:
@@ -57,6 +60,8 @@ class PointPicker(object):
         if self.snap_type == 'SCENE':
             
             mx = Matrix.Identity(4) #scene ray cast returns world coords
+            imx = Matrix.Identity(4)
+            no_mx = imx.to_3x3().transposed()
             if bversion() < '002.077.000':
                 res, obj, omx, loc, no = context.scene.ray_cast(ray_origin, ray_target)
             else:
@@ -72,11 +77,11 @@ class PointPicker(object):
                 view_direction = rv3d.view_rotation * Vector((0,0,-1))
                 plane_pt = self.grab_undo_loc
                 loc = intersect_line_plane(ray_origin, ray_target,plane_pt, view_direction)
-                
+                no = view_direction
         elif self.snap_type == 'OBJECT':
             mx = self.snap_ob.matrix_world
             imx = mx.inverted()
-            
+            no_mx = imx.to_3x3().transposed()
             if bversion() < '002.077.000':
                 loc, no, face_ind = self.snap_ob.ray_cast(imx * ray_origin, imx * ray_target)
                 if face_ind != -1:
@@ -91,6 +96,7 @@ class PointPicker(object):
             
         else:
             self.b_pts[self.selected] = mx * loc
+            self.normals[self.selected] = no_mx * no
         
     def grab_cancel(self):
         old_co =  self.grab_undo_loc
@@ -118,11 +124,14 @@ class PointPicker(object):
         hit = False
         if self.snap_type == 'SCENE':
             mx = Matrix.Identity(4)  #loc is given in world loc...no need to multiply by obj matrix
+            imx = Matrix.Identity(4)
+            no_mx = Matrix.Identity(3)
             if bversion() < '002.077.000':
                 res, obj, omx, loc, no = context.scene.ray_cast(ray_origin, ray_target)  #changed in 2.77
             else:
                 res, loc, no, ind, obj, omx = context.scene.ray_cast(ray_origin, view_vector)
-                
+                iomx = omx.inverted()
+                no_mx = iomx.to_3x3().transposed()
             hit = res
             if not hit:
                 #cast the ray into a plane a
@@ -140,6 +149,7 @@ class PointPicker(object):
         elif self.snap_type == 'OBJECT':
             mx = self.snap_ob.matrix_world
             imx = mx.inverted()
+            no_mx = imx.to_3x3().transposed()
             
             if bversion() < '002.077.000':
                 loc, no, face_ind = self.snap_ob.ray_cast(imx * ray_origin, imx * ray_target)
@@ -159,6 +169,7 @@ class PointPicker(object):
         
         if self.hovered[0] == None:  #adding in a new point
             self.b_pts.append(mx * loc)
+            self.normals.append(no_mx * no)
             self.labels.append(label)
             return True    
         if self.hovered[0] == 'POINT':
@@ -170,10 +181,12 @@ class PointPicker(object):
             if not self.hovered[0] == 'POINT': return
             self.b_pts.pop(self.hovered[1])
             self.labels.pop(self.hovered[1])
+            self.normals.pop(self.hovered[1])
         else:
             if self.selected == -1: return
             self.b_pts.pop(self.selected)
             self.labels.pop(self.selected)
+            self.normals.pop(self.selected)
                         
 
     def hover(self,context,x,y):

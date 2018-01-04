@@ -2011,7 +2011,7 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         bpy.ops.sculpt.detail_flood_fill()
         bpy.ops.object.mode_set(mode = 'OBJECT')
         
-        if 'Displace' not in based_obj.modifers:
+        if 'Displace' not in based_obj.modifiers:
             mod = based_obj.modifiers.new('Displace', type = 'DISPLACE')
             mod.mid_level = 0.85
             mod.strength = -1
