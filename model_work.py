@@ -784,6 +784,7 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
     mode_items = {('BEST_FIT','BEST_FIT','BEST_FIT'), ('LOCAL_Z','LOCAL_Z','LOCAL_Z'),('WORLD_Z','WORLD_Z','WORLD_Z')}
     mode = bpy.props.EnumProperty(name = 'Base Mode', items = mode_items)
     
+    batch_mode = bpy.props.BoolProperty(name = 'Batch Mode', default = False, description = 'Will do all selected models, may take 1 minute per model, ')
     @classmethod
     def poll(cls, context):
         if context.mode == "OBJECT" and context.object != None and context.object.type == 'MESH':
@@ -793,8 +794,25 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         
     
         
+    def invoke(self,context,event):
+        
+        return context.window_manager.invoke_props_dialog(self)
+        
     
-    def execute(self, context):
+    def execute(self,context):
+        
+        if self.batch_mode:
+            for ob in context.selected_objects:
+                if ob.type != 'MESH': continue
+                
+                self.exe_tool(context, ob)
+   
+        else:
+            self.exe_tool(context, context.object)
+            
+        return {'FINISHED'}
+        
+    def exe_tool(self, context, ob):
         
         def clean_geom(bme):
             #make sure there are no node_verts
@@ -963,12 +981,12 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         
         start_global = time.time()
         
-        ob = context.object
+        
         mx = ob.matrix_world
         imx = mx.inverted()
         
         bme = bmesh.new()
-        bme.from_mesh(context.object.data)
+        bme.from_mesh(ob.data)
         
         bme.verts.ensure_lookup_table()
         bme.edges.ensure_lookup_table()
@@ -1154,19 +1172,19 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
             f.normal_flip()
         
         
-        bme.to_mesh(context.object.data)
-        context.object.data.update()
+        bme.to_mesh(ob.data)
+        ob.data.update()
         
-        if 'Smooth Base' not in context.object.vertex_groups:
-            sgroup = context.object.vertex_groups.new('Smooth Base')
+        if 'Smooth Base' not in ob.vertex_groups:
+            sgroup = ob.vertex_groups.new('Smooth Base')
         else:
-            sgroup = context.object.vertex_groups.get('Smooth Base')
+            sgroup = ob.vertex_groups.get('Smooth Base')
         sgroup.add([v.index for v in smooth_verts], 1, type = 'REPLACE')
         
-        if 'Smoooth Base' not in context.object.modifiers:
-            smod = context.object.modifiers.new('Smooth Base', type = 'SMOOTH')
+        if 'Smoooth Base' not in ob.modifiers:
+            smod = ob.modifiers.new('Smooth Base', type = 'SMOOTH')
         else:
-            smod = context.object.modifiers['Smooth Base']
+            smod = ob.modifiers['Smooth Base']
         smod.vertex_group = 'Smooth Base'
         smod.iterations = self.smooth_iterations
         
@@ -1174,7 +1192,7 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         
         print('Took %f seconds to finish entire operator' % (time.time() - start_global))
          
-        return {'FINISHED'}
+        return
         
 class D3PLINT_OT_ortho_model_base(bpy.types.Operator):
     """Simple ortho base with height 5 - 50mm """
@@ -2292,6 +2310,7 @@ class VerticaBasePoints(PointPicker):
         pmx = pad_ob.matrix_world
         ipmx = pmx.inverted()
         p_nomx = ipmx.to_3x3().transposed()
+        p_nomx.normalize()
         
         distal_ob = bpy.data.objects.get('Distal Cut')
         distal_me = pad_ob.data
@@ -2322,20 +2341,20 @@ class VerticaBasePoints(PointPicker):
         self.plane_center = distal_ob.matrix_world.to_translation()
         
         if len(self.b_pts) > 1:
-            self.b_pts[1] = pad_ob.matrix_world * pad_me.vertices[0].co
+            self.b_pts[1] = pad_ob.matrix_world * pad_me.vertices[0].co - .5 * p_nomx * pad_me.vertices[0].normal
             self.labels[1] = 'Posterior A'
             self.normals[1] = p_nomx * pad_me.vertices.normal
         else:
-            self.b_pts.append(pad_ob.matrix_world * pad_me.vertices[0].co)
+            self.b_pts.append(pad_ob.matrix_world * pad_me.vertices[0].co - .5 * p_nomx * pad_me.vertices[0].normal)
             self.labels.append('Posterior A')
             self.normals.append(p_nomx * pad_me.vertices[0].normal)
             
         if len(self.b_pts) > 2:
-            self.b_pts[2] = pad_ob.matrix_world * pad_me.vertices[16].co
+            self.b_pts[2] = pad_ob.matrix_world * pad_me.vertices[16].co - .5 * p_nomx * pad_me.vertices[0].normal
             self.labels[2] = 'Posterior B'
             self.normals[2] = p_nomx * pad_me.vertices[16].normal
         else:
-            self.b_pts.append(pad_ob.matrix_world * pad_me.vertices[16].co)
+            self.b_pts.append(pad_ob.matrix_world * pad_me.vertices[16].co - .5 * p_nomx * pad_me.vertices[0].normal)
             self.labels.append('Posterior B')
             self.normals.append(p_nomx * pad_me.vertices[16].normal)
             
@@ -2643,6 +2662,16 @@ class VerticaBasePoints(PointPicker):
         
         return
     
+    def delete_recent(self):
+        
+        if len(self.b_pts):
+            self.b_pts.pop()
+            self.normals.pop()
+            self.labels.pop()
+            
+            
+        
+        
     def finish(self, context):
         
         start = time.time()
@@ -2650,12 +2679,54 @@ class VerticaBasePoints(PointPicker):
         
         if 'Meta Base' not in bpy.data.objects: return
         if 'Distal Cut' not in bpy.data.objects: return
+        if 'Base Plane' not in bpy.data.objects: return
         
         distal_cut = bpy.data.objects.get('Distal Cut')
-           
+        bplane = bpy.data.objects.get('Base Plane')
+                                      
+                                      
+                                         
         meta_obj = bpy.data.objects.get('Meta Base')
+        mx = meta_obj.matrix_world
+        imx = mx.inverted()
+        
         me = meta_obj.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
-        print_base = bpy.data.objects.new('Print Base', me)
+        me.name = self.snap_ob.name + ':Print Base'
+        bme = bmesh.new()
+        bme.from_mesh(me)
+        
+        bplane = bpy.data.objects.get('Base Plane')
+        bmx = bplane.matrix_world
+        ibmx = bmx.inverted()
+        
+        pt = bmx.to_translation()
+        no = ibmx.to_3x3().transposed() * Vector((0,0,1))
+        
+        
+        local_pt = imx * (pt - .1 * no)
+        local_no = imx.to_3x3() * no
+        
+        gdict = bmesh.ops.bisect_plane(bme, geom = bme.faces[:]+bme.edges[:]+bme.verts[:], 
+                               plane_co = local_pt, 
+                               plane_no = local_no,
+                               clear_outer = True)
+        
+        
+        bme.verts.ensure_lookup_table()
+        bme.edges.ensure_lookup_table()
+        bme.faces.ensure_lookup_table()
+        eds_non_man = [ed for ed in bme.edges if len(ed.link_faces)  == 1]
+        
+        loops = edge_loops_from_bmedges(bme, [ed.index for ed in eds_non_man])
+        for l in loops:
+            if l[0] != l[-1]: continue
+            l.pop()
+            bme.faces.new([bme.verts[i] for i in l])
+        
+        
+        print_base = bpy.data.objects.new(self.snap_ob.name + ':Print Base', me)
+        bme.to_mesh(me)
+        bme.free()
         
         mx = meta_obj.matrix_world
         print_base.matrix_world = mx
@@ -2690,21 +2761,7 @@ class VerticaBasePoints(PointPicker):
             self.snap_ob.modifiers.remove(mod)
             
         self.snap_ob.data = final_me
-        #bplane = bpy.data.obejects.get('Base Plane')
-        #bmx = bplane.matrix_world
-        #ibmx = bme.inverted()
         
-        #pt = bmx.to_translation()
-        #no = ibmx.to_3x3().transposed() * Vector((0,0,1))
-        
-        
-        #local_pt = imx * (pt + .005 * no)
-        #local_no = imx.to_3x3() * no
-        
-        #gdict = bmesh.ops.bisect_plane(bme, geom = bme.faces[:]+bme.edges[:]+bme.verts[:], 
-        #                       plane_co = local_pt, 
-        #                       plane_no = local_no,
-        #                       clear_outer = True)
         #
     def draw_extra(self, context):
 
@@ -2806,7 +2863,7 @@ class D3Tool_OT_model_vertical_base(bpy.types.Operator):
             elif len(self.crv.b_pts) == 3:
                 txt = "Vertical Orientation"
                 self.crv.add_vertical_point(context, x,y, label = txt)
-                help_txt = "Change view and click to place vertical orientation \n Use Up and Dn Arrows to translate plane"
+                help_txt = "Change view and click to place vertical orientation \n Use Up and Dn Arrows to translate plane \n Press B to preview the base \n Press enter to finalize"
                 self.help_box.raw_text = help_txt
                 self.help_box.format_and_wrap_text()
                 
@@ -2819,7 +2876,39 @@ class D3Tool_OT_model_vertical_base(bpy.types.Operator):
             return 'main'
         
         if event.type == 'DEL' and event.value == 'PRESS':
-            self.crv.click_delete_point()
+            self.crv.delete_recent()
+            
+            if len(self.crv.b_pts) == 0:
+                help_txt = "Left click on the bottom flat portion of the model"
+                self.help_box.raw_text = help_txt
+                self.help_box.format_and_wrap_text()
+                return 'main'
+            
+            
+            if len(self.crv.b_pts) == 1:
+
+                help_txt = help_txt = "Left click on posterior heel of model side A"
+                self.help_box.raw_text = help_txt
+                self.help_box.format_and_wrap_text()
+                return 'main'
+        
+            elif len(self.crv.b_pts) == 2:
+                
+                help_txt = help_txt = "Left click on posterior heel of model side B"
+                
+                self.help_box.raw_text = help_txt
+                self.help_box.format_and_wrap_text()
+                
+                return 'main'
+        
+        
+            elif len(self.crv.b_pts) == 3:
+                help_txt = "Left Click on vertical part of model near midline"
+                self.help_box.raw_text = help_txt
+                self.help_box.format_and_wrap_text()
+                
+                return 'main'
+            
             return 'main'
             
         if event.type == 'RET' and event.value == 'PRESS':

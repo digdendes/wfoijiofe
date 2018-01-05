@@ -352,6 +352,10 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def invoke(self,context, event):
+        
+        if len(context.scene.odc_splints) == 0:
+            self.report({'ERROR'}, "Need to mark splint and opposing models first")
+            return {'CANCELLED'}
         n = context.scene.odc_splint_index
         self.splint = context.scene.odc_splints[n]    
         
@@ -916,8 +920,10 @@ class D3SPLINT_OT_pick_model(bpy.types.Operator):
             mat = bpy.data.materials.get('Box Mat')
         
         # Assign it to object
-        if self.ob.data.materials:
+        if "Model Mat" in self.ob.data.materials:
             # assign to 1st material slot
+            j = self.ob.active_material_index
+            self.object.material_slots[j].material = mat
             self.ob.data.materials[0] = mat
         else:
             # no slots

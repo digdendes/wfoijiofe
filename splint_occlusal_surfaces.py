@@ -773,8 +773,18 @@ class D3SPLINT_OT_splint_subtract_posterior_surface(bpy.types.Operator):
             self.report({'ERROR'}, 'Need to generate functional surface first')
             return {'CANCELLED'}
         
-        print('got the models')
-        Plane.data.update()
+        if len(Shell.modifiers):
+            old_data = Shell.data
+            new_data = Shell.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+            Shell.data = None
+        
+            bpy.meshs.remove(old_data)
+            for mod in Shell.modifiers:
+                Shell.modifiers.remove(mod)
+            
+            Shell.data = new_data
+        
+        
         high_verts = []
         bme = bmesh.new()
         bme.from_mesh(Plane.data)

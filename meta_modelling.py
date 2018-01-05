@@ -475,12 +475,16 @@ class D3SPLINT_OT_splint_join_meta_to_shell(bpy.types.Operator):
         
         if Shell == None:
             self.report({'ERROR'}, 'Need to calculate splint shell first')
+            return {'CANCELLED'}
         
         if Rim == None:
-            self.report({'ERROR'}, 'Need to calculate rim first')
-            
+            self.report({'ERROR'}, 'Need to add virtual wax first')
+            return {'CANCELLED'}
+        if len(Rim.data.elements) == 0:
+            self.report({'ERROR'}, 'No new virtual wax to fuse')
+            return {'CANCELLED'}
+             
         tracking.trackUsage("D3Splint:JoinVirtualWax",None)
-        
         
         rim_me = Rim.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW' )
         rim_ob = bpy.data.objects.new('Virtual Wax Mesh', rim_me)
@@ -491,6 +495,10 @@ class D3SPLINT_OT_splint_join_meta_to_shell(bpy.types.Operator):
         bool_mod.operation = 'UNION'
         bool_mod.object = rim_ob
         Rim.hide = True
+        
+        for ele in Rim.data.elements:
+            Rim.data.elements.reomve(ele)
+            
         rim_ob.hide = True
         Shell.hide = False
         

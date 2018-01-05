@@ -3483,7 +3483,7 @@ class D3SPLINT_OT_splint_subtract_surface(bpy.types.Operator):
         items=(("BMESH", "Bmesh", "Faster/More Errors"),
                ("CARVE", "Carve", "Slower/Less Errors"),
                ("PROJECTION", "Projection", "Fastest/Least Errors")),
-        default = "BMESH")
+        default = "PROJECTION")
     
     @classmethod
     def poll(cls, context):
@@ -3870,9 +3870,10 @@ class D3SPLINT_OT_splint_reset_functional_surface(bpy.types.Operator):
         bme.verts.ensure_lookup_table()
         
         #reset occusal plane if animate articulator has happened already
-        if "AnimateArticulator" in splint.ops_string:
-            for v in bme.verts:
-                v.co[2] = 0
+        
+        for v in bme.verts:
+            v.co[2] = 0
+        
             
             
         bme.to_mesh(Plane.data)
@@ -4115,7 +4116,7 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
     bl_label = "Create Splint Spacer"
     bl_options = {'REGISTER', 'UNDO'}
     
-    radius = FloatProperty(default = .12 , min = .07, max = 1, description = 'Thickness of Offset')
+    radius = FloatProperty(default = .12 , min = .01, max = 1, description = 'Thickness of Offset')
     resolution = FloatProperty(default = 1.5, description = 'Mesh resolution. 1.5 seems ok?')
     scale = FloatProperty(default = 10, description = 'Scale up to make it better')
     
@@ -4316,7 +4317,7 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
                 v.co = imx * mx_check * co
                 v.select_set(True)
             
-            elif d > self.radius and d < (self.radius + .02):
+            elif d > self.radius and d < (self.radius + .05):
                 co = loc + (self.radius + .002) * no
                 n_too_far += 1
                 
