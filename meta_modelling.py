@@ -525,10 +525,6 @@ class D3SPLINT_OT_blockout_splint_shell(bpy.types.Operator):
     def poll(cls, context):
         #restoration exists and is in scene
         return  True
-
-    def invoke(self,context, evenet):
-        
-        return context.window_manager.invoke_props_dialog(self)
     
     def execute(self, context):
         tracking.trackUsage("D3Splint:BlockoutSplintConcavities",None)

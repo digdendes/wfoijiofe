@@ -287,6 +287,15 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         col.operator("d3splint.anterior_deprogrammer_element", text = 'Anterior Deprogrammer Ramp')
         col.operator("d3splint.splint_join_deprogrammer", text = 'Fuse Deprogrammer')
         
+        
+        row = layout.row()
+        row.label('Auto Refinement Tools')
+        row = layout.row()
+        col = row.column()
+        col.operator("d3splint.auto_sculpt_concavities", text = 'Auto Sculpt Concavities')
+        col.operator("d3splint.meta_blockout_shell", text = 'Blockout Large Concavities')
+        
+        
         row = layout.row()
         row.prop(prefs, "show_occlusal_mod")
         if get_settings().show_occlusal_mod:
