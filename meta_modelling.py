@@ -8,12 +8,15 @@ import bmesh
 import math
 from mathutils import Vector, Matrix, Color, Quaternion, kdtree
 from mathutils.geometry import intersect_point_line
+from mathutils.bvhtree import BVHTree
 
 from mesh_cut import edge_loops_from_bmedges, space_evenly_on_path, flood_selection_faces
 from bpy_extras import view3d_utils
 from bpy.props import FloatProperty, BoolProperty, IntProperty, EnumProperty
 from textbox import TextBox
 from curve import CurveDataManager, PolyLineKnife
+
+import survey_utils
 import tracking
 
 def arch_crv_draw_callback(self, context):  
@@ -497,7 +500,7 @@ class D3SPLINT_OT_splint_join_meta_to_shell(bpy.types.Operator):
         Rim.hide = True
         
         for ele in Rim.data.elements:
-            Rim.data.elements.reomve(ele)
+            Rim.data.elements.remove(ele)
             
         rim_ob.hide = True
         Shell.hide = False
@@ -507,13 +510,411 @@ class D3SPLINT_OT_splint_join_meta_to_shell(bpy.types.Operator):
         splint.ops_string += 'JoinRim:VirtualWax' 
         return {'FINISHED'}
     
+class D3SPLINT_OT_blockout_splint_shell(bpy.types.Operator):
+    '''Blockout large undercuts in the splint'''
+    bl_idname = "d3splint.meta_blockout_shell"
+    bl_label = "Meta Blockout Shell"
+    bl_options = {'REGISTER','UNDO'}
+    
+    world = bpy.props.BoolProperty(default = True, name = "Use world coordinate for calculation...almost always should be true.")
+    #smooth = bpy.props.BoolProperty(default = True, name = "Smooth the outline.  Slightly less acuurate in some situations but more accurate in others.  Default True for best results")
+    resolution = FloatProperty(default = 1.5, min = 0.5, max =3, description = 'Mesh resolution. Lower numbers are slower, bigger numbers less accurate')
+    threshold = FloatProperty(default = .09, min = .001, max = .2, description = 'angle to blockout.  .09 is about 5 degrees, .17 is 10degrees.0001 no undercut allowed.')
+    
+    @classmethod
+    def poll(cls, context):
+        #restoration exists and is in scene
+        return  True
+
+    def invoke(self,context, evenet):
         
+        return context.window_manager.invoke_props_dialog(self)
+    
+    def execute(self, context):
+        tracking.trackUsage("D3Splint:BlockoutSplintConcavities",None)
+        splint = context.scene.odc_splints[0]
+        
+        Shell = bpy.data.objects.get('Splint Shell')
+        if Shell == None:
+            self.report('ERROR','Need to have a splint shell created')
+            return {'CANCELLED'}
+                
+
+        if len(Shell.modifiers):
+            old_data = Shell.data
+            new_data = Shell.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+            
+            for mod in Shell.modifiers:
+                Shell.modifiers.remove(mod)
+            
+            Shell.data = new_data
+            bpy.data.meshes.remove(old_data)       
+            print('Applied modifiers')
+        
+        #if False:
+        #    context.scene.objects.active = Shell
+        #    Shell.select = True
+        #    bpy.ops.object.mode_set(mode = 'SCULPT')
+        #    if not Shell.use_dynamic_topology_sculpting:
+        #        bpy.ops.sculpt.dynamic_topology_toggle()
+        #    context.scene.tool_settings.sculpt.detail_type_method = 'CONSTANT'
+        #    context.scene.tool_settings.sculpt.constant_detail_resolution = 2
+        #    bpy.ops.sculpt.detail_flood_fill()
+        #    bpy.ops.object.mode_set(mode = 'OBJECT')
+        
+        #careful, this can get expensive with multires    
+        bme = bmesh.new()
+        bme.from_mesh(Shell.data)
+        bme.verts.ensure_lookup_table()
+        bme.edges.ensure_lookup_table()
+        bme.faces.ensure_lookup_table()
+        
+        bme.normal_update()
+        
+        bvh = BVHTree.FromBMesh(bme)
+        #keep track of the world matrix
+        
+        Z = Vector((0,0,1))  #the splint is more more less aligned with occlusal plane
+        
+        mx = Shell.matrix_world
+        epsilon = .000009
+        undercut_vectors = []
+        verts_seen = set()
+        
+        radius = .5
+        S = 6
+        
+        
+        for f in bme.faces:
+            if f.normal.dot(Z) > self.threshold:
+                for v in f.verts:
+                    if v in verts_seen: continue
+                    
+                    loc, no, ind, d = bvh.ray_cast(v.co + epsilon * Z, Z)
+                    if not loc: continue
+                    if no.dot(Z) > epsilon: continue 
+                    if loc and d > radius/2:
+                        undercut_vectors += [(v.co, loc, d)]
+                
+            elif f.normal.dot(Z) < -self.threshold:
+                for v in f.verts:
+                    if v in verts_seen: continue
+                    
+                    loc, no, ind, d = bvh.ray_cast(v.co - epsilon * Z, -Z)
+                    if not loc: continue
+                    if no.dot(Z) < -epsilon: continue 
+                    if loc and d > radius/2:
+                        undercut_vectors += [(v.co, loc, d)]
+        
+        
+        
+        #bme_new = bmesh.new()
+        #for ele in undercut_vectors:
+        #    v0 = bme_new.verts.new(ele[0])
+        #    v1 = bme_new.verts.new(ele[1])
+        #    bme_new.edges.new((v0, v1))
+            
+            
+        #me = bpy.data.meshes.new('Skeleton')
+        #ob = bpy.data.objects.new('Skeleton', me)
+        #bme_new.to_mesh(me)
+        #ob.matrix_world = mx
+        #context.scene.objects.link(ob)
+        #bme_new.free()
+        #bme.free()
+        #return {'FINISHED'}
+        
+        print('found %i undercut vectors' % len(undercut_vectors))
+        
+        if 'Splint Blockot Meta' in bpy.data.metaballs:
+            
+            print('cleaning out old metaball data')
+            meta_data = bpy.data.metaballs.get('Splint Blockout Meta')
+            meta_obj = bpy.data.objects.get('Blockout Mesh')
+            for ele in meta_data.elements:
+                meta_data.elements.remove(ele)
+                
+            print('cleaned out old metaball data')
+        else:
+            meta_data = bpy.data.metaballs.new('Splint Blockout Meta')
+            meta_obj = bpy.data.objects.new('Blockout Mesh', meta_data)
+            meta_data.resolution = self.resolution
+            meta_data.render_resolution = self.resolution
+            context.scene.objects.link(meta_obj)
+        
+        print('adding in new metaball data')
+        for ele in undercut_vectors:
+            
+            
+            mb = meta_data.elements.new(type = 'BALL')
+            mb.co = S * ele[0]
+            mb.radius = S * radius
+            
+            mb = meta_data.elements.new(type = 'BALL')
+            mb.co = S * ele[1]
+            mb.radius = S * radius
+            
+            vec = ele[1] - ele[0]
+            steps = math.ceil(2 * vec.length/radius)
+            vec.normalize() 
+               
+            for i in range(0,steps):
+                mb = meta_data.elements.new(type = 'BALL')
+                mb.co = S * ( ele[0] + i * radius/2 *  vec)
+                mb.radius = S * radius
+            
+            
+        print('added in new metaball data')
+        q = mx.to_quaternion()
+        Rmx = q.to_matrix().to_4x4()
+        L = Matrix.Translation(mx.to_translation())
+        Smx = Matrix.Scale(1/S, 4)
+         
+        print('setting world matrix')  
+        meta_obj.matrix_world =  L * Rmx * Smx
+        print('udating scene')
+        context.scene.update()
+        print('getting meta mesh')
+        me = meta_obj.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+        print('got meta mesh')
+        
+        bme.free()
+        del bvh
+        
+        print('freed bmesh and made a new one')
+        bme = bmesh.new()
+        bme.from_mesh(me)
+        bme.verts.ensure_lookup_table()
+        bme.edges.ensure_lookup_table()
+        bme.faces.ensure_lookup_table()
+        bme.transform(L * Rmx * Smx)
+        
+        total_faces = set(bme.faces[:])
+        islands = []
+        iters = 0
+        while len(total_faces) and iters < 100:
+            iters += 1
+            seed = total_faces.pop()
+            island = flood_selection_faces(bme, {}, seed, max_iters = 10000)
+            islands += [island]
+            total_faces.difference_update(island)
+            
+        del_faces = set()
+        for isl in islands:
+            if len(isl) < 3000:
+                del_faces.update(isl)
+        
+        bmesh.ops.delete(bme, geom = list(del_faces), context = 3)
+        del_verts = []
+        for v in bme.verts:
+            if all([f in del_faces for f in v.link_faces]):
+                del_verts += [v]        
+        bmesh.ops.delete(bme, geom = del_verts, context = 1)
+        
+        
+        del_edges = []
+        for ed in bme.edges:
+            if len(ed.link_faces) == 0:
+                del_edges += [ed]
+        bmesh.ops.delete(bme, geom = del_edges, context = 4) 
+            
+        bme.to_mesh(me)
+        bme.free()
+        
+        b_ob = bpy.data.objects.new('Splint Blockout', me)
+        #b_ob.matrix_world = Shell.matrix_world
+        context.scene.objects.link(b_ob)
+        
+        context.scene.objects.unlink(meta_obj)
+        bpy.data.objects.remove(meta_obj)
+        bpy.data.metaballs.remove(meta_data)
+        
+        mod = Shell.modifiers.new('Blockout', type = 'BOOLEAN')
+        mod.operation = 'UNION'
+        mod.solver = 'CARVE'
+        mod.object = b_ob
+        
+        b_ob.hide = True
+        return {'FINISHED'}        
+
+class D3SPLINT_OT_sculpt_concavities(bpy.types.Operator):
+    '''Blend sharp concavties by adding mateiral or by smoothing, good for small crevices'''
+    bl_idname = 'd3splint.auto_sculpt_concavities'
+    bl_label = "Auto Sculpt Concavities"
+    bl_options = {'REGISTER','UNDO'}
+    
+    
+    #smooth = bpy.props.BoolProperty(default = True, name = "Smooth the outline.  Slightly less acuurate in some situations but more accurate in others.  Default True for best results")
+    radius = FloatProperty(default = 1.5, min = 0.5, max =3, description = 'Radius of area to fill in')
+    strength = FloatProperty(default = .6 , min = .1, max = 1, description = 'how strong to apply the brush')
+    angle = bpy.props.IntProperty(default = 30, name = "Crease Angle", min = 25, max = 50, description = 'How sharp a crevice needs to be to fill, bigger number means only really sharp creases')
+    
+    modes = ['FRONT', 'LEFT', 'RIGHT', 'BACK', 'TOP','BOTTOM', 'CURRENT_VIEW']
+    mode_items = []
+    for m in modes:
+        mode_items += [(m, m, m)]
+        
+    view = EnumProperty(name = 'View Direction', items = mode_items, default = 'TOP')
+    
+    #views = ['FRONT', 'BACK', 'LEFT','RIGHT']
+    @classmethod
+    def poll(cls, context):
+        #restoration exists and is in scene
+        return  True
+
+    def invoke(self,context, evenet):
+        
+        return context.window_manager.invoke_props_dialog(self)
+    
+    def execute(self, context):
+        tracking.trackUsage("D3Splint:SculptSplintConcavities",None)
+        
+        Shell = bpy.data.objects.get('Splint Shell')
+        if Shell == None:
+            self.report('ERROR','Need to have a splint shell created')
+            return {'CANCELLED'}
+                
+        context.scene.objects.active = Shell
+        Shell.select = True
+        Shell.hide = False
+        
+        if len(Shell.modifiers):
+            for mod in Shell.modifiers:            
+                bpy.ops.object.modifier_apply(modifier = mod.name)      
+            print('Applied modifiers')
+        
+        #if False:
+        #    context.scene.objects.active = Shell
+        #    Shell.select = True
+        #    bpy.ops.object.mode_set(mode = 'SCULPT')
+        #    if not Shell.use_dynamic_topology_sculpting:
+        #        bpy.ops.sculpt.dynamic_topology_toggle()
+        #    context.scene.tool_settings.sculpt.detail_type_method = 'CONSTANT'
+        #    context.scene.tool_settings.sculpt.constant_detail_resolution = 2
+        #    bpy.ops.sculpt.detail_flood_fill()
+        #    bpy.ops.object.mode_set(mode = 'OBJECT')
+        
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        mx = Shell.matrix_world
+        imx = mx.inverted()
+        
+        #careful, this can get expensive with multires    
+        bme = bmesh.new()
+        bme.from_mesh(Shell.data)
+        bme.verts.ensure_lookup_table()
+        bme.edges.ensure_lookup_table()
+        bme.faces.ensure_lookup_table()
+        
+        bme.normal_update()
+        
+        sculpt_edges = []
+        sculpt_verts = set()
+        angle = self.angle * math.pi/180
+        for ed in bme.edges:
+            if ed.calc_face_angle_signed() <= -angle:
+                ed.select_set(True)
+                sculpt_edges += [ed]
+                sculpt_verts.update([ed.verts[0], ed.verts[1]])
+            else:
+                ed.select_set(False)
+                    
+        
+        sculpt_verts = list(sculpt_verts)
+        world_sculpt_verts = [mx * v.co for v in sculpt_verts]
+        
+        print('there are %i sculpt verts' % len(world_sculpt_verts))
+        bme.free()
+        
+        context.scene.objects.active = Shell
+        Shell.select = True
+        Shell.hide = False
+        bpy.ops.object.mode_set(mode = 'SCULPT')
+        bpy.ops.view3d.view_selected()
+        #if splint.jaw_type == 'MANDIBLE':
+        #    bpy.ops.view3d.viewnumpad(type = 'FRONT')
+        #else:
+        #    bpy.ops.view3d.viewnumpad(type = 'FRONT')
+        
+        if self.view != 'CURRENT_VIEW':
+            bpy.ops.view3d.viewnumpad(type = self.view)
+            
+        if not Shell.use_dynamic_topology_sculpting:
+            bpy.ops.sculpt.dynamic_topology_toggle()
+        
+        scene = context.scene
+        paint_settings = scene.tool_settings.unified_paint_settings
+        paint_settings.use_locked_size = True
+        paint_settings.unprojected_radius = self.radius
+        brush = bpy.data.brushes['Fill/Deepen']
+        scene.tool_settings.sculpt.brush = brush
+        scene.tool_settings.sculpt.detail_type_method = 'CONSTANT'
+        
+        
+        #if bversion() < '002.079.000':
+            #scene.tool_settings.sculpt.constant_detail = 50
+        #else:
+        #enforce 2.79
+        scene.tool_settings.sculpt.constant_detail_resolution = 2
+        
+        scene.tool_settings.sculpt.use_symmetry_x = False
+        scene.tool_settings.sculpt.use_symmetry_y = False
+        scene.tool_settings.sculpt.use_symmetry_z = False
+        brush.strength = self.strength
+        
+        brush.use_frontface = False
+        brush.stroke_method = 'DOTS'
+        
+        screen = bpy.context.window.screen
+        for area in screen.areas:
+            if area.type == 'VIEW_3D':
+                for reg in area.regions:
+                    if reg.type == 'WINDOW':
+                        break
+                for space in area.spaces:
+                    if space.type == 'VIEW_3D':
+                        break    
+                break
+        
+        override = bpy.context.copy()
+        override['area'] = area
+        override['region'] = reg
+        override['space_data'] = space
+        override['region_data'] = space.region_3d
+        override['active_object'] = Shell
+        override['object'] = Shell
+        override['sculpt_object'] = Shell
+        
+        
+        stroke = []
+        i = 0
+        for co in world_sculpt_verts:
+            #if i > 100: break
+            i += 1
+            mouse = view3d_utils.location_3d_to_region_2d(reg, space.region_3d, co)
+            l_co = imx * co
+            stroke = [{"name": "my_stroke",
+                        "mouse" : (mouse[0], mouse[1]),
+                        "pen_flip" : False,
+                        "is_start": True,
+                        "location": (l_co[0], l_co[1], l_co[2]),
+                        "pressure": 1,
+                        "size" : 30,
+                        "time": 1}]
+                      
+            bpy.ops.sculpt.brush_stroke(override, stroke=stroke, mode='NORMAL', ignore_background_click=False)
+        
+        bpy.ops.object.mode_set(mode = 'OBJECT')
+        return {'FINISHED'}
+    
 def register():
     bpy.utils.register_class(D3SPLINT_OT_draw_meta_curve)
     bpy.utils.register_class(D3SPLINT_OT_splint_virtual_wax_on_curve)
     bpy.utils.register_class(D3SPLINT_OT_splint_join_meta_to_shell)
     bpy.utils.register_class(D3SPLINT_OT_anterior_deprogrammer_element)
     bpy.utils.register_class(D3SPLINT_OT_splint_join_depro_to_shell)
+    bpy.utils.register_class(D3SPLINT_OT_blockout_splint_shell)
+    bpy.utils.register_class(D3SPLINT_OT_sculpt_concavities)
     
 def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_draw_meta_curve)
@@ -521,4 +922,6 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_splint_join_meta_to_shell)
     bpy.utils.unregister_class(D3SPLINT_OT_anterior_deprogrammer_element)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_join_depro_to_shell)
+    bpy.utils.unregister_class(D3SPLINT_OT_blockout_splint_shell)
+    bpy.utils.unregister_class(D3SPLINT_OT_sculpt_concavities)
     

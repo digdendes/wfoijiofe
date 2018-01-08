@@ -27,6 +27,47 @@ def thirty_steps(frame):
     return r
 
 
+def three_way_envelope_l(frame):
+    #protrusion
+    print('Frame number %i' % frame)
+    if frame < 60:
+        R = .2 + .8 * abs(math.sin(math.pi * frame/120))
+            
+            
+    #right excursion
+    elif frame >= 60 and frame < 120:
+        R = .2 + .8 * abs(math.sin(math.pi * (frame-60)/120))
+            
+    #left excursion
+    elif frame >=120 and frame < 180:
+        R = .2
+        
+    else:
+        R = .2
+        
+    return R
+            
+    
+    
+def three_way_envelope_r(frame):
+    #protrusion
+    print('Frame number %i' % frame)
+    if frame < 60:
+        R = .2 + .8 * abs(math.sin(math.pi * frame/120))
+             
+    #right excursion
+    elif frame >= 60 and frame < 120:
+        R = .2        
+            
+    #left excursion
+    elif frame >=120 and frame < 180:
+        R = .2 + .8 * abs(math.sin(math.pi * (frame-120)/120))
+        
+    else:
+        R = .2
+        
+    return R
+    
 def find_bone_drivers(amature_object, bone_name):
     # create an empty dictionary to store all found bones and drivers in
     boneDict = {}
@@ -65,7 +106,11 @@ def find_bone_drivers(amature_object, bone_name):
     
 bpy.app.driver_namespace['saw_tooth'] = saw_tooth
 bpy.app.driver_namespace['thirty_steps'] = thirty_steps
+bpy.app.driver_namespace['threeway_envelope_r'] = three_way_envelope_r
+bpy.app.driver_namespace['threeway_envelope_l'] = three_way_envelope_l
 
+
+            
     
 class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
     """Create Arcon Style semi adjustable articulator from parameters"""
@@ -89,12 +134,13 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         return True
     
     def execute(self, context):
-        tracking.trackUsage("D3Tool:GenArticulator",str((self.intra_condyle_width,                                                         self.intra_condyle_width,
+        tracking.trackUsage("D3Tool:GenArticulator",str((self.intra_condyle_width,
+                                                         self.intra_condyle_width,
                                                          self.bennet_angle,
                                                          self.canine_guidance,
                                                          self.incisal_guidance)))
         context.scene.frame_start = 0
-        context.scene.frame_end = 900
+        context.scene.frame_end = 180
         context.scene.frame_set(0)
         
         #add 2 bezier paths named right and left condyle, move them to the condyle width
@@ -274,6 +320,11 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         
         bpy.ops.object.mode_set(mode = 'POSE')
         #now set the pose constrints
+        if 'threeway_envelope_r' not in bpy.app.driver_namespace:
+            bpy.app.driver_namespace['threeway_envelope_r'] = three_way_envelope_r
+        if 'threeway_envelope_l' not in bpy.app.driver_namespace:
+            bpy.app.driver_namespace['threeway_envelope_l'] = three_way_envelope_l
+                
         pboneR = art_arm.pose.bones.get('Right Condyle')
         cons = pboneR.constraints.new(type = 'FOLLOW_PATH')
         cons.target = rcp_obj
@@ -284,7 +335,7 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         v.targets[0].id_type = 'SCENE'
         v.targets[0].id = context.scene
         v.targets[0].data_path = "frame_current"
-        d.expression = ".2 + .8 * fmod(frame,30)/30"
+        d.expression = "threeway_envelope_r(frame)"
         
         
         pboneL = art_arm.pose.bones.get('Left Condyle')
@@ -297,7 +348,7 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         v.targets[0].id_type = 'SCENE'
         v.targets[0].id = context.scene
         v.targets[0].data_path = "frame_current"
-        d.expression = ".2 + .8 * floor(frame/30)/30"
+        d.expression = "threeway_envelope_l(frame)"
         
         cons = pboneR.constraints.new(type = 'LOCKED_TRACK')
         cons.target = art_arm
@@ -426,7 +477,7 @@ class D3Splint_OT_articulator_set_mode(bpy.types.Operator):
     bl_label = "Articulator Mode Set"
     bl_options = {'REGISTER', 'UNDO'}
     
-    modes = ['PROTRUSIVE', 'RIGHT_EXCURSION', 'LEFT_EXCURSION', 'RELAX_RAMP', 'FULL_ENVELOPE']
+    modes = ['PROTRUSIVE', 'RIGHT_EXCURSION', 'LEFT_EXCURSION', 'RELAX_RAMP', '3WAY_ENVELOPE','FULL_ENVELOPE']
     mode_items = []
     for m in modes:
         mode_items += [(m, m, m)]
@@ -503,7 +554,21 @@ class D3Splint_OT_articulator_set_mode(bpy.types.Operator):
             context.scene.frame_start = 0
             context.scene.frame_end = 60
             
+        elif self.mode == '3WAY_ENVELOPE':
             
+            if 'threeway_envelope_r' not in bpy.app.driver_namespace:
+                bpy.app.driver_namespace['threeway_envelope_r'] = three_way_envelope_r
+            if 'threeway_envelope_l' not in bpy.app.driver_namespace:
+                bpy.app.driver_namespace['threeway_envelope_l'] = three_way_envelope_l
+            #protrusion
+            dl.expression = 'threeway_envelope_l(frame)'
+            dr.expression = 'threeway_envelope_r(frame)'
+        
+            context.scene.frame_start = 0
+            context.scene.frame_end = 180
+            
+            
+                
         elif self.mode == 'FULL_ENVELOPE':
             
             dr.expression = ".2 + .8 * fmod(frame,30)/30"

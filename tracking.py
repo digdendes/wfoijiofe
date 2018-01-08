@@ -575,10 +575,10 @@ def trackInstalled(background=None):
         
         city, country, loc = request_to_ipinfo()
         
-        print('original loc')
-        print(loc)
+        #print('original loc')
+        #print(loc)
         err_loc = lat_long_error(loc)
-        print(err_loc)
+        #print(err_loc)
         
         payload = json.dumps({
                 "blender":bversion,
@@ -651,12 +651,12 @@ def trackUsage(function, param=None, background=None):
             bversion = "unknown"
 
         city, country, loc = request_to_ipinfo()
-        print('original loc')
-        print(loc)
-        print('errored location')
+        #print('original loc')
+        #print(loc)
+        #print('errored location')
         
         new_loc = lat_long_error(loc)
-        print(new_loc)
+        #print(new_loc)
         
         payload = json.dumps({
                 "blender":bversion,

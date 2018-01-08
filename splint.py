@@ -2285,8 +2285,8 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
         
         meta_data = bpy.data.metaballs.new('Splint Wax Rim')
         meta_obj = bpy.data.objects.new('Meta Surface', meta_data)
-        meta_data.resolution = .8
-        meta_data.render_resolution = .8
+        meta_data.resolution = .4
+        meta_data.render_resolution = .4
         context.scene.objects.link(meta_obj)
         
         #get world path of the maxillary curve
@@ -2952,8 +2952,8 @@ class D3SPLINT_OT_splint_add_rim_curve(bpy.types.Operator):
         else:
             meta_data = bpy.data.metaballs.new('Meta Wax')
             meta_obj = bpy.data.objects.new('Meta Wax', meta_data)
-            meta_data.resolution = .8
-            meta_data.render_resolution = .8
+            meta_data.resolution = .4
+            meta_data.render_resolution = .4
             context.scene.objects.link(meta_obj)
             meta_mx = meta_obj.matrix_world
         
@@ -3575,7 +3575,7 @@ class D3SPLINT_OT_splint_subtract_surface(bpy.types.Operator):
             bool_mod.object = Plane
         
         else:
-            shrink_mod = Shell.modifiers.nwe('Subtract Surface', type = 'SHRINKWRAP')
+            shrink_mod = Shell.modifiers.new('Subtract Surface', type = 'SHRINKWRAP')
             shrink_mod.wrap_method = 'PROJECT'
             if splint.jaw_type == 'MAXILLA':
                 shrink_mod.use_negative_direction = False

@@ -574,7 +574,9 @@ class D3SPLINT_OT_splint_manual_auto_surface(bpy.types.Operator):
             
         for ob in bpy.data.objects:
             ob.select = False
-            ob.hide = True
+            
+            if ob != Model:
+                ob.hide = True
         Model.select = True
         Model.hide = False
         context.scene.objects.active = Model
@@ -744,6 +746,10 @@ class D3SPLINT_OT_splint_subtract_posterior_surface(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     
+    #sculpt to
+    sculpt_to = bpy.props.BoolProperty(default = False, description = "Not only remove but pull some of the shell down to touch")
+    snap_limit = bpy.props.FloatProperty(default = 2.0, min = .25, max = 5.0, description = "Max distance the shell will snap to")
+    remesh = bpy.props.BoolProperty(default = True, description = "Not only remove but pull some of the shell down to touch")
     @classmethod
     def poll(cls, context):
         #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
@@ -776,21 +782,21 @@ class D3SPLINT_OT_splint_subtract_posterior_surface(bpy.types.Operator):
         if len(Shell.modifiers):
             old_data = Shell.data
             new_data = Shell.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
-            Shell.data = None
+            
         
-            bpy.meshs.remove(old_data)
+            
             for mod in Shell.modifiers:
                 Shell.modifiers.remove(mod)
             
             Shell.data = new_data
-        
+            bpy.data.meshes.remove(old_data)
         
         high_verts = []
         bme = bmesh.new()
         bme.from_mesh(Plane.data)
         bme.verts.ensure_lookup_table()
         
-        print('got a bmesh')
+        bvh  = BVHTree.FromObject(Model, context.scene)
         
         mx_p = Plane.matrix_world
         imx_p = mx_p.inverted()
@@ -808,14 +814,14 @@ class D3SPLINT_OT_splint_subtract_posterior_surface(bpy.types.Operator):
             ray_target = mx_p * v.co - 5 * Z
             ray_target2 = mx_p * v.co + .8 * Z
             
-            ok, loc, no, face_ind = Model.ray_cast(imx_s * ray_orig, imx_s * ray_target - imx_s*ray_orig)
+            loc, no, face_ind, d = bvh.ray_cast(imx_s * ray_orig, imx_s * ray_target - imx_s*ray_orig, 5)
         
-            if ok:
+            if loc:
                 high_verts += [v]
                 v.co = imx_p * (mx_s * loc - 0.8 * Z)
             else:
-                ok, loc, no, face_ind = Model.ray_cast(imx_s * ray_orig, imx_s * ray_target2 - imx_s*ray_orig, distance = 0.8)
-                if ok:
+                loc, no, face_ind, d = bvh.ray_cast(imx_s * ray_orig, imx_s * ray_target2 - imx_s*ray_orig, .8)
+                if loc:
                     high_verts += [v]
                     v.co = imx_p * (mx_s * loc - 0.8 * Z)
         
@@ -851,19 +857,40 @@ class D3SPLINT_OT_splint_subtract_posterior_surface(bpy.types.Operator):
         for v in sbme.verts:
             ray_orig = mx_s * v.co
             ray_target = mx_s * v.co + 5 * Z
+            ray_target2 = mx_s * v.co - self.snap_limit * Z
             ok, loc, no, face_ind = Plane.ray_cast(imx_p * ray_orig, imx_p * ray_target - imx_p*ray_orig)
             
             if ok:
                 v.co = imx_s * (mx_p * loc)
-                print('changing a vert')
+               
         
+            if self.sculpt_to:
+                if abs(v.normal.dot(Z)) < .2: continue
+                
+                
+                ok, loc, no, face_ind = Plane.ray_cast(imx_p * ray_orig, imx_p * ray_target2 - imx_p*ray_orig, distance = self.snap_limit)
+                if ok:
+                    v.co = imx_s * (mx_p * loc)
+                    
         sbme.to_mesh(Shell.data)
         Shell.data.update()
                 
         Plane.hide = True
         Shell.hide = False
+        Model.hide = False
         
-        splint.ops_string += 'SubtractSurface:'
+        if self.remesh:
+            context.scene.objects.active = Shell
+            Shell.select = True
+            bpy.ops.object.mode_set(mode = 'SCULPT')
+            if not Shell.use_dynamic_topology_sculpting:
+                bpy.ops.sculpt.dynamic_topology_toggle()
+            context.scene.tool_settings.sculpt.detail_type_method = 'CONSTANT'
+            context.scene.tool_settings.sculpt.constant_detail_resolution = 2
+            bpy.ops.sculpt.detail_flood_fill()
+            bpy.ops.object.mode_set(mode = 'OBJECT')
+        
+        splint.ops_string += 'SubtractPosteriorSurface:'
         return {'FINISHED'}
                     
 def register():
