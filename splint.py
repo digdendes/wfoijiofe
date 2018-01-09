@@ -2241,6 +2241,15 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
     
     
     meta_type = EnumProperty(name = 'Meta Type', items = [('CUBE','CUBE','CUBE'), ('ELLIPSOID', 'ELLIPSOID','ELLIPSOID')], default = 'CUBE')
+    width_offset = FloatProperty(name = 'Extra Wdith', default = 0.01, min = -3, max = 3)
+    thickenss_offset = FloatProperty(name = 'Extra Thickness', default = 0.01, min = -3, max = 3)
+    
+    anterior_projection = FloatProperty(name = 'Extra Anterior Width', default = 0.01, min = 0.0, max = 3)
+    
+    
+    flare = IntProperty(default = 0, min = -60, max = 60, description = 'Angle off of world Z')
+    anterior_segement = FloatProperty(name = 'AP Spread', default = 0.3, min = .15, max = .5)
+    
     @classmethod
     def poll(cls, context):
         #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
@@ -2297,7 +2306,7 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
         bme_max.edges.ensure_lookup_table()
         loops = edge_loops_from_bmedges(bme_max, [ed.index for ed in bme_max.edges])
         vs0 = [mx_max * bme_max.verts[i].co for i in loops[0]]
-        vs_even_max, eds0 = space_evenly_on_path(vs0, [(0,1),(1,2)], 60)
+        vs_even_max, eds0 = space_evenly_on_path(vs0, [(0,1),(1,2)], 100)
         
         #get world path of the mandibular curve
         me_mand = MandCurve.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
@@ -2307,7 +2316,7 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
         bme_mand.edges.ensure_lookup_table()
         loops = edge_loops_from_bmedges(bme_mand, [ed.index for ed in bme_mand.edges])
         vs0 = [mx_mand * bme_mand.verts[i].co for i in loops[0]]
-        vs_even_mand, eds0 = space_evenly_on_path(vs0, [(0,1),(1,2)], 60)
+        vs_even_mand, eds0 = space_evenly_on_path(vs0, [(0,1),(1,2)], 100)
         
         
         #check for tip to tail
@@ -2317,7 +2326,14 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
         
         Z = Vector((0,0,1))
         
-            
+        
+        max_x = max(vs_even_max, key = lambda x: x[0])
+        min_x = min(vs_even_max, key = lambda x: x[0])
+        A_ap = max_x[0]
+        P_ap = min_x[0]
+        ap_spread = max_x[0] - min_x[0]
+        
+        
         for i in range(1,len(vs_even_max)-1):
             
             #use maxilary curve for estimattino
@@ -2329,7 +2345,7 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
             v0_mand = vs_even_mand[i]
             center = .5 *  v0_0 + 0.5 * v0_mand
             
-            size_z = max(1, abs(v0_0[2] - v0_mand[2]))
+            size_z = max(1, abs(v0_0[2] - v0_mand[2] - 1))
             size_y = ((v0_0[0] - v0_mand[0])**2 + (v0_0[1] - v0_mand[1])**2)**.5
             size_y = max(3, size_y)
             
@@ -2346,14 +2362,45 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
             T.col[2] = Z
             quat = T.to_quaternion()
             
-                        
+            
             mb = meta_data.elements.new(type = self.meta_type)
-            mb.size_y = .5 * size_y
-            mb.size_z = .35 * size_z
+            
             mb.size_x = 1.5
-            mb.rotation = quat
+            
+            
+            if v0_0[0] > P_ap + (1-self.anterior_segement) * ap_spread:
+                
+                Qrot = Quaternion(X_c, math.pi/180 * self.flare)
+                Zprime = Qrot * Z
+            
+                Y_c = Zprime.cross(X_c)
+            
+            
+                T = Matrix.Identity(3)
+                T.col[0] = X_c
+                T.col[1] = Y_c
+                T.col[2] = Zprime
+                quat = T.to_quaternion()
+                
+                if v0_0[0] > A_ap - self.anterior_segement * ap_spread + .25 * self.anterior_segement * ap_spread:
+                    mb.size_y =  .5 * (size_y - 1.5 + self.width_offset) + self.anterior_projection
+                    mb.size_z = .35 * size_z + .5 * self.thickenss_offset
+                    mb.co = center + (.5 * self.width_offset + self.anterior_projection) * Y_c
+                    mb.rotation = quat
+                else:
+                    
+                    blend =  (v0_0[0] - (A_ap - self.anterior_segement * ap_spread))/(.25 * self.anterior_segement * ap_spread)
+                    mb.size_y =  .5 * (size_y - 1.5 + self.width_offset) + blend * self.anterior_projection
+                    mb.co = center + (.5 * self.width_offset + blend * self.anterior_projection) * Y_c
+                    mb.rotation = quat
+            else:          
+            
+                mb.size_y = .5 * (size_y - 1.5) + self.width_offset
+                mb.co = center
+                
+                mb.rotation = quat
             mb.stiffness = 2
-            mb.co = center
+            
             
         context.scene.update()
         me = meta_obj.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')

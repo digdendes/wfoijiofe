@@ -541,7 +541,7 @@ class D3SPLINT_OT_splint_manual_auto_surface(bpy.types.Operator):
             return {'PASS_THROUGH'}
         
         if nmode in {'finish','cancel'}:
-            context.space_data.show_manipulator = True
+            #context.space_data.show_manipulator = True
             
             if nmode == 'finish':
                 context.space_data.transform_manipulators = {'TRANSLATE', 'ROTATE'}
