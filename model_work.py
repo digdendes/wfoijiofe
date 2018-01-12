@@ -2021,7 +2021,7 @@ class D3Splint_OT_model_thicken2(bpy.types.Operator):
     def draw(self, context):
         layout = self.layout
         row = layout.row()
-        row.prop(self.radius)
+        row.prop(self, "radius")
 
 class VerticaBasePoints(PointPicker): 
     def __init__(self,context,snap_type ='SCENE', snap_object = None):

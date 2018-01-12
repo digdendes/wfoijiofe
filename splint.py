@@ -4211,6 +4211,7 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         n_elipse = 0
         n_ball = 0    
         for v in self.bme.verts:
+            if not len(v.link_edges): continue
             co = v.co
             R = .5 * max([ed.calc_length() for ed in v.link_edges])
             

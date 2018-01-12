@@ -615,6 +615,7 @@ class D3SPLINT_OT_splint_manual_auto_surface(bpy.types.Operator):
             Plane = bpy.data.objects.new('Posterior Plane', me)
             context.scene.objects.link(Plane)
         
+        
         pbme = bmesh.new()
         pbme.verts.ensure_lookup_table()
         pbme.edges.ensure_lookup_table()
@@ -664,6 +665,10 @@ class D3SPLINT_OT_splint_manual_auto_surface(bpy.types.Operator):
         bme_pln.faces.ensure_lookup_table()
         bvh = BVHTree.FromBMesh(bme_pln)
         
+        
+        #we are going to raycast the user world coordinate points
+        #into a grid, and identify all points in the grid from the local Z direction
+        #Then we will store the local location of the user picked coordinate in a dictionary
         key_verts = {}
         
         for loc in self.crv.b_pts:
@@ -696,10 +701,32 @@ class D3SPLINT_OT_splint_manual_auto_surface(bpy.types.Operator):
             kdtree.insert(v.co, v.index)
         
         kdtree.balance()
-        to_delete = []
+        
+        #raycast  the shell if we can
+        raycast_shell = False
+        if 'Splint Shell' in bpy.data.objects:
+            shell = bpy.data.objects.get('Splint Shell')
+            bvh_shell = BVHTree.FromObject(shell, context.scene)
+            mx_shell = shell.matrix_world
+            imx_shell = mx_shell.inverted()
+            Z_shell = imx_shell.to_3x3()*Z
+            raycast_shell = True
+            
+        
+        right_side = set()
+        left_side = set()
+        ray_casted = set()
+        
+        to_delete = set()
+        
         for v in bme_pln.verts:
             if v in key_verts:
                 v.co[2] = key_verts[v][2]
+               
+                if v.co[1] > 0:
+                    left_side.add(v)
+                else:
+                    right_side.add(v)
                 continue
                 
             results = kdtree.find_range(v.co, .5)
@@ -713,6 +740,10 @@ class D3SPLINT_OT_splint_manual_auto_surface(bpy.types.Operator):
                         
                 v_new *= 1/r_total
                 v.co[2] = v_new[2]
+                if v.co[1] > 0:
+                    left_side.add(v)
+                else:
+                    right_side.add(v)
                 continue
                         
             results = kdtree.find_range(v.co, 6)
@@ -726,18 +757,134 @@ class D3SPLINT_OT_splint_manual_auto_surface(bpy.types.Operator):
                         
                 v_new *= 1/r_total
                 v.co[2] = v_new[2]
+                if v.co[1] > 0:
+                    left_side.add(v)
+                else:
+                    right_side.add(v)
                 continue
             
-            to_delete += [v]
+            loc, no, index, d = bvh_shell.ray_cast(imx_shell * pmx * v.co, Z_shell)
+            if loc:
+                
+                ray_casted.add(v)
+                results = kdtree.find_n(v.co, 4)
+                N = len(results)
+                r_total = 0
+                v_new = Vector((0,0,0))
+                for res in results:
+                    r_total += (1/res[2])**2
+                    v_new += ((1/res[2])**2) * key_verts[bme_pln.verts[res[1]]]
+                        
+                v_new *= 1/r_total
+                v.co[2] = v_new[2]
+                continue
+
+        total_verts = ray_casted | left_side | right_side
+        
+        ant_left = max(left_side, key = lambda x: x.co[0])
+        ant_right = max(right_side, key = lambda x: x.co[0])
+        
+        new_verts = set()
+        dilation_verts = set()  
+        for v in total_verts:
+            for ed in v.link_edges:
+                v_new = ed.other_vert(v)
+                if v_new in total_verts or v_new in new_verts: 
+                    continue
+                else:
+                    new_verts.add(v_new)
+                    
+        print('adding %i new verts' % len(new_verts))
+        
+        
+        total_verts.update(new_verts)
+        dilation_verts.update(new_verts)
+        
+        #for v in ray_casted:
+        #    if v.co[1] > 0:
+        #        if v.co[0] > ant_left.co[0]:
+        #            to_delete.add(v)
+        #    else:
+        #        if v.co[0] > ant_right.co[0]:
+        #            to_delete.add(v)
+        
+        #print('added %i ray_casted' % len(ray_casted))
+        #total_verts = ray_casted | left_side | right_side
+        #total_verts.difference_update(to_delete)       
+        
+        #new_verts = set()   
+        #for v in total_verts:
+        #    for ed in v.link_edges:
+        #        v_new = ed.other_vert(v)
+        #        if v_new in total_verts: continue
+                
+        #        if v_new.co[1] > 0 and v_new.co[0] < ant_left.co[0]:
+        #            if v in to_delete:
+        #                new_verts.add(v)
+        #        if v_new.co[1] <= 0 and v_new.co[0] < ant_right.co[0]:
+        #            if v in to_delete:
+        #                new_verts.add(v)   
+        
+        #to_delete.difference_update(new_verts)
+        
+        #print('adding %i new verts' % len(new_verts))   
+        for j in range(0,3):
+            newer_verts = set()  
+            for v in new_verts:
+                for ed in v.link_edges:
+                    v_new = ed.other_vert(v)
+                    if v_new in total_verts or v_new in newer_verts:
+                        continue
+                     
+                    newer_verts.add(v_new)
+                    
             
-        bmesh.ops.delete(bme_pln, geom = to_delete, context = 1)
+                       
+            total_verts.update(newer_verts)
+            dilation_verts.update(newer_verts)
+            new_verts = newer_verts
+        
+        to_delete = set(bme_pln.verts[:]) - total_verts
+        
+        #filter out anteior dilation
+        for v in dilation_verts:
+            
+            if v.co[1] > 0 and v.co[0] > ant_left.co[0]:
+                to_delete.add(v)
+                continue
+            if v.co[1] <= 0 and v.co[0] > ant_right.co[0]:
+                to_delete.add(v)
+                continue
+                
+             
+            results = kdtree.find_n(v.co, 4)
+            N = len(results)
+            r_total = 0
+            v_new = Vector((0,0,0))
+            for res in results:
+                r_total += (1/res[2])**2
+                v_new += ((1/res[2])**2) * key_verts[bme_pln.verts[res[1]]]
+                        
+            v_new *= 1/r_total
+            v.co[2] = v_new[2]
+            
+        #filter out anteior dilation
+        for v in ray_casted:
+            if v.co[1] > 0 and v.co[0] > ant_left.co[0]:
+                to_delete.add(v)
+                continue
+            if v.co[1] <= 0 and v.co[0] > ant_right.co[0]:
+                to_delete.add(v)
+                continue
+                            
+        bmesh.ops.delete(bme_pln, geom = list(to_delete), context = 1)
         bme_pln.to_mesh(Plane.data)
         Plane.data.update()
         
         smod = Plane.modifiers.new('Smooth', type = 'SMOOTH')
         smod.iterations = 5
         smod.factor = 1
-        tracking.trackUsage("D3Splint:SplintManualSurface",None)
+        #tracking.trackUsage("D3Splint:SplintManualSurface",None)
 
 class D3SPLINT_OT_splint_subtract_posterior_surface(bpy.types.Operator):
     """Subtract Posterior Surface from Shell"""
@@ -801,8 +948,9 @@ class D3SPLINT_OT_splint_subtract_posterior_surface(bpy.types.Operator):
         mx_p = Plane.matrix_world
         imx_p = mx_p.inverted()
         
-        mx_s = Model.matrix_world
-        imx_s = mx_s.inverted()
+        mx_m = Model.matrix_world
+        imx_m = mx_m.inverted()
+        
         
         if splint.jaw_type == 'MAXILLA':
             Z = Vector((0,0,1))
@@ -814,16 +962,16 @@ class D3SPLINT_OT_splint_subtract_posterior_surface(bpy.types.Operator):
             ray_target = mx_p * v.co - 5 * Z
             ray_target2 = mx_p * v.co + .8 * Z
             
-            loc, no, face_ind, d = bvh.ray_cast(imx_s * ray_orig, imx_s * ray_target - imx_s*ray_orig, 5)
+            loc, no, face_ind, d = bvh.ray_cast(imx_m * ray_orig, imx_m * ray_target - imx_m*ray_orig, 5)
         
             if loc:
                 high_verts += [v]
-                v.co = imx_p * (mx_s * loc - 0.8 * Z)
+                v.co = imx_p * (mx_m * loc - 0.8 * Z)
             else:
-                loc, no, face_ind, d = bvh.ray_cast(imx_s * ray_orig, imx_s * ray_target2 - imx_s*ray_orig, .8)
+                loc, no, face_ind, d = bvh.ray_cast(imx_m * ray_orig, imx_m * ray_target2 - imx_m*ray_orig, .8)
                 if loc:
                     high_verts += [v]
-                    v.co = imx_p * (mx_s * loc - 0.8 * Z)
+                    v.co = imx_p * (mx_m * loc - 0.8 * Z)
         
         if len(high_verts):
             self.report({'WARNING'}, 'Sweep surface intersected upper model, corrected it for you!')
@@ -855,13 +1003,13 @@ class D3SPLINT_OT_splint_subtract_posterior_surface(bpy.types.Operator):
         sbme.verts.ensure_lookup_table()
         
         for v in sbme.verts:
-            ray_orig = mx_s * v.co
-            ray_target = mx_s * v.co + 5 * Z
-            ray_target2 = mx_s * v.co - self.snap_limit * Z
+            ray_orig = imx_m * v.co
+            ray_target = imx_m * v.co + 5 * Z
+            ray_target2 = imx_m * v.co - self.snap_limit * Z
             ok, loc, no, face_ind = Plane.ray_cast(imx_p * ray_orig, imx_p * ray_target - imx_p*ray_orig)
             
             if ok:
-                v.co = imx_s * (mx_p * loc)
+                v.co = imx_m * (mx_p * loc)
                
         
             if self.sculpt_to:
@@ -870,7 +1018,7 @@ class D3SPLINT_OT_splint_subtract_posterior_surface(bpy.types.Operator):
                 
                 ok, loc, no, face_ind = Plane.ray_cast(imx_p * ray_orig, imx_p * ray_target2 - imx_p*ray_orig, distance = self.snap_limit)
                 if ok:
-                    v.co = imx_s * (mx_p * loc)
+                    v.co = imx_m * (mx_p * loc)
                     
         sbme.to_mesh(Shell.data)
         Shell.data.update()
