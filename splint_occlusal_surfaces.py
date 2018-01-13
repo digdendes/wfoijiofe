@@ -609,6 +609,7 @@ class D3SPLINT_OT_splint_manual_auto_surface(bpy.types.Operator):
         
         if 'Posterior Plane' in bpy.data.objects:
             Plane = bpy.data.objects['Posterior Plane']
+            Plane.hide = False
                 
         else:
             me = bpy.data.meshes.new('Posterior Plane')
@@ -951,6 +952,8 @@ class D3SPLINT_OT_splint_subtract_posterior_surface(bpy.types.Operator):
         mx_m = Model.matrix_world
         imx_m = mx_m.inverted()
         
+        mx_s = Shell.matrix_world
+        imx_s = mx_s.inverted()
         
         if splint.jaw_type == 'MAXILLA':
             Z = Vector((0,0,1))
@@ -989,6 +992,8 @@ class D3SPLINT_OT_splint_subtract_posterior_surface(bpy.types.Operator):
                     f.material_index = 1
             bme.to_mesh(Plane.data)
             
+        
+        print('We did the ray casting for the model')
         bme.free()
         Plane.data.update()
         context.scene.update()
@@ -997,28 +1002,31 @@ class D3SPLINT_OT_splint_subtract_posterior_surface(bpy.types.Operator):
         splint = context.scene.odc_splints[n]
         
 
-        #Do a manual ray cast to the underlying data...use BVH in future?   Nah
+        #Do a manual ray cast to the underlying data...use BVH in future?
         sbme = bmesh.new()
         sbme.from_mesh(Shell.data)
         sbme.verts.ensure_lookup_table()
         
+        print('got the shell data')
+        n_ray_casted = 0
         for v in sbme.verts:
-            ray_orig = imx_m * v.co
-            ray_target = imx_m * v.co + 5 * Z
-            ray_target2 = imx_m * v.co - self.snap_limit * Z
+            ray_orig = mx_s * v.co
+            ray_target = mx_s * ( v.co + 5 * Z )
+            ray_target2 = mx_s * (v.co - self.snap_limit * Z)
             ok, loc, no, face_ind = Plane.ray_cast(imx_p * ray_orig, imx_p * ray_target - imx_p*ray_orig)
             
             if ok:
-                v.co = imx_m * (mx_p * loc)
-               
-        
+                v.co = imx_s * (mx_p * loc)
+                n_ray_casted += 1
+                
             if self.sculpt_to:
                 if abs(v.normal.dot(Z)) < .2: continue
                 
                 
                 ok, loc, no, face_ind = Plane.ray_cast(imx_p * ray_orig, imx_p * ray_target2 - imx_p*ray_orig, distance = self.snap_limit)
                 if ok:
-                    v.co = imx_m * (mx_p * loc)
+                    v.co = imx_s * (mx_p * loc)
+                    n_ray_casted += 1
                     
         sbme.to_mesh(Shell.data)
         Shell.data.update()

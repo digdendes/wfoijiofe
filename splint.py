@@ -1583,6 +1583,7 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
             self.report({'ERROR'},'Margin and model not defined')
             return {'CANCELLED'}
         
+        start = time.time()
         
         mx = margin.matrix_world
         
@@ -1919,6 +1920,7 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         trimmed_bme.to_mesh(trimmed_model)
         trimmed_obj.matrix_world = mx2
         
+        interval_start = time.time()
         context.scene.objects.active = trimmed_obj
         trimmed_obj.select = True
         trimmed_obj.hide = False
@@ -1930,18 +1932,36 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         bpy.ops.sculpt.detail_flood_fill()
         bpy.ops.object.mode_set(mode = 'OBJECT')
         
+        print('took %f seconds to detail flood fill' % (time.time() - interval_start))
         trimmed_obj.hide = True
                     
         trimmed_bme.verts.ensure_lookup_table()
+        quad_faces = set()
+        edges = set()
         for i in range(6):        
             gdict = bmesh.ops.extrude_edge_only(trimmed_bme, edges = new_edges)
             trimmed_bme.edges.ensure_lookup_table()
             trimmed_bme.verts.ensure_lookup_table()
             new_verts = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMVert)]
             new_edges = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMEdge)]
+            new_faces = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMFace)]
+            
+            quad_faces.update(new_faces)
+            edges.update(new_edges)
             for v in new_verts:
-                v.co += .4 * Z
+                v.co += .2 * Z
         
+        gdict = bmesh.ops.triangulate(trimmed_bme, faces = list(quad_faces))
+        
+        edges.update(gdict['edges'])
+        
+        subdiv_eds = []
+        for ed in edges:
+            if ed.calc_length() > .2:
+                subdiv_eds.append(ed)
+        
+        print('subdividing %i long edges' % len(subdiv_eds))
+        bmesh.ops.subdivide_edges(trimmed_bme, edges = subdiv_eds, cuts = 1) 
         #loops = edge_loops_from_bmedges(trimmed_bme, [ed.index for ed in new_edges])
         #print('there are %i loops' % len(loops))
         #for loop in loops:
@@ -1960,7 +1980,7 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
             if len(v.link_edges) < 2:
                 to_delete.append(v)
                 
-        print('deleting %i loose verts' % len(to_delete))
+        print('deleting %i loose verts after extruding' % len(to_delete))
         bmesh.ops.delete(trimmed_bme, geom = to_delete, context = 1)
         
         trimmed_bme.verts.ensure_lookup_table()
@@ -1975,14 +1995,16 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
                     if len(v.link_faces) == 0:
                         to_delete.append(v)
 
+
         to_delete = list(set(to_delete))
+        print('deleting %i edges without faces' % len(to_delete))
         bmesh.ops.delete(trimmed_bme, geom = to_delete, context = 1)
                 
         trimmed_bme.verts.ensure_lookup_table()
         trimmed_bme.edges.ensure_lookup_table()
         trimmed_bme.faces.ensure_lookup_table()
               
-        if    'Based_Model' in bpy.data.objects:
+        if 'Based_Model' in bpy.data.objects:
             based_obj = bpy.data.objects.get('Based_Model')
             based_model = based_obj.data
         else:
@@ -1999,22 +2021,28 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         
         trimmed_bme.to_mesh(based_model)
         
+        interval_start = time.time()
         
-        context.scene.objects.active = based_obj
-        based_obj.select = True
-        based_obj.hide = False
-        bpy.ops.object.mode_set(mode = 'SCULPT')
-        if not based_obj.use_dynamic_topology_sculpting:
-            bpy.ops.sculpt.dynamic_topology_toggle()
-        context.scene.tool_settings.sculpt.detail_type_method = 'CONSTANT'
-        context.scene.tool_settings.sculpt.constant_detail_resolution = 5.5
-        bpy.ops.sculpt.detail_flood_fill()
-        bpy.ops.object.mode_set(mode = 'OBJECT')
+        #context.scene.objects.active = based_obj
+        #based_obj.select = True
+        #based_obj.hide = False
+        #bpy.ops.object.mode_set(mode = 'SCULPT')
+        #if not based_obj.use_dynamic_topology_sculpting:
+        #    bpy.ops.sculpt.dynamic_topology_toggle()
+        #context.scene.tool_settings.sculpt.detail_type_method = 'CONSTANT'
+        #context.scene.tool_settings.sculpt.constant_detail_resolution = 5.5
+        #bpy.ops.sculpt.detail_flood_fill()
+        #bpy.ops.object.mode_set(mode = 'OBJECT')
         
+        print('took %f seconds to detail flood fill' % (time.time() - interval_start))
+        interval_start = time.time()
         if 'Displace' not in based_obj.modifiers:
             mod = based_obj.modifiers.new('Displace', type = 'DISPLACE')
             mod.mid_level = 0.85
             mod.strength = -1
+        
+        print('took %f seconds to add modifier' % (time.time() - interval_start))
+        interval_start = time.time()
         
         Model.hide = True
         based_obj.hide = False
@@ -2026,6 +2054,9 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         #todo remove/delete to_mesh mesh
         splint.trim_upper = True
         
+        print('took %f finish up hiding and free bmeshes' % (time.time() - interval_start))
+        interval_start = time.time()
+        print('took %f seconds for entire operation' % (time.time() - start))
         return {'FINISHED'}
     
         
