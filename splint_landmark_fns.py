@@ -524,6 +524,14 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
             cons.target = Model
             cons.inverse_matrix = Model.matrix_world.inverted()
         
+            if "Jaw Orientation" in bpy.data.objects:
+                Transform = bpy.data.objects.get('Mandibular Orientation')
+            else:
+                Transform = bpy.data.objects.new('Mandibular Orientation', None)
+                Transform.parent = Model
+                context.scene.objects.link(Transform)
+            Transform.matrix_world = T * R_fox
+                
         if "Trim Surface" in bpy.data.objects:
             trim_ob = bpy.data.objects['Trim Surface']
             trim_ob.data.transform(iR)
@@ -621,8 +629,8 @@ class D3SPLINT_OT_splint_trim_model_paint(bpy.types.Operator):
     
     def execute(self, context):
         
-        splint = context.scene.odc_splints[0]
-        model = context.scene.odc_splints[0].model
+        n = context.scene.odc_splint_index
+        model = context.scene.odc_splints[n].model
         Model = bpy.data.objects.get(model)
         if not Model:
             self.report({'ERROR'}, "Need to set Model first")
@@ -917,18 +925,16 @@ class D3SPLINT_OT_pick_model(bpy.types.Operator):
             mat = bpy.data.materials.new('Model Mat')
             mat.diffuse_color = Color((0.5, .8, .4))
         else:
-            mat = bpy.data.materials.get('Box Mat')
+            mat = bpy.data.materials.get('Model Mat')
         
         # Assign it to object
-        if "Model Mat" in self.ob.data.materials:
+        if self.ob.data.materials:
             # assign to 1st material slot
-            j = self.ob.active_material_index
-            self.object.material_slots[j].material = mat
             self.ob.data.materials[0] = mat
         else:
             # no slots
-            self.ob.data.materials.append(mat)    
-            
+            self.ob.data.materials.append(mat)
+        
         tracking.trackUsage("D3Splint:PickModel")
         return 'finish'
             
@@ -1432,7 +1438,226 @@ class D3SPLINT_OT_pick_external_trim(bpy.types.Operator):
         context.window_manager.modal_handler_add(self) 
         
         tracking.trackUsage("D3Splint:Pick3rdPartyTrim", None)
-        return {'RUNNING_MODAL'}       
+        return {'RUNNING_MODAL'}
+    
+    
+class D3SPLINT_OT_start_splint_on_opposing(bpy.types.Operator):
+    """Start a splint on the opposite model, prepare scene for that workflow"""
+    bl_idname = "d3splint.plan_splint_on_opposing"
+    bl_label = "Plan Splint on Opposingr"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+
+    keep_func_surface = bpy.props.BoolProperty(default = False, description = "If True, keep the old functional surface for comparison")
+    @classmethod
+    def poll(cls, context):
+        
+        return True
+    
+    def invoke(self, context, event):
+        
+        
+        return context.window_manager.invoke_props_dialog(self)
+         
+    def execute(self, context):
+        
+        #save a copy
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        
+        if splint.opposing == '':
+            self.report({'ERROR'}, "You can not plan a splint on opposing if you have not marked opposing")
+        splint.name = splint.name + "_opposing"
+        
+        #Items Which Don't Need to be re-done
+        #-Pick Model and Pick Opposing, we can deduce this
+        #-Set landmarks
+        #-Maxillary Curve and Mandibular Curve
+        #-Articulator Settings shoudl remain unchanged
+        old_model = splint.model
+        new_model = splint.opposing
+        
+        OldModel = bpy.data.objects.get(old_model)
+        OldOpposing = bpy.data.objects.get(new_model)
+        
+        
+        model_mat = bpy.data.materials.get('Model Mat')
+        opp_mat = bpy.data.materials.get('Opposing Mat')
+        
+        OldModel.data.materials[0] = opp_mat
+        OldOpposing.data.materials[0] = model_mat
+        
+        if 'Final Splint' in context.scene.objects:
+            new_opposing = 'Opposing Splint'
+            FinalSplint = bpy.data.objects.get('Final Splint')
+            FinalSplint.name = 'Opposing Splint'
+            
+            mx = FinalSplint.matrix_world
+            FinalSplint.parent = OldModel
+            FinalSplint.matrix_world = mx
+            FinalSplint.data.materials.append(opp_mat)
+            splint.opposing = 'Opposing Splint'
+        else:
+            splint.opposing = old_model
+        
+        splint.model = new_model
+        
+        #Switch the jaw type   
+        if splint.jaw_type == 'MAXILLA':
+            splint.jaw_type = 'MANDIBLE'
+            PlaneCurve = bpy.data.objects.get('Occlusal Curve Max')
+        else:
+            splint.jaw_type = 'MAXILLA'
+            PlaneCurve = bpy.data.objects.get('Occlusal Curve Mand')
+        
+        splint.ops_string = ''
+        #handle the margin
+        Margin = bpy.data.objects.get(splint.margin)
+        if Margin:
+            context.scene.objects.unlink(Margin)
+            crv = Margin.data
+            bpy.data.objects.remove(Margin)
+            bpy.data.curves.remove(crv)
+            
+            
+        TrimModel = bpy.data.objects.get('Trimmed_Model')
+        if TrimModel:
+            context.scene.objects.unlink(TrimModel)
+            me = TrimModel.data
+            bpy.data.objects.remove(TrimModel)
+            bpy.data.meshes.remove(me)
+        
+        
+        BaseModel = bpy.data.objects.get('Based_Model')
+        if BaseModel:
+            context.scene.objects.unlink(BaseModel)
+            me = BaseModel.data
+            bpy.data.objects.remove(BaseModel)
+            bpy.data.meshes.remove(me)
+            
+        splint.splint = ''
+        Splint = bpy.data.objects.get('Splint Shell')
+        if Splint:
+            context.scene.objects.unlink(Splint)
+            me = Splint.data
+            bpy.data.objects.remove(Splint)
+            bpy.data.meshes.remove(me)
+               
+        Spacer = bpy.data.objects.get('Passive Spacer')
+        if Spacer:
+            context.scene.objects.unlink(Spacer)
+            me = Spacer.data
+            bpy.data.objects.remove(Spacer)
+            bpy.data.meshes.remove(me)
+        
+        splint.splint_outline = False
+        splint.trim_upper = False 
+        splint.splint_shell = False
+        splint.passive_offset = False
+        splint.finalize_splint = False
+        
+        if PlaneCurve:
+            me = PlaneCurve.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+            mx = PlaneCurve.matrix_world
+            arch_vs = [mx*v.co for v in me.vertices]
+            arc_vs_even, eds = space_evenly_on_path(arch_vs, [(0,1),(1,2)], 101, 0)
+            
+            v_ant = arc_vs_even[50] #we established 100 verts so 50 is the anterior midpoint
+            v_0 = arc_vs_even[0]
+            v_n = arc_vs_even[-1]
+            
+            center = .5 *(.5*(v_0 + v_n) + v_ant)
+            
+            vec_n = v_n - v_0
+            vec_n.normalize()
+            
+            vec_ant = v_ant - v_0
+            vec_ant.normalize()
+            
+            Z = vec_n.cross(vec_ant)
+            Z.normalize()
+            X = v_ant - center
+            X.normalize()
+            
+            if Z.dot(Vector((0,0,1))) < 0:
+                Z = -1 * Z
+                    
+            Y = Z.cross(X)
+            
+            R = Matrix.Identity(3)  #make the columns of matrix U, V, W
+            R[0][0], R[0][1], R[0][2]  = X[0] ,Y[0],  Z[0]
+            R[1][0], R[1][1], R[1][2]  = X[1], Y[1],  Z[1]
+            R[2][0] ,R[2][1], R[2][2]  = X[2], Y[2],  Z[2]
+            
+            R = R.to_4x4()
+            T = Matrix.Translation(center + 4 * Z)
+            T2 = Matrix.Translation(center + 10 * Z)
+            
+            bme = bmesh.new()
+            bme.verts.ensure_lookup_table()
+            bme.edges.ensure_lookup_table()
+            bme.faces.ensure_lookup_table()
+            bmesh.ops.create_grid(bme, x_segments = 200, y_segments = 200, size = 39.9)
+            
+            
+            
+            if 'Occlusal Plane' not in bpy.data.objects:
+                bme.to_mesh(me)
+                plane_obj = bpy.data.objects.new('Occlusal Plane', me)
+            else:
+                plane_obj = bpy.data.objects.get('Occlusal Plane')
+                if self.keep_func_surface:
+                    
+                    plane_obj.name = 'Functional Surface' + splint.jaw_type[0:3]
+                    plane_obj.data.name = 'Functional Surface' + splint.jaw_type[0:3]
+                    me = bpy.data.meshes.new('Occlusal Plane')
+                    plane_obj =bpy.data.objects.new('Occlusal Plane', me)
+                    context.scene.objects.link(plane_obj)
+                   
+                bme.to_mesh(plane_obj.data)
+            
+            plane_obj.matrix_world = T * R
+            bme.free()
+            
+            if splint.jaw_type == 'MAXILLA':
+                Target = bpy.data.objects.get(splint.get_maxilla())
+            else:
+                Target = bpy.data.objects.get(splint.get_mandible())
+                
+            if 'Child Of' in plane_obj.constraints:
+                cons = plane_obj.constraints['Child Of']
+            else:
+                cons = plane_obj.constraints.new('CHILD_OF')
+        
+            cons.target = Target
+            cons.inverse_matrix = Target.matrix_world.inverted()
+        #The opposing functional surfaces can be re-generated if available
+        
+        #Items Which Must Be Redone
+        # - Survey if needed
+        # -Splint Perimeter
+        # -Splint Shell
+        # -Passive Offset
+        
+        # -Finalize
+         
+        return {'FINISHED'}
+        
+    def draw(self, context):
+        
+        layout = self.layout
+        
+        row = layout.row()
+        row.label('This operator will permanently change this project!')
+        row = layout.row()
+        row.label('Please save a copy of this .blend file BEFORE changing it')
+        row = layout.row()
+        row.label('Click outside of this box to cancel and save first')
+        row = layout.row()
+        row.prop(self, "keep_func_surface")
+        
+        
+        
 def register():
     bpy.utils.register_class(D3SPLINT_OT_splint_land_marks)
     bpy.utils.register_class(D3SPLINT_OT_splint_paint_margin)  
@@ -1441,6 +1666,7 @@ def register():
     bpy.utils.register_class(D3SPLINT_OT_pick_model)
     bpy.utils.register_class(D3SPLINT_OT_pick_opposing)
     bpy.utils.register_class(D3SPLINT_OT_pick_external_shell)
+    bpy.utils.register_class(D3SPLINT_OT_start_splint_on_opposing)
      
 def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_splint_land_marks)
@@ -1450,6 +1676,7 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_pick_model)
     bpy.utils.unregister_class(D3SPLINT_OT_pick_opposing)
     bpy.utils.unregister_class(D3SPLINT_OT_pick_external_shell)
+    bpy.utils.unregister_class(D3SPLINT_OT_start_splint_on_opposing)
     
 if __name__ == "__main__":
     register()

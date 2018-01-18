@@ -323,6 +323,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         col = row.column()
         
         col.operator("d3splint.open_pin_on_articulator", text = "Change Pin Setting" )
+        col.operator("d3splint.recover_mounting_relationship", text = "Recover Mounting" )
         col.operator("d3splint.articulator_mode_set", text = "Choose Articulator Motion")
         
         if splint and "AnimateArticulator" in splint.ops_string: 
@@ -387,6 +388,14 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         col.operator("d3splint.splint_finish_booleans", text = "Finalize The Splint", icon = ico)
         col.operator("d3guard.splint_cork_boolean", text = "Finalize Splint (CORK EGINE)")
         col.operator("d3splint.export_splint_stl", text = "Export Splint STL")
+        
+        row = layout.row()
+        row.label('Start Again on Opposing?')
+        
+        row = layout.row()
+        col = row.column()
+        col.operator("d3splint.plan_splint_on_opposing", text = "Plan Opposing Splint")
+        
           
 class VIEW3D_PT_D3SplintModels(bpy.types.Panel):
     bl_space_type = "VIEW_3D"

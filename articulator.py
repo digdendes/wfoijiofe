@@ -103,11 +103,20 @@ def find_bone_drivers(amature_object, bone_name):
         return []
     
     
+ 
+def load_driver_namespace():   
     
-bpy.app.driver_namespace['saw_tooth'] = saw_tooth
-bpy.app.driver_namespace['thirty_steps'] = thirty_steps
-bpy.app.driver_namespace['threeway_envelope_r'] = three_way_envelope_r
-bpy.app.driver_namespace['threeway_envelope_l'] = three_way_envelope_l
+    if 'saw_tooth' not in bpy.app.driver_namespace:
+        bpy.app.driver_namespace['saw_tooth'] = saw_tooth
+    
+    if 'thirty_steps' not in bpy.app.driver_namespace:
+        bpy.app.driver_namespace['thirty_steps'] = thirty_steps
+    
+    if 'threeway_envelope_r' not in bpy.app.driver_namespace:
+        bpy.app.driver_namespace['threeway_envelope_r'] = three_way_envelope_r
+    
+    if 'threeway_envelope_' not in bpy.app.driver_namespace:
+        bpy.app.driver_namespace['threeway_envelope_l'] = three_way_envelope_l
 
 
             
@@ -580,17 +589,199 @@ class D3Splint_OT_articulator_set_mode(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class D3SPLINT_OT_splint_open_pin_on_articulator(bpy.types.Operator):
+    """Open Pin on Articulator.  Pin increments are assumed 1mm at 85mm from condyles"""
+    bl_idname = "d3splint.open_pin_on_articulator"
+    bl_label = "Change Articulator Pin"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    
+    amount = FloatProperty(name = 'Pin Setting', default = 0.5, step = 10, min = -3.0, max = 3.0)
+    @classmethod
+    def poll(cls, context):
+        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
+        #    return True
+        #else:
+        #    return False
+        return True
+    
+    def invoke(self,context,event):
+        tracking.trackUsage("D3Splint:ChangePinSetting",None)
+        return context.window_manager.invoke_props_dialog(self)
+    
+    def execute(self, context):
+        if context.scene.frame_current != 0:
+            self.report({'WARNING'}, "The articulator is not at the 0 position, resetting it to 0 before changing pin")
+            context.scene.frame_current = 0
+            context.scene.frame_set(0)
+            context.scene.frame_set(0)
+            
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n] #TODO better knowledge for multiple splints
+        if not splint.landmarks_set:
+            self.report({'ERROR'}, 'You must set landmarks to get an approximate mounting')
+            return {'CANCELLED'}
+        
+        mandible = splint.get_mandible()
+        maxilla = splint.get_maxilla()
+        
+        Model = bpy.data.objects.get(mandible)
+        Master = bpy.data.objects.get(maxilla)
+        if not Model:
+            self.report({'ERROR'},"Please set opposing model")
+            return {'CANCELLED'}
+        
+        Articulator = bpy.data.objects.get('Articulator')
+        if Articulator == None:
+            self.report({'ERROR'},"Please use Add Arcon Articulator function")
+            return {'CANCELLED'}
+        
+        if context.scene.frame_current != 0:
+            context.scene.frame_current = -1
+            context.scene.frame_current = 0
+            context.scene.frame_set(0)
+        
+        re_mount = False
+        
+        constraints = []
+        if len(Model.constraints):
+            re_mount = True
+            for cons in Model.constraints:
+                cdata = {}
+                cdata['type'] = cons.type
+                cdata['target'] = cons.target
+                cdata['subtarget'] = cons.subtarget
+                constraints += [cdata]
+                Model.constraints.remove(cons) 
+            
+            
+        
+        radians = self.amount/85
+        
+        R = Matrix.Rotation(radians, 4, 'Y')
+        Model.matrix_world = R * Model.matrix_world
+        
+        if re_mount:
+            
+            cons = Model.constraints.new(type = 'CHILD_OF')
+            cons.target = Master
+            cons.inverse_matrix = Master.matrix_world.inverted()
+             
+            cons = Model.constraints.new(type = 'CHILD_OF')
+            cons.target = Articulator
+            cons.subtarget = 'Mandibular Bow'
+        
+            mx = Articulator.matrix_world * Articulator.pose.bones['Mandibular Bow'].matrix
+            cons.inverse_matrix = mx.inverted()
+    
+        return {'FINISHED'}
 
+class D3SPLINT_OT_recover_mandible_mounting(bpy.types.Operator):
+    """Recover original bite/mount relationship when models were first imported"""
+    bl_idname = "d3splint.recover_mounting_relationship"
+    bl_label = "Recover Mandibular Mounting"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
+        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
+        #    return True
+        #else:
+        #    return False
+        return True
+    
+    def execute(self, context):
+        
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n] #TODO better knowledge for multiple splints
+        
+        if context.scene.frame_current != 0:
+            self.report({'WARNING'}, "The articulator is not at the 0 position, resetting it to 0 before recovering moutn")
+            context.scene.frame_current = 0
+            context.scene.frame_set(0)
+            context.scene.frame_set(0)
+            
+        if not splint.landmarks_set:
+            self.report({'ERROR'}, 'You must set landmarks to have saved mounting')
+            return {'CANCELLED'}
+        
+        
+        if "Mandibular Orientation" not in bpy.data.objects:
+            self.report({'ERROR'}, 'Unfortunately, the mounting backup is not present.  Did you delete it?')
+            return {'CANCELLED'}
+        
+        mandible = splint.get_mandible()
+        maxilla = splint.get_maxilla()
+        
+        Model = bpy.data.objects.get(mandible)
+        Master = bpy.data.objects.get(maxilla)
+        
+        if not Model:
+            self.report({'ERROR'},"It is not clear which model is the mandible.  Have you set model and set opposing?")
+            return {'CANCELLED'}
+        
+        if not Master:
+            self.report({'ERROR'},"It is not clear which model is the maxilla.  Have you set model and set opposing?")
+            return {'CANCELLED'}
+        
+        
+        Orientation = bpy.data.objects.get('Mandibular Orientation')
+        mx_recover = Orientation.matrix_world
+        
+        if context.scene.frame_current != 0:
+            context.scene.frame_current = -1
+            context.scene.frame_current = 0
+            context.scene.frame_set(0)
+        
+        re_mount = False
+        
+        constraints = []
+        if len(Model.constraints):
+            re_mount = True
+            for cons in Model.constraints:
+                cdata = {}
+                cdata['type'] = cons.type
+                cdata['target'] = cons.target
+                cdata['subtarget'] = cons.subtarget
+                constraints += [cdata]
+                Model.constraints.remove(cons) 
+            
+            
+        
+
+        Model.matrix_world = mx_recover
+        
+        Articulator = bpy.data.objects.get('Articulator')
+        
+        if re_mount:
+            
+            cons = Model.constraints.new(type = 'CHILD_OF')
+            cons.target = Master
+            cons.inverse_matrix = Master.matrix_world.inverted()
+             
+            if Articulator:
+                cons = Model.constraints.new(type = 'CHILD_OF')
+                cons.target = Articulator
+                cons.subtarget = 'Mandibular Bow'
+        
+                mx = Articulator.matrix_world * Articulator.pose.bones['Mandibular Bow'].matrix
+                cons.inverse_matrix = mx.inverted()
+    
+        return {'FINISHED'}
 
       
 def register():
     bpy.utils.register_class(D3SPLINT_OT_generate_articulator)
     bpy.utils.register_class(D3Splint_OT_articulator_set_mode)
+    bpy.utils.register_class(D3SPLINT_OT_splint_open_pin_on_articulator)
+    bpy.utils.register_class(D3SPLINT_OT_recover_mandible_mounting)
     
     
 def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_generate_articulator)
     bpy.utils.unregister_class(D3Splint_OT_articulator_set_mode)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_open_pin_on_articulator)
+    bpy.utils.unregister_class(D3SPLINT_OT_recover_mandible_mounting)
     
 if __name__ == "__main__":
     register()

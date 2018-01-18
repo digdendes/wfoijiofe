@@ -301,11 +301,11 @@ class D3SPLINT_OT_anterior_deprogrammer_element(bpy.types.Operator):
     
     
     guidance_angle = IntProperty(default = 15, min = -90, max = 90, description = 'Angle off of world Z')
-    anterior_length = FloatProperty(default = 4, description = 'Length of anterior ramp')
-    posterior_length = FloatProperty(default = 6, description = 'Length of posterior ramp')
-    posterior_width = FloatProperty(default = 8, description = 'Posterior Width of ramp')
+    anterior_length = FloatProperty(default = 5, description = 'Length of anterior ramp')
+    posterior_length = FloatProperty(default = 10, description = 'Length of posterior ramp')
+    posterior_width = FloatProperty(default = 10, description = 'Posterior Width of ramp')
     anterior_width = FloatProperty(default = 8, description = 'Anterior Width of ramp')
-    thickness = FloatProperty(default = 3, description = 'Thickness of ramp')
+    thickness = FloatProperty(default = 2.75, description = 'Thickness of ramp')
     support_height = FloatProperty(default = 6, description = 'Height of support strut')
     support_width =  FloatProperty(default = 6, description = 'Width of support strut')
     
@@ -528,7 +528,6 @@ class D3SPLINT_OT_blockout_splint_shell(bpy.types.Operator):
     
     def execute(self, context):
         tracking.trackUsage("D3Splint:BlockoutSplintConcavities",None)
-        splint = context.scene.odc_splints[0]
         
         Shell = bpy.data.objects.get('Splint Shell')
         if Shell == None:

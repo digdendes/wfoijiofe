@@ -24,7 +24,7 @@
 bl_info = {
     'name': "D3T Splint Module",
     'author': "Patrick R. Moore",
-    'version': (0,2,3),
+    'version': (0,2,4),
     'blender': (2, 7, 9),
     'api': "3c04373",
     'location': "3D View -> Tool Shelf",
@@ -49,7 +49,7 @@ from bpy.app.handlers import persistent
 #from . 
 
 import odcutils
-
+from articulator import load_driver_namespace
 from . import addon_updater_ops
 
 
@@ -181,7 +181,7 @@ class D3Splint_OT_general_preferences(Operator):
         
         #prevent accidental tweaking when blender responsiveness is slow
         #common problem once the scene gets complex with boolean modifiers
-        user_preferences.inputs.tweak_threshold = 200
+        user_preferences.inputs.tweak_threshold = 1000
         
         #make em stick
         bpy.ops.wm.save_userpref()
@@ -214,7 +214,9 @@ def load_post_method(dummy):
     
     print('loaded splints')
     for splint in bpy.context.scene.odc_splints:
-        print(splint.tooth_string)
+        print(splint.ops_string)
+        
+    load_driver_namespace()
         #splint.load_components_from_string(bpy.context.scene)
 @persistent    
 def save_pre_method(dummy):

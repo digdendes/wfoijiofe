@@ -258,7 +258,8 @@ class D3Splint_automatic_opposing_surface(bpy.types.Operator):
 
     def invoke(self,context, event):
         
-        splint = context.scene.odc_splints[0]
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
         
         if splint.jaw_type == 'MAXILLA':
             opposing = splint.get_mandible()

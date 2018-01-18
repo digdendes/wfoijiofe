@@ -1186,7 +1186,8 @@ class D3SPLINT_OT_survey_model(bpy.types.Operator):
         tracking.trackUsage("D3Splint:SurveyModelView",None)
         settings = get_settings()
         dbg = settings.debug
-        splint = context.scene.odc_splints[0]
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
         
         Model = bpy.data.objects.get(splint.model)
         if Model == None:
@@ -1302,7 +1303,8 @@ class D3SPLINT_OT_blockout_model_meta(bpy.types.Operator):
         tracking.trackUsage("D3Splint:BlockoutUndercuts",None)
         settings = get_settings()
         dbg = settings.debug
-        splint = context.scene.odc_splints[0]
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
         
         Model = bpy.data.objects.get(splint.model)
         if Model == None:
@@ -1385,7 +1387,8 @@ class D3SPLINT_OT_survey_model_axis(bpy.types.Operator):
         tracking.trackUsage("D3Splint:SurveyModelArrow",None)
         settings = get_settings()
         dbg = settings.debug
-        splint = context.scene.odc_splints[0]
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
         
         Model = bpy.data.objects.get(splint.model)
         if Model == None:
@@ -2818,7 +2821,8 @@ class D3SPLINT_OT_convexify_model(bpy.types.Operator):
 
     def invoke(self,context, event):
         
-        self.splint = context.scene.odc_splints[0]
+        n = context.scene.odc_splint_index
+        self.splint = context.scene.odc_splints[n]
         self.crv = None
         margin = "Embrasures"
            
@@ -2905,7 +2909,8 @@ class D3SPLINT_OT_join_convex(bpy.types.Operator):
         if len(context.scene.odc_splints) == 0:
             self.report({'ERROR'}, "need to start a splint first")
             return {'CANCELLED'}
-        splint = context.scene.odc_splints[0]
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
         
         Opposing = bpy.data.objects.get(splint.opposing)
         if not Opposing:
@@ -3142,10 +3147,10 @@ class D3SPLINT_OT_splint_trim_model(bpy.types.Operator):
     
     def execute(self, context):
         
-        splint = context.scene.odc_splints[0]
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
         buccal = splint.name + "_buccal"
-        model = context.scene.odc_splints[0].model
-        Model = bpy.data.objects.get(model)
+        Model = bpy.data.objects.get(splint.model)
         if buccal not in context.scene.objects:
             self.report({'ERROR'}, "Need to mark buccal splint limits first")
         
@@ -3361,7 +3366,9 @@ class D3SPLINT_OT_splint_mount_on_articulator(bpy.types.Operator):
     
     def execute(self, context):
         
-        opposing = context.scene.odc_splints[0].opposing
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        opposing = splint.opposing
         Model = bpy.data.objects.get(opposing)
         
         if not Model:
@@ -3390,92 +3397,12 @@ class D3SPLINT_OT_splint_mount_on_articulator(bpy.types.Operator):
         
         return {'FINISHED'}
 
-class D3SPLINT_OT_splint_open_pin_on_articulator(bpy.types.Operator):
-    """Open Pin on Articulator.  Pin increments are assumed 1mm at 85mm from condyles"""
-    bl_idname = "d3splint.open_pin_on_articulator"
-    bl_label = "Change Articulator Pin"
-    bl_options = {'REGISTER', 'UNDO'}
-    
-    
-    amount = FloatProperty(name = 'Pin Setting', default = 0.5, step = 10, min = -3.0, max = 3.0)
-    @classmethod
-    def poll(cls, context):
-        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
-        #    return True
-        #else:
-        #    return False
-        return True
-    
-    def invoke(self,context,event):
-        tracking.trackUsage("D3Splint:ChangePinSetting",None)
-        return context.window_manager.invoke_props_dialog(self)
-    
-    def execute(self, context):
-        
-        splint = context.scene.odc_splints[0]  #TODO better knowledge for multiple splints
-        if not splint.landmarks_set:
-            self.report({'ERROR'}, 'You must set landmarks to get an approximate mounting')
-            return {'CANCELLED'}
-        
-        mandible = splint.get_mandible()
-        maxilla = splint.get_maxilla()
-        
-        Model = bpy.data.objects.get(mandible)
-        Master = bpy.data.objects.get(maxilla)
-        if not Model:
-            self.report({'ERROR'},"Please set opposing model")
-            return {'CANCELLED'}
-        
-        Articulator = bpy.data.objects.get('Articulator')
-        if Articulator == None:
-            self.report({'ERROR'},"Please use Add Arcon Articulator function")
-            return {'CANCELLED'}
-        
-        if context.scene.frame_current != 0:
-            context.scene.frame_current = -1
-            context.scene.frame_current = 0
-            context.scene.frame_set(0)
-        
-        re_mount = False
-        
-        constraints = []
-        if len(Model.constraints):
-            re_mount = True
-            for cons in Model.constraints:
-                cdata = {}
-                cdata['type'] = cons.type
-                cdata['target'] = cons.target
-                cdata['subtarget'] = cons.subtarget
-                constraints += [cdata]
-                Model.constraints.remove(cons) 
-            
-            
-        
-        radians = self.amount/85
-        
-        R = Matrix.Rotation(radians, 4, 'Y')
-        Model.matrix_world = R * Model.matrix_world
-        
-        if re_mount:
-            
-            cons = Model.constraints.new(type = 'CHILD_OF')
-            cons.target = Master
-            cons.inverse_matrix = Master.matrix_world.inverted()
-             
-            cons = Model.constraints.new(type = 'CHILD_OF')
-            cons.target = Articulator
-            cons.subtarget = 'Mandibular Bow'
-        
-            mx = Articulator.matrix_world * Articulator.pose.bones['Mandibular Bow'].matrix
-            cons.inverse_matrix = mx.inverted()
-    
-        return {'FINISHED'}
-    
-    
+
 def occlusal_surface_frame_change(scene):
 
     if not len(scene.odc_splints): return
-    splint = scene.odc_splints[0]
+    n = scene.odc_splint_index
+    splint = scene.odc_splints[n]
     #TODO...get the models better?
     plane = bpy.data.objects.get('Occlusal Plane')
     jaw = bpy.data.objects.get(splint.opposing)
@@ -3881,9 +3808,9 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
                 keep_verts.update(front)
                 front = new_neighbors
                 
-        delete_verts = [v for v in bme.verts if v not in keep_verts]
-        bmesh.ops.delete(bme, geom = delete_verts, context = 1)
-        bme.to_mesh(Plane.data)
+            delete_verts = [v for v in bme.verts if v not in keep_verts]
+            bmesh.ops.delete(bme, geom = delete_verts, context = 1)
+            bme.to_mesh(Plane.data)
         
         
         for ob in bpy.data.objects:
@@ -3933,7 +3860,8 @@ class D3SPLINT_OT_splint_reset_functional_surface(bpy.types.Operator):
         return True
     
     def execute(self, context):
-        splint = context.scene.odc_splints[0]
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
         
         #filter the occlusal surface verts
         Plane = bpy.data.objects.get('Occlusal Plane')
@@ -4030,7 +3958,7 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
     bl_label = "Create Splint Outer Surface"
     bl_options = {'REGISTER', 'UNDO'}
     
-    radius = FloatProperty(default = 2.5, min = .75, max = 4, description = 'Thickness of splint')
+    radius = FloatProperty(default = 1.5, min = .6, max = 4, description = 'Thickness of splint', name = 'Thickness')
     resolution = FloatProperty(default = .4, description = '0.5 to 1.5 seems to be good')
     finalize = BoolProperty(default = False, description = 'Will convert meta to mesh and remove meta object')
     
@@ -4051,7 +3979,8 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
         
         R_prime = 1/.901 * (self.radius + .0219)
         
-        splint = context.scene.odc_splints[0]
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
         self.bme = bmesh.new()
         ob = bpy.data.objects.get('Trimmed_Model')
         self.bme.from_object(ob, context.scene)
@@ -4225,7 +4154,8 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
             return {'CANCELLED'}
         
         
-        splint = context.scene.odc_splints[0]
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
         splint.passive_value = self.radius
         
         self.bme.from_object(ob, context.scene)  #this object should have a displace modifier
@@ -4490,7 +4420,8 @@ class D3SPLINT_OT_meta_splint_passive_spacer_refine(bpy.types.Operator):
         start = time.time()
         interval_start = start
         
-        splint = context.scene.odc_splints[0]
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
         r = splint.passive_value
         
         mx = ob.matrix_world
@@ -4676,7 +4607,7 @@ def register():
     bpy.utils.register_class(D3SPLINT_OT_splint_subtract_surface)
     bpy.utils.register_class(D3SPLINT_OT_splint_go_sculpt)
     bpy.utils.register_class(D3SPLINT_OT_splint_finish_booleans)
-    bpy.utils.register_class(D3SPLINT_OT_splint_open_pin_on_articulator)
+    #bpy.utils.register_class(D3SPLINT_OT_splint_open_pin_on_articulator)
     #Experimental
     #bpy.utils.register_class(D3SPLINT_OT_splint_margin_detail)
     #bpy.utils.register_class(D3SPLINT_OT_splint_margin_trim)
@@ -4729,7 +4660,7 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_splint_subtract_surface)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_go_sculpt)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_finish_booleans)
-    bpy.utils.unregister_class(D3SPLINT_OT_splint_open_pin_on_articulator)
+    #bpy.utils.unregister_class(D3SPLINT_OT_splint_open_pin_on_articulator)
 
 if __name__ == "__main__":
     register()
