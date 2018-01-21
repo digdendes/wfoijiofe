@@ -252,29 +252,24 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
             ico = 'CHECKBOX_DEHLT'
         col.operator("d3splint.splint_passive_spacer", text = "Passivity Offset", icon = ico)
         
+
+        
+        row = layout.row()
+        row.label('Virtual Wax Tools')
+        
+        row = layout.row()
+        col = row.column()
         if splint and "MakeRim" in splint.ops_string: 
             ico = 'FILE_TICK'
         else:
             ico = 'NONE'
-        col.operator("d3splint.splint_rim_from_dual_curves", text = "Splint Flat Plane", icon = ico)
+        col.operator("d3splint.splint_rim_from_dual_curves", text = "Splint Wax Rim", icon = ico)
         
         if splint and "JoinRim" in splint.ops_string: 
             ico = 'FILE_TICK'
         else:
             ico = 'NONE'
-        col.operator("d3splint.splint_join_rim", text = "Join rim to Shell", icon = ico)
-        
-        
-        row = layout.row()
-        row.label('Flat Plane Tools')
-        row = layout.row()
-        col = row.column()
-        col.operator("d3splint.splint_manual_flat_plane", text = "Mark Opposing Contacts")
-        col.operator("d3splint.subtract_posterior_surface", text = 'Subtract Posterior Plane')
-        
-        
-        row = layout.row()
-        row.label('Virtual Wax Tools')
+        col.operator("d3splint.splint_join_rim", text = "Fuse Rim to Shell", icon = ico)
         
         row = layout.row()
         col = row.column()
@@ -286,6 +281,14 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         col = row.column()
         col.operator("d3splint.anterior_deprogrammer_element", text = 'Anterior Deprogrammer Ramp')
         col.operator("d3splint.splint_join_deprogrammer", text = 'Fuse Deprogrammer')
+        
+        
+        row = layout.row()
+        row.label('Flat Plane Tools')
+        row = layout.row()
+        col = row.column()
+        col.operator("d3splint.splint_manual_flat_plane", text = "Mark Opposing Contacts")
+        col.operator("d3splint.subtract_posterior_surface", text = 'Subtract Posterior Plane')
         
         
         row = layout.row()
