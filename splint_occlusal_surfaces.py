@@ -1049,11 +1049,123 @@ class D3SPLINT_OT_splint_subtract_posterior_surface(bpy.types.Operator):
         
         splint.ops_string += 'SubtractPosteriorSurface:'
         return {'FINISHED'}
+
+class D3SPLINT_OT_splint_subtract_MIP_bite(bpy.types.Operator):
+    """Subtract Opposing"""
+    bl_idname = "d3splint.subtract_opposing_model"
+    bl_label = "Subtract Opposing Occlusion from Shell"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    
+    #sculpt to
+    sculpt_to = bpy.props.BoolProperty(default = False, description = "Not only remove but pull some of the shell down to touch")
+    snap_limit = bpy.props.FloatProperty(default = 2.0, min = .25, max = 5.0, description = "Max distance the shell will snap to")
+    remesh = bpy.props.BoolProperty(default = True, description = "Not only remove but pull some of the shell down to touch")
+    @classmethod
+    def poll(cls, context):
+        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
+        #    return True
+        #else:
+        #    return False
+        return True
+    
+    def execute(self, context):
+        
+        if not len(context.scene.odc_splints):
+            self.report({'ERROR'}, 'Need to start a splint by setting model first')
+            return {'CANCELLED'}
+        
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        
+        Model = bpy.data.objects.get(splint.model)
+        Shell = bpy.data.objects.get('Splint Shell')
+        Opposing = bpy.data.objects.get(splint.opposing)
+
+        
+        if Shell == None:
+            self.report({'ERROR'}, 'Need to calculate splint shell first')
+            return {'CANCELLED'}
+        if Opposing == None:
+            self.report({'ERROR'}, 'Need to indicate opposing model')
+            return {'CANCELLED'}
+        
+        if len(Shell.modifiers):
+            old_data = Shell.data
+            new_data = Shell.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+            
+            for mod in Shell.modifiers:
+                Shell.modifiers.remove(mod)
+            
+            Shell.data = new_data
+            bpy.data.meshes.remove(old_data)
+        
+        bme = bmesh.new()
+        bme.from_mesh(Opposing.data)
+        bme.verts.ensure_lookup_table()
+        
+        
+        
+        mx_p = Opposing.matrix_world
+        imx_p = mx_p.inverted()
+        
+        mx_m = Model.matrix_world
+        imx_m = mx_m.inverted()
+        
+        mx_s = Shell.matrix_world
+        imx_s = mx_s.inverted()
+        
+        if splint.jaw_type == 'MAXILLA':
+            Z = Vector((0,0,1))
+        else:
+            Z = Vector((0,0,-1))
+            
+
+        #Do a manual ray cast to the underlying data...use BVH in future?
+        sbme = bmesh.new()
+        sbme.from_mesh(Shell.data)
+        sbme.verts.ensure_lookup_table()
+        
+        print('got the shell data')
+        n_ray_casted = 0
+        for v in sbme.verts:
+            ray_orig = mx_s * v.co
+            ray_target = mx_s * ( v.co + 5 * Z )
+            ray_target2 = mx_s * (v.co - self.snap_limit * Z)
+            ok, loc, no, face_ind = Opposing.ray_cast(imx_p * ray_orig, imx_p * ray_target - imx_p*ray_orig)
+            
+            if ok:
+                v.co = imx_s * (mx_p * loc)
+                n_ray_casted += 1
+                
+            if self.sculpt_to:
+                if abs(v.normal.dot(Z)) < .2: continue
+                
+                
+                ok, loc, no, face_ind = Opposing.ray_cast(imx_p * ray_orig, imx_p * ray_target2 - imx_p*ray_orig, distance = self.snap_limit)
+                if ok:
+                    v.co = imx_s * (mx_p * loc)
+                    n_ray_casted += 1
                     
+        sbme.to_mesh(Shell.data)
+        Shell.data.update()
+                
+        Opposing.hide = True
+        Shell.hide = False
+        Model.hide = False
+        
+
+        splint.ops_string += 'MIP_Bite:'
+        tracking.trackUsage("D3Splint:MIPBite", param = None, background = True)
+        return {'FINISHED'}
+    
+                        
 def register():
     bpy.utils.register_class(D3SPLINT_OT_splint_manual_auto_surface)
     bpy.utils.register_class(D3SPLINT_OT_splint_subtract_posterior_surface)
+    bpy.utils.register_class(D3SPLINT_OT_splint_subtract_MIP_bite)
     
 def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_splint_manual_auto_surface) 
     bpy.utils.unregister_class(D3SPLINT_OT_splint_subtract_posterior_surface)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_subtract_MIP_bite)

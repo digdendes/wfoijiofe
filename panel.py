@@ -312,7 +312,10 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
             col.operator("d3splint.join_convex_lower", text = "Join Convex Elements")
             
         row = layout.row()
-        row.label('Articulation/Mounting')
+        row.label('Articulation/Mounting/Occlusion')
+        
+        row = layout.row()
+        row.operator("d3splint.subtract_opposing_model", text = 'Grind MIP')
         row = layout.row()
         if splint and "GenArticulator" in splint.ops_string: 
             ico = 'FILE_TICK'

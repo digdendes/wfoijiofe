@@ -667,6 +667,7 @@ def trackUsage(function, param=None, background=None):
                 "hardware":hardware_key(),
                 "param":str(param),
                 "timestamp":{".sv": "timestamp"},
+                "usertime":str(datetime.now()),
                 "version":Tracker.version
             })
 
