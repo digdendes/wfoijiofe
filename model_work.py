@@ -2143,6 +2143,13 @@ class VerticaBasePoints(PointPicker):
         ob.matrix_world = T * R
         #trannslate to center
         
+        #R = Matrix.Identity(3)  #make the columns of matrix U, V, W
+        #R[0][0], R[0][1], R[0][2]  = Y[0] ,Z[0],  -X[0]
+        #R[1][0], R[1][1], R[1][2]  = Y[1], Z[1],  -X[1]
+        #R[2][0] ,R[2][1], R[2][2]  = Y[2], Z[2],  -X[2]
+        
+        #context.space_data.region_3d.view_rotation = R.to_quaternion()
+        #context.space_data.region_3d.view_location = .5 * (self.b_pts[1] - self.b_pts[2])
     
     def orient_pane_ob(self):
         
@@ -2180,7 +2187,7 @@ class VerticaBasePoints(PointPicker):
         
         if 'Base Plane' in bpy.data.objects:
             b_plane_ob = bpy.data.objects['Base Plane']
-            b_plane_ob.hide = True
+            
         else:
             bpln_bme = bmesh.new()
             bmesh.ops.create_circle(bpln_bme, cap_ends = True, cap_tris = True, segments = 24, diameter = 50)
@@ -2189,7 +2196,7 @@ class VerticaBasePoints(PointPicker):
             context.scene.objects.link(b_plane_ob)
             bpln_bme.to_mesh(b_plane_me)
             bpln_bme.free()
-        b_plane_ob.hide = True
+        b_plane_ob.hide = False
         #constrain to plane  
         X = Vector((random.random(), random.random(), random.random()))
         
@@ -2393,10 +2400,10 @@ class VerticaBasePoints(PointPicker):
             pad_ob = bpy.data.objects.new('Pad Base', pad_me)
             context.scene.objects.link(pad_ob)
         pad_ob.hide = True
+        #pad_ob.hide = False
         
         meta_obj.hide = False    
         meta_obj.matrix_world = self.plane_ob.matrix_world
-        pad_ob.hide = False
         pad_ob.matrix_world = self.snap_ob.matrix_world
         
         
