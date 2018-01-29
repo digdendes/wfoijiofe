@@ -68,11 +68,11 @@ class SCENE_UL_odc_splints(bpy.types.UIList):
             layout.alignment = 'CENTER'
             layout.label("", icon_value="NODE")
             
-class VIEW3D_PT_ODCSettings(bpy.types.Panel):
+class VIEW3D_PT_D3SplintAssitant(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type="TOOLS"
     bl_category = "Dental"
-    bl_label = "D3Tool Control Panel"
+    bl_label = "D3Tool Assistant Panel"
     bl_context = ""
 
     def draw(self, context):
@@ -82,11 +82,20 @@ class VIEW3D_PT_ODCSettings(bpy.types.Panel):
         #split = layout.split()
         row = layout.row()
 
-        row.operator("wm.url_open", text = "Wiki", icon="INFO").url = "https://github.com/patmo141/"
+        row.operator("wm.url_open", text = "Wiki", icon="INFO").url = "https://d3tool.com/d3splint-membership-videos/"
         row.operator("wm.url_open", text = "Errors", icon="ERROR").url = "https://github.com/patmo141/"
-        row.operator("wm.url_open", text = "Forum", icon="QUESTION").url = "https://www.facebook.com/"
+        row.operator("wm.url_open", text = "Forum", icon="QUESTION").url = "https://www.facebook.com/groups/939777786197766"
         
-      
+
+        row = layout.row()
+        row.label(text = "Save/Checkpoints")
+        row = layout.row()
+        col = row.column()
+        col.operator("wm.save_as_mainfile", text = "Save").copy = False
+        col.operator("wm.splint_saveincremental", text = "Save Checkpoint")
+        
+        
+   
 class VIEW3D_PT_D3Splints(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type="TOOLS"
@@ -492,8 +501,8 @@ def register():
     bpy.utils.register_class(SCENE_UL_odc_implants)
     bpy.utils.register_class(SCENE_UL_odc_bridges)
     bpy.utils.register_class(SCENE_UL_odc_splints)
-    bpy.utils.register_class(VIEW3D_PT_ODCSettings)
     
+    bpy.utils.register_class(VIEW3D_PT_D3SplintAssitant)
     bpy.utils.register_class(VIEW3D_PT_D3Splints)
     bpy.utils.register_class(VIEW3D_PT_D3SplintModels)
     bpy.utils.register_class(VIEW3D_PT_D3SplintModelText)
@@ -506,7 +515,6 @@ def unregister():
     bpy.utils.unregister_class(SCENE_UL_odc_bridges)
     bpy.utils.unregister_class(SCENE_UL_odc_splints)
     
-    bpy.utils.unregister_class(VIEW3D_PT_ODCSettings)
     
     bpy.utils.unregister_class(VIEW3D_PT_D3Splints)
     

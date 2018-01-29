@@ -946,6 +946,11 @@ class D3SPLINT_OT_pick_model(bpy.types.Operator):
         self.ob_preview = 'None'
         context.window.cursor_modal_set('EYEDROPPER')
         
+        #hide the stupid grid floor
+        context.space_data.show_floor = False
+        context.space_data.show_axis_x = False
+        context.space_data.show_axis_y = False
+        
         #TODO, tweak the modifier as needed
         help_txt = "Pick Model\n\n Hover over objects in the scene \n left click on model that splint will build on \n ESC to cancel"
         self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)

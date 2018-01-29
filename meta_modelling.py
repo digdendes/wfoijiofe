@@ -148,22 +148,22 @@ class D3SPLINT_OT_draw_meta_curve(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
 class D3SPLINT_OT_splint_virtual_wax_on_curve(bpy.types.Operator):
-    """Create Virtual Wax Objecyt from selected bezier curve"""
+    """Create Virtual Wax Object on the user drawn wax curve"""
     bl_idname = "d3splint.virtual_wax_on_curve"
     bl_label = "Virtual Wax on Curve"
     bl_options = {'REGISTER', 'UNDO'}
     
     
     segments = IntProperty(default = 60, description = 'Resolution of the wax elements')
-    posterior_width = FloatProperty(default = 4, description = 'Width of posterior rim')
-    anterior_width = FloatProperty(default = 4, description = 'Width of anterior rim')
-    thickness = FloatProperty(default = 2, description = 'Height of  rim')
+    posterior_width = FloatProperty(default = 4, description = 'Width of wax object at endpoints', name = "Width at End")
+    anterior_width = FloatProperty(default = 4, description = 'Width of wax object in the middle', name = "width in Middle")
+    thickness = FloatProperty(default = 2, description = 'Height/Thickness of  rim')
     
     
     flare = IntProperty(default = 0, min = -90, max = 90, description = 'Angle off of world Z')
     meta_type = EnumProperty(name = 'Meta Type', items = [('CUBE','CUBE','CUBE'), 
                                                           ('ELLIPSOID', 'ELLIPSOID','ELLIPSOID'),
-                                                          ('BALL','BALL','BALL')], default = 'CUBE')
+                                                          ('BALL','BALL','BALL')], default = 'CUBE', description = "Shape of extruded wax object")
     @classmethod
     def poll(cls, context):
         

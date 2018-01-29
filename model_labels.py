@@ -36,6 +36,8 @@ class D3Splint_place_text_on_model(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         
+        if not context.object:
+            return False
         return True
             
     
@@ -82,11 +84,12 @@ class D3Splint_place_text_on_model(bpy.types.Operator):
         #    x *= -1
         #    y *= -1
         
-        if 'Emboss Boss' in bpy.data.curves:    
+        if 'Emboss Boss' in bpy.data.curves and 'Emboss Boss' in bpy.data.objects:    
             txt_crv = bpy.data.curves.get('Emboss Boss')
             txt_ob = bpy.data.objects.get('Emboss Boss')
             txt_crv.body = self.message
-        
+            new_mods = False
+            
         else:
             txt_crv = bpy.data.curves.new('Emboss Boss', type = 'FONT')
             txt_crv.body = self.message
@@ -96,6 +99,7 @@ class D3Splint_place_text_on_model(bpy.types.Operator):
             txt_crv.align_y = 'BOTTOM'
             txt_ob = bpy.data.objects.new('Emboss Boss', txt_crv)
             context.scene.objects.link(txt_ob)
+            new_mods = True
             
         #txt_crv.extrude = 1
         txt_crv.size = self.font_size
@@ -147,28 +151,35 @@ class D3Splint_place_text_on_model(bpy.types.Operator):
               
         T = Matrix.Translation(translation)
         
+        
         txt_ob.matrix_world = T * R * S
-        mod = txt_ob.modifiers.new('Shrinkwrap', type = 'SHRINKWRAP')
-        mod.wrap_method = 'PROJECT'
-        mod.use_project_z = True
-        mod.use_negative_direction = True
-        mod.use_positive_direction = True
-        mod.target = context.object
         
-        tmod = txt_ob.modifiers.new('Triangulate', type = 'TRIANGULATE')
-        
-        smod = txt_ob.modifiers.new('Smooth', type = 'SMOOTH')
-        smod.use_x = False
-        smod.use_y = False
-        smod.use_z = True
-        smod.factor = 1
-        smod.iterations = 2000
+        if new_mods:
+            mod = txt_ob.modifiers.new('Shrinkwrap', type = 'SHRINKWRAP')
+            mod.wrap_method = 'PROJECT'
+            mod.use_project_z = True
+            mod.use_negative_direction = True
+            mod.use_positive_direction = True
         
         
-        solid = txt_ob.modifiers.new('Solidify', type = 'SOLIDIFY')
-        solid.thickness = self.depth
-        solid.offset = 0
-                   
+            tmod = txt_ob.modifiers.new('Triangulate', type = 'TRIANGULATE')
+        
+            smod = txt_ob.modifiers.new('Smooth', type = 'SMOOTH')
+            smod.use_x = False
+            smod.use_y = False
+            smod.use_z = True
+            smod.factor = 1
+            smod.iterations = 2000
+        
+        
+            solid = txt_ob.modifiers.new('Solidify', type = 'SOLIDIFY')
+            solid.thickness = self.depth
+            solid.offset = 0
+        
+        else:
+            mod = txt_ob.modifiers.get('Shrinkwrap')
+        mod.target = context.object           
+        txt_ob.hide = False
         return {"FINISHED"}
 
 

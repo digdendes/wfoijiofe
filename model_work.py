@@ -2180,7 +2180,7 @@ class VerticaBasePoints(PointPicker):
         
         if 'Base Plane' in bpy.data.objects:
             b_plane_ob = bpy.data.objects['Base Plane']
-            b_plane_ob.hide = False
+            b_plane_ob.hide = True
         else:
             bpln_bme = bmesh.new()
             bmesh.ops.create_circle(bpln_bme, cap_ends = True, cap_tris = True, segments = 24, diameter = 50)
@@ -2189,7 +2189,7 @@ class VerticaBasePoints(PointPicker):
             context.scene.objects.link(b_plane_ob)
             bpln_bme.to_mesh(b_plane_me)
             bpln_bme.free()
-        
+        b_plane_ob.hide = True
         #constrain to plane  
         X = Vector((random.random(), random.random(), random.random()))
         
@@ -2392,6 +2392,7 @@ class VerticaBasePoints(PointPicker):
             pad_me = bpy.data.meshes.new('Pad Base')
             pad_ob = bpy.data.objects.new('Pad Base', pad_me)
             context.scene.objects.link(pad_ob)
+        pad_ob.hide = True
         
         meta_obj.hide = False    
         meta_obj.matrix_world = self.plane_ob.matrix_world
@@ -2673,8 +2674,7 @@ class VerticaBasePoints(PointPicker):
             self.labels.pop()
             
             
-        
-        
+            
     def finish(self, context):
         
         start = time.time()

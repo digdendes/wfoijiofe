@@ -1586,6 +1586,10 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
             self.report({'ERROR'},'Margin and model not defined')
             return {'CANCELLED'}
         
+        if not splint.landmarks_set:
+            self.report({'ERROR'}, 'You must set landmarks to get an approximate mounting')
+            return {'CANCELLED'}
+        
         start = time.time()
         
         mx = margin.matrix_world
@@ -4123,7 +4127,7 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
     bl_label = "Create Splint Spacer"
     bl_options = {'REGISTER', 'UNDO'}
     
-    radius = FloatProperty(default = .12 , min = .01, max = 1, description = 'Thickness of Offset')
+    radius = FloatProperty(default = .12 , min = .01, max = 1, description = 'Thickness of Offset', name = 'Thickness')
     resolution = FloatProperty(default = 1.5, description = 'Mesh resolution. 1.5 seems ok?')
     scale = FloatProperty(default = 10, description = 'Scale up to make it better')
     
