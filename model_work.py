@@ -31,6 +31,7 @@ from textbox import TextBox
 from bpy_extras import view3d_utils
 from mathutils.geometry import intersect_point_line, intersect_line_plane
 import random
+import blf
 #TODO, put this somewhere logical and useful
 def vector_angle_between(v0, v1, vcross):
     a = v0.angle(v1)
@@ -2059,8 +2060,11 @@ class VerticaBasePoints(PointPicker):
         
         
         #self.projected_points = []
-            
-            
+        
+        #record whether we have calculated the base or not
+        self.base_preview = False    
+        self.Z_projected = Vector((0,0,1))
+        self.theta = 0    
         
     def add_vertical_point(self,context,x,y, label = None):
         
@@ -2070,9 +2074,7 @@ class VerticaBasePoints(PointPicker):
         if not self.click_add_point(context, x, y, label = 'Plane Control'):
             return
         
-        
-        
-        
+
         region = context.region
         rv3d = context.region_data
         coord = x, y
@@ -2155,14 +2157,25 @@ class VerticaBasePoints(PointPicker):
         
         if self.plane_ob == None: return
         
+        Z_base = self.normals[0]
+        
+        
         #constrain to plane  
         X = self.b_pts[1] - self.b_pts[2]
 
-        
         Z = self.b_pts[3] - self.plane_center
         
         Z.normalize()
         
+        
+        theta = math.asin(Z.dot(Z_base))
+        print("angle is %f" % (180.0 * theta/math.pi))
+        
+        Z_projected = Z - Z.dot(Z_base) * Z_base
+        Z_projected.normalize()
+        
+        self.Z_projected = Z_projected
+        self.theta = theta
         #enforce X perpendicular to Z
         X = X - X.dot(Z) * Z
         X.normalize()
@@ -2178,6 +2191,7 @@ class VerticaBasePoints(PointPicker):
         T = Matrix.Translation(self.plane_center)
 
         self.plane_ob.matrix_world = T * R
+        self.plane_ob.hide = False
         
     def mark_base(self, context, x,y, label = ''):
         
@@ -2671,6 +2685,9 @@ class VerticaBasePoints(PointPicker):
         for mb in to_delete:
             meta_data.elements.remove(mb)        
         
+        self.base_preview = True
+        self.plane_ob.hide = True
+        
         return
     
     def delete_recent(self):
@@ -2679,17 +2696,20 @@ class VerticaBasePoints(PointPicker):
             self.b_pts.pop()
             self.normals.pop()
             self.labels.pop()
-            
-            
-            
+                       
     def finish(self, context):
         
         start = time.time()
         interval_start = start
         
-        if 'Meta Base' not in bpy.data.objects: return
-        if 'Distal Cut' not in bpy.data.objects: return
-        if 'Base Plane' not in bpy.data.objects: return
+        if not self.base_preview:
+            print('making base since there is no preview')
+            self.make_base(context)
+            
+        #if 'Meta Base' not in bpy.data.objects: return
+        #if 'Distal Cut' not in bpy.data.objects: return
+        #if 'Base Plane' not in bpy.data.objects: return
+        
         
         distal_cut = bpy.data.objects.get('Distal Cut')
         bplane = bpy.data.objects.get('Base Plane')
@@ -2777,9 +2797,30 @@ class VerticaBasePoints(PointPicker):
 
         if len(self.b_pts) != 4: return
      
-    
+        region = context.region  
+        rv3d = context.space_data.region_3d
+        
         bgl_utils.draw_polyline_from_coordinates(context, [self.plane_center, self.b_pts[3]], 2, color = (.1,1,.1,1))
         bgl_utils.draw_polyline_from_coordinates(context, [self.b_pts[1], self.b_pts[2]], 2, color = (.1,1,.1,1))
+        
+        
+        vec_p = self.b_pts[3] - self.plane_center
+        vec_p.normalize()
+        
+        vec_base = self.Z_projected
+        
+        vec_mid = .5 * (vec_base + vec_p)
+        vec_mid.normalize()
+        
+        
+        angle_loc = self.plane_center + 10 * vec_mid
+        
+        angle = str(abs(180 * self.theta / math.pi))[0:4]
+        
+        vector2d = view3d_utils.location_3d_to_region_2d(region, rv3d, angle_loc)
+        blf.position(0, vector2d[0], vector2d[1], 0)
+                
+        blf.draw(0, angle)
         
         #if len(self.projected_points):
         #    bgl_utils.draw_3d_points(context, self.projected_points, 1, color = (.1, .1, .1, 1))        
@@ -2876,6 +2917,7 @@ class D3Tool_OT_model_vertical_base(bpy.types.Operator):
                 help_txt = "Change view and click to place vertical orientation \n Use Up and Dn Arrows to translate plane \n Press B to preview the base \n Press enter to finalize"
                 self.help_box.raw_text = help_txt
                 self.help_box.format_and_wrap_text()
+                self.help_box.fit_box_height_to_text_lines()
                 
                 return 'main'
         
