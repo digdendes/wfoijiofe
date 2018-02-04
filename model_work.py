@@ -3019,6 +3019,11 @@ class D3Tool_OT_model_vertical_base(bpy.types.Operator):
     def invoke(self,context, event):
         
         model = context.object
+        
+        for ob in context.scene.objects:
+            if ob != context.object:
+                ob.hide = True
+                
         self.crv = VerticaBasePoints(context,snap_type ='OBJECT', snap_object = model)
         
         

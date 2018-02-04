@@ -156,8 +156,14 @@ class D3SplintRestoration(bpy.types.PropertyGroup):
         cls.trim_upper = bpy.props.BoolProperty(name = 'trim_upper', default = False)
         #done
         cls.splint_shell = bpy.props.BoolProperty(name = 'splint_shell', default = False)
+        
+        cls.insertion_path = bpy.props.BoolProperty(name = 'insertion path', default = False)
         #done
         cls.passive_offset = bpy.props.BoolProperty(name = 'passive_offset', default = False)
+        
+        #done
+        cls.remove_undercuts = bpy.props.BoolProperty(name = 'remove_undercuts', default = False)
+        
         #done
         cls.finalize_splint = bpy.props.BoolProperty(name = 'finalize_splint', default = False)
         

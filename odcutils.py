@@ -2509,6 +2509,8 @@ def silouette_brute_force(context, ob, view, world = True, smooth = True, debug 
     
             mod2 = obj.modifiers.new('Wrap','SHRINKWRAP')
             mod2.target = ob
+            mod2.use_keep_above_surface = True
+            mod2.offset = .02
     
     if debug:
         print("finished in %f seconds" % (time.time() - start))

@@ -89,7 +89,7 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
         bmesh.ops.create_grid(bme, x_segments = 200, y_segments = 200, size = 39.9)
         
         bme.to_mesh(me)
-        plane_obj = bpy.data.objects.new('Occlusal Plane', me)
+        plane_obj = bpy.data.objects.new('Dynamic Occlusal Surface', me)
         plane_obj.matrix_world = T * R
         
         mat = bpy.data.materials.get("Plane Material")
@@ -244,6 +244,238 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
         
         tracking.trackUsage("D3Splint:MaxBuccalCusps",None)
 
+        return {'RUNNING_MODAL'}
+
+
+class D3SPLINT_OT_splint_occlusal_curve_mand(bpy.types.Operator):
+    """Draw a line along the lingual cusps of the mandibular model"""
+    bl_idname = "d3splint.draw_occlusal_curve_mand"
+    bl_label = "Mark Mandible Occlusal Curve"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls,context):
+        return True
+
+    def  convert_curve_to_plane(self, context):
+        
+        me = self.crv.crv_obj.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+        mx = self.crv.crv_obj.matrix_world
+        arch_vs = [mx*v.co for v in me.vertices]
+        arc_vs_even, eds = space_evenly_on_path(arch_vs, [(0,1),(1,2)], 101, 0)
+        
+        
+        Z = odcutils.calculate_plane(arc_vs_even, itermax = 500, debug = False)
+        
+        v_ant = arc_vs_even[50] #we established 100 verts so 50 is the anterior midpoint
+        v_0 = arc_vs_even[0]
+        v_n = arc_vs_even[-1]
+        
+        center = .5 *(.5*(v_0 + v_n) + v_ant)
+        
+        vec_n = v_n - v_0
+        vec_n.normalize()
+        
+        vec_ant = v_ant - v_0
+        vec_ant.normalize()
+        
+        #Z = vec_n.cross(vec_ant)
+        #Z.normalize()
+        X = v_ant - center
+        X.normalize()
+        
+        if Z.dot(Vector((0,0,1))) < 0:
+            Z = -1 * Z
+                
+        Y = Z.cross(X)
+        
+        R = Matrix.Identity(3)  #make the columns of matrix U, V, W
+        R[0][0], R[0][1], R[0][2]  = X[0] ,Y[0],  Z[0]
+        R[1][0], R[1][1], R[1][2]  = X[1], Y[1],  Z[1]
+        R[2][0] ,R[2][1], R[2][2]  = X[2], Y[2],  Z[2]
+        
+        R = R.to_4x4()
+        T = Matrix.Translation(center - 4 * Z)
+        T2 = Matrix.Translation(center + 10 * Z)
+        
+        bme = bmesh.new()
+        bme.verts.ensure_lookup_table()
+        bme.edges.ensure_lookup_table()
+        bme.faces.ensure_lookup_table()
+        bmesh.ops.create_grid(bme, x_segments = 200, y_segments = 200, size = 39.9)
+        
+        bme.to_mesh(me)
+        plane_obj = bpy.data.objects.new('Dynamic Occlusal Surface', me)
+        plane_obj.matrix_world = T * R
+        
+        mat = bpy.data.materials.get("Plane Material")
+        if mat is None:
+            # create material
+            mat = bpy.data.materials.new(name="Plane Material")
+            mat.diffuse_color = Color((0.8, 1, .9))
+        
+        plane_obj.data.materials.append(mat)
+        Master = bpy.data.objects.get(self.splint.get_maxilla())
+        Opposing = bpy.data.objects.get(self.splint.get_mandible())
+        cons = plane_obj.constraints.new('CHILD_OF')
+        cons.target = Master
+        cons.inverse_matrix = Master.matrix_world.inverted()
+        
+        context.scene.objects.link(plane_obj)
+        plane_obj.hide = True
+        bme.free()
+        
+        
+        
+    def finish_up(self,context):     
+        for ob in bpy.data.objects:
+            ob.hide = True
+        self.crv.crv_obj.hide = True
+        self.splint.curve_mand = True
+        
+        Model = bpy.data.objects.get(self.splint.model)
+        if Model:
+            Model.select = True
+            Model.hide = False
+            context.scene.objects.active = Model
+            if self.splint.jaw_type == 'MAXILLA':
+                bpy.ops.view3d.viewnumpad(type = 'BOTTOM')
+            else:
+                bpy.ops.view3d.viewnumpad(type = 'TOP')
+            bpy.ops.view3d.view_selected()
+            
+    def modal_nav(self, event):
+        events_nav = {'MIDDLEMOUSE', 'WHEELINMOUSE','WHEELOUTMOUSE', 'WHEELUPMOUSE','WHEELDOWNMOUSE'} #TODO, better navigation, another tutorial
+        handle_nav = False
+        handle_nav |= event.type in events_nav
+
+        if handle_nav: 
+            return 'nav'
+        return ''
+    
+    def modal_main(self,context,event):
+        # general navigation
+        nmode = self.modal_nav(event)
+        if nmode != '':
+            return nmode  #stop here and tell parent modal to 'PASS_THROUGH'
+
+        #after navigation filter, these are relevant events in this state
+        if event.type == 'G' and event.value == 'PRESS':
+            if self.crv.grab_initiate():
+                return 'grab'
+            else:
+                #error, need to select a point
+                return 'main'
+        
+        if event.type == 'MOUSEMOVE':
+            self.crv.hover(context, event.mouse_region_x, event.mouse_region_y)    
+            return 'main'
+        
+        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+            x, y = event.mouse_region_x, event.mouse_region_y
+            self.crv.click_add_point(context, x,y)
+            return 'main'
+        
+        if event.type == 'RIGHTMOUSE' and event.value == 'PRESS':
+            self.crv.click_delete_point(mode = 'mouse')
+            return 'main'
+        
+        if event.type == 'X' and event.value == 'PRESS':
+            self.crv.delete_selected(mode = 'selected')
+            return 'main'
+            
+        if event.type == 'RET' and event.value == 'PRESS':
+            
+            if self.splint.jaw_type == 'MAXILLA':
+                self.convert_curve_to_plane(context)
+            
+            self.finish_up(context)
+            tracking.trackUsage("D3Splint:SplintMandibularCurve",None)
+            return 'finish'
+            
+        elif event.type == 'ESC' and event.value == 'PRESS':
+            return 'cancel' 
+
+        return 'main'
+    
+    def modal_grab(self,context,event):
+        # no navigation in grab mode
+        
+        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+            #confirm location
+            self.crv.grab_confirm()
+            return 'main'
+        
+        elif event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS':
+            #put it back!
+            self.crv.grab_cancel()
+            return 'main'
+        
+        elif event.type == 'MOUSEMOVE':
+            #update the b_pt location
+            self.crv.grab_mouse_move(context,event.mouse_region_x, event.mouse_region_y)
+            return 'grab'
+        
+    def modal(self, context, event):
+        context.area.tag_redraw()
+        
+        FSM = {}    
+        FSM['main']    = self.modal_main
+        FSM['grab']    = self.modal_grab
+        FSM['nav']     = self.modal_nav
+        
+        nmode = FSM[self.mode](context, event)
+        
+        if nmode == 'nav': 
+            return {'PASS_THROUGH'}
+        
+        if nmode in {'finish','cancel'}:
+            context.space_data.show_manipulator = True
+            context.space_data.transform_manipulators = {'TRANSLATE'}
+            #clean up callbacks
+            bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+            return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
+        
+        if nmode: self.mode = nmode
+        
+        return {'RUNNING_MODAL'}
+
+    def invoke(self,context, event):
+        
+        self.splint = context.scene.odc_splints[0]    
+        self.crv = None
+        margin = 'Occlusal Curve Mand'
+        
+        model = self.splint.get_mandible()   
+        if model != '' and model in bpy.data.objects:
+            Model = bpy.data.objects[model]
+            for ob in bpy.data.objects:
+                ob.select = False
+                ob.hide = True
+            Model.select = True
+            Model.hide = False
+            context.scene.objects.active = Model
+            bpy.ops.view3d.viewnumpad(type = 'TOP')
+            bpy.ops.view3d.view_selected()
+            context.space_data.show_manipulator = False
+            context.space_data.transform_manipulators = {'TRANSLATE'}
+            self.crv = CurveDataManager(context,snap_type ='OBJECT', snap_object = Model, shrink_mod = False, name = margin, cyclic = 'FALSE')
+            self.crv.crv_obj.parent = Model
+            
+        else:
+            self.report({'ERROR'}, "Need to mark the Opposing model first!")
+            return {'CANCELLED'}
+            
+        
+        #self.splint.occl = self.crv.crv_obj.name
+        
+        #TODO, tweak the modifier as needed
+        help_txt = "DRAW LINGUAL OCCLUSAL POINTS\n\n-Left Click on lingual cusps and incisal edges to define Dynamic Occlusal Surface\n-Points will snap to objects under mouse \n-Right click to delete a point n\ G to grab  \n ENTER to confirm \n ESC to cancel"
+        self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
+        self.help_box.snap_to_corner(context, corner = [1,1])
+        self.mode = 'main'
+        self._handle = bpy.types.SpaceView3D.draw_handler_add(arch_crv_draw_callback, (self, context), 'WINDOW', 'POST_PIXEL')
+        context.window_manager.modal_handler_add(self) 
         return {'RUNNING_MODAL'}
 
 def landmarks_draw_callback(self, context):  
@@ -524,7 +756,7 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
             cons.target = Model
             cons.inverse_matrix = Model.matrix_world.inverted()
         
-            if "Jaw Orientation" in bpy.data.objects:
+            if "Mandibular Orientation" in bpy.data.objects:
                 Transform = bpy.data.objects.get('Mandibular Orientation')
             else:
                 Transform = bpy.data.objects.new('Mandibular Orientation', None)
@@ -538,9 +770,9 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
             trim_ob.matrix_world = mx_mount
             trim_ob.hide = True
         
-        buccal = self.splint.name + '_buccal'
-        if buccal in bpy.data.objects:
-            bobj = bpy.data.objects[buccal]
+        margin = self.splint.name + '_margin'
+        if margin in bpy.data.objects:
+            bobj = bpy.data.objects[margin]
             bobj.data.transform(iR)
             bobj.matrix_world = mx_mount
             bobj.hide = True
@@ -548,7 +780,7 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         if "Trimmed_Model" in bpy.data.objects:
             trim_ob = bpy.data.objects["Trimmed_Model"]
             trim_ob.data.transform(iR)
-            trim_ob.matrix_word = mx_mount
+            trim_ob.matrix_world = mx_mount
             trim_ob.hide = True
         
         context.scene.cursor_location = Model.location
@@ -1606,17 +1838,17 @@ class D3SPLINT_OT_start_splint_on_opposing(bpy.types.Operator):
             
             
             
-            if 'Occlusal Plane' not in bpy.data.objects:
+            if 'Dynamic Occlusal Surface' not in bpy.data.objects:
                 bme.to_mesh(me)
-                plane_obj = bpy.data.objects.new('Occlusal Plane', me)
+                plane_obj = bpy.data.objects.new('Dynamic Occlusal Surface', me)
             else:
-                plane_obj = bpy.data.objects.get('Occlusal Plane')
+                plane_obj = bpy.data.objects.get('Dynamic Occlusal Surface')
                 if self.keep_func_surface:
                     
                     plane_obj.name = 'Functional Surface' + splint.jaw_type[0:3]
                     plane_obj.data.name = 'Functional Surface' + splint.jaw_type[0:3]
-                    me = bpy.data.meshes.new('Occlusal Plane')
-                    plane_obj =bpy.data.objects.new('Occlusal Plane', me)
+                    me = bpy.data.meshes.new('Dynamic Occlusal Surface')
+                    plane_obj =bpy.data.objects.new('Dynamic Occlusal Surface', me)
                     context.scene.objects.link(plane_obj)
                    
                 bme.to_mesh(plane_obj.data)
@@ -1668,6 +1900,7 @@ def register():
     bpy.utils.register_class(D3SPLINT_OT_splint_paint_margin)  
     bpy.utils.register_class(D3SPLINT_OT_splint_trim_model_paint)
     bpy.utils.register_class(D3SPLINT_OT_splint_occlusal_arch_max)
+    bpy.utils.register_class(D3SPLINT_OT_splint_occlusal_curve_mand)
     bpy.utils.register_class(D3SPLINT_OT_pick_model)
     bpy.utils.register_class(D3SPLINT_OT_pick_opposing)
     bpy.utils.register_class(D3SPLINT_OT_pick_external_shell)
@@ -1678,6 +1911,7 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_splint_paint_margin)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_trim_model_paint)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_occlusal_arch_max)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_occlusal_curve_mand)
     bpy.utils.unregister_class(D3SPLINT_OT_pick_model)
     bpy.utils.unregister_class(D3SPLINT_OT_pick_opposing)
     bpy.utils.unregister_class(D3SPLINT_OT_pick_external_shell)

@@ -193,17 +193,20 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         row = layout.row()
         row.operator("d3splint.draw_occlusal_curve_mand", text = "Mark Mand Curve", icon = ico)
         
-        row = layout.row()
-        row.prop(prefs, "show_survey_functions")
         
-        if prefs.show_survey_functions:
-            row = layout.row()
-            row.label('Survey and HoC')
+        row = layout.row()
+        row.label('Survey and HoC')
             
-            row = layout.row()
-            col = row.column()
-            col.operator("d3splint.view_silhouette_survey", text = "Survey Model (View)")
-            col.operator("d3splint.arrow_silhouette_survey", text = "Survey Model (Arrow)")
+        row = layout.row()
+        col = row.column()
+        
+        if splint and splint.insertion_path: 
+            ico = 'CHECKBOX_HLT'
+        else:
+            ico = 'CHECKBOX_DEHLT'
+            
+        col.operator("d3splint.view_silhouette_survey", text = "Survey Model (View)", icon = ico)
+        col.operator("d3splint.arrow_silhouette_survey", text = "Survey Model (Arrow)")
         
         row = layout.row()
         row.label('Splint Boundaries')
@@ -213,7 +216,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         else:
             ico = 'CHECKBOX_DEHLT'
         row = layout.row()
-        row.operator("d3splint.draw_buccal_curve", text = "Mark Splint Outline", icon = ico)
+        row.operator("d3splint.draw_splint_margin", text = "Mark Splint Margin", icon = ico)
         
         if splint and splint.trim_upper: 
             ico = 'CHECKBOX_HLT'
@@ -261,7 +264,11 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
             ico = 'CHECKBOX_DEHLT'
         col.operator("d3splint.splint_passive_spacer", text = "Passivity Offset", icon = ico)
         
-
+        if splint and splint.remove_undercuts: 
+            ico = 'CHECKBOX_HLT'
+        else:
+            ico = 'CHECKBOX_DEHLT'
+        col.operator("d3splint.meta_blockout_trimmed_model2", text = "Undercut Blockout", icon = ico)
         
         row = layout.row()
         row.label('Virtual Wax Tools')
@@ -400,8 +407,8 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         else:
             ico = 'CHECKBOX_DEHLT'
         col = row.column()
-        col.operator("d3splint.splint_finish_booleans", text = "Finalize The Splint", icon = ico)
-        col.operator("d3guard.splint_cork_boolean", text = "Finalize Splint (CORK EGINE)")
+        col.operator("d3splint.splint_finish_booleans2", text = "Finalize The Splint", icon = ico)
+        #col.operator("d3guard.splint_cork_boolean", text = "Finalize Splint (CORK EGINE)")
         col.operator("d3splint.export_splint_stl", text = "Export Splint STL")
         
         row = layout.row()

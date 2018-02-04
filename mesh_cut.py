@@ -208,7 +208,7 @@ def grow_selection_to_find_face(bme, start_face, stop_face, max_iters = 1000):
             
     return total_selection
     
-def edge_loops_from_bmedges(bmesh, bm_edges):
+def edge_loops_from_bmedges(bme, bm_edges):
     """
     Edge loops defined by edges
 
@@ -224,7 +224,7 @@ def edge_loops_from_bmedges(bmesh, bm_edges):
     edges = bm_edges.copy()
 
     while edges:
-        current_edge = bmesh.edges[edges.pop()]
+        current_edge = bme.edges[edges.pop()]
         vert_e, vert_st = current_edge.verts[:]
         vert_end, vert_start = vert_e.index, vert_st.index
         line_poly = [vert_start, vert_end]
@@ -236,7 +236,7 @@ def edge_loops_from_bmedges(bmesh, bm_edges):
             i = len(edges)
             while i:
                 i -= 1
-                ed = bmesh.edges[edges[i]]
+                ed = bme.edges[edges[i]]
                 v_1, v_2 = ed.verts
                 v1, v2 = v_1.index, v_2.index
                 if v1 == vert_end:

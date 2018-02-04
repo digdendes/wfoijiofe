@@ -24,7 +24,7 @@
 bl_info = {
     'name': "D3T Splint Module",
     'author': "Patrick R. Moore",
-    'version': (0,2,8),
+    'version': (0,3,0),
     'blender': (2, 7, 9),
     'api': "3c04373",
     'location': "3D View -> Tool Shelf",
@@ -152,6 +152,21 @@ class D3SplintAddonPreferences(AddonPreferences):
                                               description = 'Appliance is on upper or lower jaw')
     
     
+    
+    
+    ###### Articulator Defaults   ############
+    ##########################################
+    def_intra_condyle_width = IntProperty(default = 110, description = 'Width between condyles in mm')
+    def_condyle_angle = IntProperty(default = 20, description = 'Condyle inclination')
+    def_bennet_angle = FloatProperty(default = 7.5, description = 'Bennet Angle')
+    
+    def_incisal_guidance = FloatProperty(default = 10, description = 'Incisal Guidance Angle')
+    def_canine_guidance = FloatProperty(default = 10, description = 'Canine Lateral Guidance Angle')
+    def_guideance_delay_ant = FloatProperty(default = .1, description = 'Anterior movement before guidance starts')
+    def_guideance_delay_lat = FloatProperty(default = .1, description = 'Lateral movement before guidance starts')
+    
+    
+    def_occlusal_plane_angle = FloatProperty(default = 7.5, description = 'Bennet Angle')
     #behavior_mode = EnumProperty(name="How Active Tooth is determined by operator", description="'LIST' is more predictable, 'ACTIVE' more like blender, 'ACTIVE_SELECTED' is for advanced users", items=behavior_enum, default='0')
 
     def draw(self, context):

@@ -115,7 +115,7 @@ def undercut_faces(context, ob, view, threshold = .01, world = True):
         if f.normal.dot(view) < -threshold:
             undercut_locations += [f.calc_center_median()]
             undercut_radii += [2 * f.calc_area()**.5]
-    return undercut_locations, undercut_radii 
+    return undercut_locations, undercut_radii
     
     
     

@@ -129,7 +129,7 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
     
     intra_condyle_width = IntProperty(default = 110, description = 'Width between condyles in mm')
     condyle_angle = IntProperty(default = 20, description = 'Condyle inclination')
-    bennet_angle = FloatProperty(default = 7.5, description = 'Height of rim')
+    bennet_angle = FloatProperty(default = 7.5, description = 'Bennet Angle')
     
     incisal_guidance = FloatProperty(default = 10, description = 'Incisal Guidance Angle')
     canine_guidance = FloatProperty(default = 10, description = 'Canine Lateral Guidance Angle')
@@ -674,6 +674,7 @@ class D3SPLINT_OT_splint_open_pin_on_articulator(bpy.types.Operator):
             mx = Articulator.matrix_world * Articulator.pose.bones['Mandibular Bow'].matrix
             cons.inverse_matrix = mx.inverted()
     
+        context.space_data.show_manipulator = True
         return {'FINISHED'}
 
 class D3SPLINT_OT_recover_mandible_mounting(bpy.types.Operator):

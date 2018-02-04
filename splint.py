@@ -9,7 +9,7 @@ from bpy.props import FloatProperty, BoolProperty, IntProperty, EnumProperty
 import bgl
 import blf
 import random
-from mesh_cut import edge_loops_from_bmedges, space_evenly_on_path, flood_selection_faces
+from mesh_cut import edge_loops_from_bmedges, space_evenly_on_path, flood_selection_faces, flood_selection_faces_limit
 from common_utilities import bversion, showErrorMessage
 #from . 
 import odcutils
@@ -547,9 +547,9 @@ def arch_crv_draw_callback(self, context):
     self.help_box.draw()      
     
 
-class D3SPLINT_OT_splint_buccal_marks(bpy.types.Operator):
+class D3SPLINT_OT_splint_mark_margin(bpy.types.Operator):
     """Draw a line along the limits of the splint"""
-    bl_idname = "d3splint.draw_buccal_curve"
+    bl_idname = "d3splint.draw_splint_margin"
     bl_label = "Mark Buccal Splint Limits"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -655,7 +655,7 @@ class D3SPLINT_OT_splint_buccal_marks(bpy.types.Operator):
         
         self.splint = context.scene.odc_splints[0]   
         self.crv = None
-        margin = self.splint.name + '_buccal'
+        margin = self.splint.name + '_margin'
            
         if self.splint.model != '' and self.splint.model in bpy.data.objects:
             Model = bpy.data.objects[self.splint.model]
@@ -695,402 +695,14 @@ class D3SPLINT_OT_splint_buccal_marks(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
 
-class D3SPLINT_OT_splint_occlusal_arch(bpy.types.Operator):
-    """Draw a line along the lingual cusps of the mandibular model"""
-    bl_idname = "d3splint.draw_occlusal_curve_mand"
-    bl_label = "Mark Occlusal Curve"
-    bl_options = {'REGISTER', 'UNDO'}
-    
-    @classmethod
-    def poll(cls,context):
-        return True
 
-    def  convert_curve_to_plane(self, context):
-        
-        me = self.crv.crv_obj.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
-        mx = self.crv.crv_obj.matrix_world
-        arch_vs = [mx*v.co for v in me.vertices]
-        arc_vs_even, eds = space_evenly_on_path(arch_vs, [(0,1),(1,2)], 101, 0)
-        
-        v_ant = arc_vs_even[50] #we established 100 verts so 50 is the anterior midpoint
-        v_0 = arc_vs_even[0]
-        v_n = arc_vs_even[-1]
-        
-        center = .5 *(.5*(v_0 + v_n) + v_ant)
-        
-        vec_n = v_n - v_0
-        vec_n.normalize()
-        
-        vec_ant = v_ant - v_0
-        vec_ant.normalize()
-        
-        Z = vec_n.cross(vec_ant)
-        Z.normalize()
-        X = v_ant - center
-        X.normalize()
-        
-        if Z.dot(Vector((0,0,1))) < 0:
-            Z = -1 * Z
-                
-        Y = Z.cross(X)
-        
-        R = Matrix.Identity(3)  #make the columns of matrix U, V, W
-        R[0][0], R[0][1], R[0][2]  = X[0] ,Y[0],  Z[0]
-        R[1][0], R[1][1], R[1][2]  = X[1], Y[1],  Z[1]
-        R[2][0] ,R[2][1], R[2][2]  = X[2], Y[2],  Z[2]
-        
-        R = R.to_4x4()
-        T = Matrix.Translation(center - 4 * Z)
-        T2 = Matrix.Translation(center + 10 * Z)
-        
-        bme = bmesh.new()
-        bme.verts.ensure_lookup_table()
-        bme.edges.ensure_lookup_table()
-        bme.faces.ensure_lookup_table()
-        bmesh.ops.create_grid(bme, x_segments = 200, y_segments = 200, size = 39.9)
-        
-        bme.to_mesh(me)
-        plane_obj = bpy.data.objects.new('Occlusal Plane', me)
-        plane_obj.matrix_world = T * R
-        
-        mat = bpy.data.materials.get("Plane Material")
-        if mat is None:
-            # create material
-            mat = bpy.data.materials.new(name="Plane Material")
-            mat.diffuse_color = Color((0.8, 1, .9))
-        
-        plane_obj.data.materials.append(mat)
-        Master = bpy.data.objects.get(self.splint.get_maxilla())
-        Opposing = bpy.data.objects.get(self.splint.get_mandible())
-        cons = plane_obj.constraints.new('CHILD_OF')
-        cons.target = Master
-        cons.inverse_matrix = Master.matrix_world.inverted()
-        
-        context.scene.objects.link(plane_obj)
-        plane_obj.hide = True
-        bme.free()
-        
-        
-        
-    def finish_up(self,context):     
-        for ob in bpy.data.objects:
-            ob.hide = True
-        self.crv.crv_obj.hide = True
-        self.splint.curve_mand = True
-        
-        Model = bpy.data.objects.get(self.splint.model)
-        if Model:
-            Model.select = True
-            Model.hide = False
-            context.scene.objects.active = Model
-            if self.splint.jaw_type == 'MAXILLA':
-                bpy.ops.view3d.viewnumpad(type = 'BOTTOM')
-            else:
-                bpy.ops.view3d.viewnumpad(type = 'TOP')
-            bpy.ops.view3d.view_selected()
-            
-    def modal_nav(self, event):
-        events_nav = {'MIDDLEMOUSE', 'WHEELINMOUSE','WHEELOUTMOUSE', 'WHEELUPMOUSE','WHEELDOWNMOUSE'} #TODO, better navigation, another tutorial
-        handle_nav = False
-        handle_nav |= event.type in events_nav
-
-        if handle_nav: 
-            return 'nav'
-        return ''
-    
-    def modal_main(self,context,event):
-        # general navigation
-        nmode = self.modal_nav(event)
-        if nmode != '':
-            return nmode  #stop here and tell parent modal to 'PASS_THROUGH'
-
-        #after navigation filter, these are relevant events in this state
-        if event.type == 'G' and event.value == 'PRESS':
-            if self.crv.grab_initiate():
-                return 'grab'
-            else:
-                #error, need to select a point
-                return 'main'
-        
-        if event.type == 'MOUSEMOVE':
-            self.crv.hover(context, event.mouse_region_x, event.mouse_region_y)    
-            return 'main'
-        
-        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
-            x, y = event.mouse_region_x, event.mouse_region_y
-            self.crv.click_add_point(context, x,y)
-            return 'main'
-        
-        if event.type == 'RIGHTMOUSE' and event.value == 'PRESS':
-            self.crv.click_delete_point(mode = 'mouse')
-            return 'main'
-        
-        if event.type == 'X' and event.value == 'PRESS':
-            self.crv.delete_selected(mode = 'selected')
-            return 'main'
-            
-        if event.type == 'RET' and event.value == 'PRESS':
-            
-            if self.splint.jaw_type == 'MAXILLA':
-                self.convert_curve_to_plane(context)
-            
-            self.finish_up(context)
-            tracking.trackUsage("D3Splint:SplintMandibularCurve",None)
-            return 'finish'
-            
-        elif event.type == 'ESC' and event.value == 'PRESS':
-            return 'cancel' 
-
-        return 'main'
-    
-    def modal_grab(self,context,event):
-        # no navigation in grab mode
-        
-        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
-            #confirm location
-            self.crv.grab_confirm()
-            return 'main'
-        
-        elif event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS':
-            #put it back!
-            self.crv.grab_cancel()
-            return 'main'
-        
-        elif event.type == 'MOUSEMOVE':
-            #update the b_pt location
-            self.crv.grab_mouse_move(context,event.mouse_region_x, event.mouse_region_y)
-            return 'grab'
-        
-    def modal(self, context, event):
-        context.area.tag_redraw()
-        
-        FSM = {}    
-        FSM['main']    = self.modal_main
-        FSM['grab']    = self.modal_grab
-        FSM['nav']     = self.modal_nav
-        
-        nmode = FSM[self.mode](context, event)
-        
-        if nmode == 'nav': 
-            return {'PASS_THROUGH'}
-        
-        if nmode in {'finish','cancel'}:
-            context.space_data.show_manipulator = True
-            context.space_data.transform_manipulators = {'TRANSLATE'}
-            #clean up callbacks
-            bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
-            return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
-        
-        if nmode: self.mode = nmode
-        
-        return {'RUNNING_MODAL'}
-
-    def invoke(self,context, event):
-        
-        self.splint = context.scene.odc_splints[0]    
-        self.crv = None
-        margin = 'Occlusal Curve Mand'
-        
-        model = self.splint.get_mandible()   
-        if model != '' and model in bpy.data.objects:
-            Model = bpy.data.objects[model]
-            for ob in bpy.data.objects:
-                ob.select = False
-                ob.hide = True
-            Model.select = True
-            Model.hide = False
-            context.scene.objects.active = Model
-            bpy.ops.view3d.viewnumpad(type = 'TOP')
-            bpy.ops.view3d.view_selected()
-            context.space_data.show_manipulator = False
-            context.space_data.transform_manipulators = {'TRANSLATE'}
-            self.crv = CurveDataManager(context,snap_type ='OBJECT', snap_object = Model, shrink_mod = False, name = margin, cyclic = 'FALSE')
-            self.crv.crv_obj.parent = Model
-            
-        else:
-            self.report({'ERROR'}, "Need to mark the Opposing model first!")
-            return {'CANCELLED'}
-            
-        
-        #self.splint.occl = self.crv.crv_obj.name
-        
-        #TODO, tweak the modifier as needed
-        help_txt = "DRAW LINGUAL OCCLUSAL POINTS\n\n-Left Click on lingual cusps and incisal edges to define occlusal plane\n-Points will snap to objects under mouse \n-Right click to delete a point n\ G to grab  \n ENTER to confirm \n ESC to cancel"
-        self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
-        self.help_box.snap_to_corner(context, corner = [1,1])
-        self.mode = 'main'
-        self._handle = bpy.types.SpaceView3D.draw_handler_add(arch_crv_draw_callback, (self, context), 'WINDOW', 'POST_PIXEL')
-        context.window_manager.modal_handler_add(self) 
-        return {'RUNNING_MODAL'}
      
 def ispltmgn_draw_callback(self, context):  
     self.crv.draw(context)
     self.help_box.draw()      
     
 
-class D3SPLINT_OT_splint_margin(bpy.types.Operator):
-    """Draw a line with the mouse to extrude bezier curves"""
-    bl_idname = "d3splint.initiate_splint_outline"
-    bl_label = "Splint Outine"
-    bl_options = {'REGISTER', 'UNDO'}
-    
-    @classmethod
-    def poll(cls,context):
-        condition_1 = context.object != None
-        return condition_1
-    
-    def modal_nav(self, event):
-        events_nav = {'MIDDLEMOUSE', 'WHEELINMOUSE','WHEELOUTMOUSE', 'WHEELUPMOUSE','WHEELDOWNMOUSE'} #TODO, better navigation, another tutorial
-        handle_nav = False
-        handle_nav |= event.type in events_nav
 
-        if handle_nav: 
-            return 'nav'
-        return ''
-    
-    def modal_main(self,context,event):
-        # general navigation
-        nmode = self.modal_nav(event)
-        if nmode != '':
-            return nmode  #stop here and tell parent modal to 'PASS_THROUGH'
-
-        #after navigation filter, these are relevant events in this state
-        if event.type == 'G' and event.value == 'PRESS':
-            if self.crv.grab_initiate():
-                return 'grab'
-            else:
-                #error, need to select a point
-                return 'main'
-        
-        if event.type == 'MOUSEMOVE':
-            self.crv.hover(context, event.mouse_region_x, event.mouse_region_y)    
-            return 'main'
-        
-        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
-            x, y = event.mouse_region_x, event.mouse_region_y
-            self.crv.click_add_point(context, x,y)
-            return 'main'
-        
-        if event.type == 'RIGHTMOUSE' and event.value == 'PRESS':
-            self.crv.click_delete_point(mode = 'mouse')
-            return 'main'
-        
-        if event.type == 'X' and event.value == 'PRESS':
-            self.crv.delete_selected(mode = 'selected')
-            return 'main'
-            
-        if event.type == 'RET' and event.value == 'PRESS':
-            return 'finish'
-            
-        elif event.type == 'ESC' and event.value == 'PRESS':
-            return 'cancel' 
-
-        return 'main'
-    
-    def modal_grab(self,context,event):
-        # no navigation in grab mode
-        
-        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
-            #confirm location
-            self.crv.grab_confirm()
-            return 'main'
-        
-        elif event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS':
-            #put it back!
-            self.crv.grab_cancel()
-            return 'main'
-        
-        elif event.type == 'MOUSEMOVE':
-            #update the b_pt location
-            self.crv.grab_mouse_move(context,event.mouse_region_x, event.mouse_region_y)
-            return 'grab'
-        
-    def modal(self, context, event):
-        context.area.tag_redraw()
-        
-        FSM = {}    
-        FSM['main']    = self.modal_main
-        FSM['grab']    = self.modal_grab
-        FSM['nav']     = self.modal_nav
-        
-        nmode = FSM[self.mode](context, event)
-        
-        if nmode == 'nav': 
-            return {'PASS_THROUGH'}
-        
-        if nmode in {'finish','cancel'}:
-            #clean up callbacks
-            context.space_data.show_manipulator = True
-            context.space_data.transform_manipulators = {'TRANSLATE'}
-            bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
-            return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
-        
-        if nmode: self.mode = nmode
-        
-        return {'RUNNING_MODAL'}
-
-
-    def invoke(self,context, event):
-        
-        if len(context.scene.odc_splints) == 0 and context.object:
-            #This is a hidden cheat, allowing quick starting of a splint
-            my_item = context.scene.odc_splints.add()        
-            my_item.name = context.object.name + '_Splint'
-            my_item.model = context.object.name
-            self.report({'WARNING'}, "Assumed you wanted to start a new splint on the active object!  If not, then UNDO")
-            
-            for ob in bpy.data.objects:
-                ob.select = False
-                
-            context.object.select = True
-            bpy.ops.view3d.view_selected()
-            self.splint = my_item
-            
-        else:
-            self.splint = context.scene.odc_splints[0]
-            
-        self.crv = None
-        margin = self.splint.name + '_outline'
-        
-        if (self.splint.model == '' or self.splint.model not in bpy.data.objects) and not context.object:
-            self.report({'WARNING'}, "There is no model, the curve will snap to anything in the scene!")
-            self.crv = CurveDataManager(context,snap_type ='SCENE', snap_object = None, shrink_mod = False, name = margin, cyclic = 'MANDATORY')
-            
-        elif self.splint.model != '' and self.splint.model in bpy.data.objects:
-            Model = bpy.data.objects[self.splint.model]
-            for ob in bpy.data.objects:
-                ob.select = False
-            Model.select = True
-            Model.hide = False
-            context.scene.objects.active = Model
-            bpy.ops.view3d.view_selected()
-            self.crv = CurveDataManager(context,snap_type ='OBJECT', snap_object = Model, shrink_mod = True, name = margin, cyclic = 'MANDATORY')
-            self.crv.crv_obj.parent = Model
-            
-        if self.crv == None:
-            self.report({'ERROR'}, "Not sure what you want, you may need to select an object or plan a splint")
-            return {'CANCELLED'}
-        
-        self.splint.margin = self.crv.crv_obj.name
-        
-        if 'Wrap' in self.crv.crv_obj.modifiers:
-            mod = self.crv.crv_obj.modifiers['Wrap']
-            mod.offset = .75
-            mod.use_keep_above_surface = True
-        
-            mod = self.crv.crv_obj.modifiers.new('Smooth','SMOOTH')
-            mod.iterations = 10
-            
-        #TODO, tweak the modifier as needed
-        help_txt = "DRAW MARGIN OUTLINE\n\nLeft Click on model to draw outline \nRight click to delete a point \nLeft Click last point to make loop \n G to grab  \n ENTER to confirm \n ESC to cancel"
-        self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
-        self.help_box.snap_to_corner(context, corner = [1,1])
-        self.mode = 'main'
-        self._handle = bpy.types.SpaceView3D.draw_handler_add(ispltmgn_draw_callback, (self, context), 'WINDOW', 'POST_PIXEL')
-        context.window_manager.modal_handler_add(self) 
-        context.space_data.show_manipulator = False
-        context.space_data.transform_manipulators = {'TRANSLATE'}
-        return {'RUNNING_MODAL'}
     
     
 def plyknife_draw_callback(self, context):
@@ -1100,73 +712,7 @@ def plyknife_draw_callback(self, context):
         common_drawing.draw_polyline_from_points(context, self.sketch, (.3,.3,.3,.8), 2, "GL_LINE_SMOOTH")
         
 
-class D3SPLINT_OT_initiate_splint_margin(bpy.types.Operator):
-    '''Places a bezier curve to be extruded around the boundaries of a splint'''
-    bl_idname = 'd3splint.initiate_splint_margin'
-    bl_label = "Initiate Splint Margin"
-    bl_options = {'REGISTER','UNDO'}
-        
-    @classmethod
-    def poll(cls, context):
-        #restoration exists and is in scene
-        return len(context.scene.odc_splints) > 0             
-
-    def execute(self, context):
-        
-        sce=bpy.context.scene
-        n = sce.odc_splint_index
-        splint = sce.odc_splints[n]
-        
-        layers_copy = [layer for layer in context.scene.layers]
-        context.scene.layers[0] = True
-        
-        model = splint.model
-        Model = bpy.data.objects[model]
-
-        L = odcutils.get_bbox_center(Model, world=True)
-        #L = bpy.context.scene.cursor_location
-
-        #bpy.ops.view3d.viewnumpad(type='TOP')
-        bpy.ops.object.select_all(action='DESELECT')
-        
-        if context.mode != 'OBJECT':
-            bpy.ops.object.mode_set(mode='OBJECT')
-        
-        #bpy.context.scene.cursor_location = L
-        bpy.ops.curve.primitive_bezier_curve_add(view_align=True, enter_editmode=True, location=L)
-        
-        context.tool_settings.use_snap = True
-        context.tool_settings.snap_target= 'ACTIVE'
-        context.tool_settings.snap_element = 'FACE'
-        context.tool_settings.proportional_edit = 'DISABLED'
-        
-        Margin =context.object
-        Margin.name=splint.name + "_margin"
-        Margin.parent = Model
-        
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.curve.handle_type_set(type='AUTOMATIC')
-        bpy.ops.curve.select_all(action='DESELECT')
-        context.object.data.splines[0].bezier_points[1].select_control_point=True
-        bpy.ops.curve.delete()
-        bpy.ops.curve.select_all(action='SELECT')
-        
-        mod = Margin.modifiers.new('Wrap','SHRINKWRAP')
-        mod.target = Model
-        mod.offset = .75
-        mod.use_keep_above_surface = True
-        
-        mod = Margin.modifiers.new('Smooth','SMOOTH')
-        mod.iterations = 10
-        
-        splint.margin = Margin.name
-        odcutils.layer_management(sce.odc_splints)
-        
-        for i, layer in enumerate(layers_copy):
-            context.scene.layers[i] = layer
-        context.scene.layers[4] = True
-        return {'FINISHED'}
-    
+   
 class D3SPLINT_OT_survey_model(bpy.types.Operator):
     '''Calculates silhouette of object which surveys convexities AND concavities from the current view axis'''
     bl_idname = 'd3splint.view_silhouette_survey'
@@ -1778,7 +1324,7 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         trimmed_bme.verts.ensure_lookup_table()
         
         
-        to_keep = []
+        to_keep = set()
         mx2 = Model.matrix_world
         #Z = mx.inverted().to_3x3() * Vector((0,0,1))
         if splint.jaw_type == 'MAXILLA':
@@ -1792,8 +1338,56 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
             res = bvh.ray_cast(a, Z, 20)
             if res[0] != None:
                 #v.co = Vector((0,0,0))
-                to_keep.append(v)
+                to_keep.add(v)
         
+    
+        above_faces = set()
+        for f in trimmed_bme.faces:
+            if all([v in to_keep for v in f.verts]):
+                above_faces.add(f)
+        
+        
+        border_eds = [ed for ed in trimmed_bme.edges if len([f for f in ed.link_faces if f in above_faces]) == 1]
+        
+        
+        trimmed_bme.edges.ensure_lookup_table()
+        loops = edge_loops_from_bmedges(trimmed_bme, [ed.index for ed in border_eds])
+        
+        if len(loops) > 1:
+            
+            below_faces = set(trimmed_bme.faces) - above_faces
+            
+            islands = []
+            iters = 0
+            while len(below_faces) and iters < 100:
+                iters += 1
+                seed = below_faces.pop()
+                island = flood_selection_faces_limit(trimmed_bme, set([seed]), seed, below_faces, max_iters = 1000)
+                islands += [island]
+                below_faces.difference_update(island)
+        
+        print('There are %i islands in below verts' % len(islands))    
+        to_keep = set()
+        for isl in islands:
+            print('Island with %i faces' % len(isl))
+            if len(isl) < 3000:
+                above_faces.update(isl)
+        
+        print('keeping %i faces' % len(to_keep))
+        
+        #above_faces.update(to_keep)
+        
+        for v in trimmed_bme.verts:
+            v.select_set(False)
+        for ed in trimmed_bme.edges:
+            ed.select_set(False)
+        for f in trimmed_bme.faces:
+            f.select_set(False)
+            
+        for f in above_faces:
+            to_keep.update(f.verts[:])
+        
+
         to_delete = list(set(trimmed_bme.verts[:]) - set(to_keep))
         new_bme.free()
         
@@ -1845,7 +1439,7 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         trimmed_bme.edges.ensure_lookup_table()
         
         #####################################################
-        #######  Clean Small Isands  ########################
+        #######  Clean Small Islands  ########################
         #####################################################
         
         start = time.time()
@@ -1926,6 +1520,7 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         
         trimmed_bme.to_mesh(trimmed_model)
         trimmed_obj.matrix_world = mx2
+        trimmed_bme.free()
         
         interval_start = time.time()
         context.scene.objects.active = trimmed_obj
@@ -1940,35 +1535,39 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         bpy.ops.object.mode_set(mode = 'OBJECT')
         
         print('took %f seconds to detail flood fill' % (time.time() - interval_start))
-        trimmed_obj.hide = True
-                    
-        trimmed_bme.verts.ensure_lookup_table()
-        quad_faces = set()
-        edges = set()
-        for i in range(6):        
-            gdict = bmesh.ops.extrude_edge_only(trimmed_bme, edges = new_edges)
-            trimmed_bme.edges.ensure_lookup_table()
-            trimmed_bme.verts.ensure_lookup_table()
-            new_verts = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMVert)]
-            new_edges = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMEdge)]
-            new_faces = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMFace)]
+        trimmed_obj.hide = False
+        
+        
+        ########################################
+        ##### Leaving for Historical ###########
+        ########################################            
+        #trimmed_bme.verts.ensure_lookup_table()
+        #quad_faces = set()
+        #edges = set()
+        #for i in range(6):        
+        #    gdict = bmesh.ops.extrude_edge_only(trimmed_bme, edges = new_edges)
+        #    trimmed_bme.edges.ensure_lookup_table()
+        #    trimmed_bme.verts.ensure_lookup_table()
+        #    new_verts = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMVert)]
+        #    new_edges = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMEdge)]
+        #    new_faces = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMFace)]
             
-            quad_faces.update(new_faces)
-            edges.update(new_edges)
-            for v in new_verts:
-                v.co += .2 * Z
+        #    quad_faces.update(new_faces)
+        #    edges.update(new_edges)
+        #    for v in new_verts:
+        #        v.co += .2 * Z
         
-        gdict = bmesh.ops.triangulate(trimmed_bme, faces = list(quad_faces))
+        #gdict = bmesh.ops.triangulate(trimmed_bme, faces = list(quad_faces))
         
-        edges.update(gdict['edges'])
+        #edges.update(gdict['edges'])
         
-        subdiv_eds = []
-        for ed in edges:
-            if ed.calc_length() > .2:
-                subdiv_eds.append(ed)
+        #subdiv_eds = []
+        #for ed in edges:
+        #    if ed.calc_length() > .2:
+        #        subdiv_eds.append(ed)
         
-        print('subdividing %i long edges' % len(subdiv_eds))
-        bmesh.ops.subdivide_edges(trimmed_bme, edges = subdiv_eds, cuts = 1) 
+        #print('subdividing %i long edges' % len(subdiv_eds))
+        #bmesh.ops.subdivide_edges(trimmed_bme, edges = subdiv_eds, cuts = 1) 
         #loops = edge_loops_from_bmedges(trimmed_bme, [ed.index for ed in new_edges])
         #print('there are %i loops' % len(loops))
         #for loop in loops:
@@ -1982,53 +1581,53 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
             
         #TODO, make small islands a bmesh util
         #clean loose verts
-        to_delete = []
-        for v in trimmed_bme.verts:
-            if len(v.link_edges) < 2:
-                to_delete.append(v)
+        #to_delete = []
+        #for v in trimmed_bme.verts:
+        #    if len(v.link_edges) < 2:
+        #        to_delete.append(v)
                 
-        print('deleting %i loose verts after extruding' % len(to_delete))
-        bmesh.ops.delete(trimmed_bme, geom = to_delete, context = 1)
+        #print('deleting %i loose verts after extruding' % len(to_delete))
+        #bmesh.ops.delete(trimmed_bme, geom = to_delete, context = 1)
         
-        trimmed_bme.verts.ensure_lookup_table()
-        trimmed_bme.edges.ensure_lookup_table()
-        trimmed_bme.faces.ensure_lookup_table()
+        #trimmed_bme.verts.ensure_lookup_table()
+        #trimmed_bme.edges.ensure_lookup_table()
+        #trimmed_bme.faces.ensure_lookup_table()
         
         #delete edges without faces
-        to_delete = []
-        for ed in trimmed_bme.edges:
-            if len(ed.link_faces) == 0:
-                for v in ed.verts:
-                    if len(v.link_faces) == 0:
-                        to_delete.append(v)
+        #to_delete = []
+        #for ed in trimmed_bme.edges:
+        #    if len(ed.link_faces) == 0:
+        #        for v in ed.verts:
+        #            if len(v.link_faces) == 0:
+        #                to_delete.append(v)
 
 
-        to_delete = list(set(to_delete))
-        print('deleting %i edges without faces' % len(to_delete))
-        bmesh.ops.delete(trimmed_bme, geom = to_delete, context = 1)
+        #to_delete = list(set(to_delete))
+        #print('deleting %i edges without faces' % len(to_delete))
+        #bmesh.ops.delete(trimmed_bme, geom = to_delete, context = 1)
                 
-        trimmed_bme.verts.ensure_lookup_table()
-        trimmed_bme.edges.ensure_lookup_table()
-        trimmed_bme.faces.ensure_lookup_table()
+        #trimmed_bme.verts.ensure_lookup_table()
+        #trimmed_bme.edges.ensure_lookup_table()
+        #trimmed_bme.faces.ensure_lookup_table()
               
-        if 'Based_Model' in bpy.data.objects:
-            based_obj = bpy.data.objects.get('Based_Model')
-            based_model = based_obj.data
-        else:
-            based_model = bpy.data.meshes.new('Based_Model')
-            based_obj = bpy.data.objects.new('Based_Model', based_model)
+        #if 'Based_Model' in bpy.data.objects:
+        #    based_obj = bpy.data.objects.get('Based_Model')
+        #    based_model = based_obj.data
+        #else:
+        #    based_model = bpy.data.meshes.new('Based_Model')
+        #    based_obj = bpy.data.objects.new('Based_Model', based_model)
             
-            based_obj.matrix_world = mx2
-            context.scene.objects.link(based_obj)
+        #    based_obj.matrix_world = mx2
+        #    context.scene.objects.link(based_obj)
                 
-            cons = based_obj.constraints.new('CHILD_OF')
-            cons.target = Master
-            cons.inverse_matrix = Master.matrix_world.inverted()
+        #    cons = based_obj.constraints.new('CHILD_OF')
+        #    cons.target = Master
+        #    cons.inverse_matrix = Master.matrix_world.inverted()
         
         
-        trimmed_bme.to_mesh(based_model)
+        #trimmed_bme.to_mesh(based_model)
         
-        interval_start = time.time()
+        #interval_start = time.time()
         
         #context.scene.objects.active = based_obj
         #based_obj.select = True
@@ -2041,23 +1640,23 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         #bpy.ops.sculpt.detail_flood_fill()
         #bpy.ops.object.mode_set(mode = 'OBJECT')
         
-        print('took %f seconds to detail flood fill' % (time.time() - interval_start))
-        interval_start = time.time()
-        if 'Displace' not in based_obj.modifiers:
-            mod = based_obj.modifiers.new('Displace', type = 'DISPLACE')
-            mod.mid_level = 0.85
-            mod.strength = -1
+        #print('took %f seconds to detail flood fill' % (time.time() - interval_start))
+        #interval_start = time.time()
+        #if 'Displace' not in based_obj.modifiers:
+        #    mod = based_obj.modifiers.new('Displace', type = 'DISPLACE')
+        #    mod.mid_level = 0.85
+        #    mod.strength = -1
         
-        print('took %f seconds to add modifier' % (time.time() - interval_start))
-        interval_start = time.time()
+        #print('took %f seconds to add modifier' % (time.time() - interval_start))
+        #interval_start = time.time()
         
         Model.hide = True
-        based_obj.hide = False
+        #based_obj.hide = False
         
         
         bme.free()
         new_bme.free()
-        trimmed_bme.free()
+        #trimmed_bme.free()
         #todo remove/delete to_mesh mesh
         splint.trim_upper = True
         
@@ -2287,6 +1886,7 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
     
     flare = IntProperty(default = 0, min = -60, max = 60, description = 'Angle off of world Z')
     anterior_segement = FloatProperty(name = 'AP Spread', default = 0.3, min = .15, max = .5)
+    anterior_only = BoolProperty(name = 'Anterior Only', default = False, description = 'If true will only create ramp in front of AP spread')
     
     @classmethod
     def poll(cls, context):
@@ -2401,13 +2001,12 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
             quat = T.to_quaternion()
             
             
-            mb = meta_data.elements.new(type = self.meta_type)
             
-            mb.size_x = 1.5
             
             
             if v0_0[0] > P_ap + (1-self.anterior_segement) * ap_spread:
-                
+                mb = meta_data.elements.new(type = self.meta_type)
+                mb.size_x = 1.5
                 Qrot = Quaternion(X_c, math.pi/180 * self.flare)
                 Zprime = Qrot * Z
             
@@ -2432,7 +2031,9 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
                     mb.co = center + (.5 * self.width_offset + blend * self.anterior_projection) * Y_c
                     mb.rotation = quat
             else:          
-            
+                if self.anterior_only: continue
+                mb = meta_data.elements.new(type = self.meta_type)
+                mb.size_x = 1.5
                 mb.size_y = .5 * (size_y - 1.5) + self.width_offset
                 mb.co = center
                 
@@ -2442,20 +2043,27 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
             
         context.scene.update()
         me = meta_obj.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
-        new_ob = bpy.data.objects.new('Flat Plane', me)
-        context.scene.objects.link(new_ob)
+        
+        if 'Wax Rim' not in bpy.data.objects:
+            new_ob = bpy.data.objects.new('Wax Rim', me)
+            context.scene.objects.link(new_ob)
+            
+            mat = bpy.data.materials.get("Splint Material")
+            if mat is None:
+            # create material
+                mat = bpy.data.materials.new(name="Splint Material")
+                mat.diffuse_color = Color((0.5, .1, .6))
+        
+            new_ob.data.materials.append(mat)
+            
+        else:
+            new_ob = bpy.data.objects.get('Wax Rim')
+            new_ob.data = me
+            new_ob.hide = False
 
         context.scene.objects.unlink(meta_obj)
         bpy.data.objects.remove(meta_obj)
         bpy.data.metaballs.remove(meta_data)
-        
-        mat = bpy.data.materials.get("Splint Material")
-        if mat is None:
-            # create material
-            mat = bpy.data.materials.new(name="Splint Material")
-            mat.diffuse_color = Color((0.5, .1, .6))
-        
-        new_ob.data.materials.append(mat)
         
         bme_max.free()
         bme_mand.free()
@@ -3153,7 +2761,7 @@ class D3SPLINT_OT_splint_trim_model(bpy.types.Operator):
         
         n = context.scene.odc_splint_index
         splint = context.scene.odc_splints[n]
-        buccal = splint.name + "_buccal"
+        buccal = splint.name + "_margin"
         Model = bpy.data.objects.get(splint.model)
         if buccal not in context.scene.objects:
             self.report({'ERROR'}, "Need to mark buccal splint limits first")
@@ -3226,7 +2834,7 @@ class D3SPLINT_OT_splint_trim_model(bpy.types.Operator):
         trimmed_bme.verts.ensure_lookup_table()
         
         
-        to_delete = []
+        
         mx2 = Model.matrix_world
         imx = mx.inverted()
         
@@ -3237,84 +2845,83 @@ class D3SPLINT_OT_splint_trim_model(bpy.types.Operator):
             print('MANDIBLE')
             Z = mx.inverted().to_3x3() * Vector((0,0,-1))
         
-        print(Z)
-        print(splint.jaw_type)
+        
+        below_verts = set()
         for v in trimmed_bme.verts:
             a = imx * mx2 * v.co
             
             res = bvh.ray_cast(a, Z, 20)
             if res[0] == None:
                 v.co = Vector((0,0,0))
-                to_delete.append(v)
-        
-        #faces_to_delete = []
-        #for f in trimmed_bme.faces:
-        #    if all([v in to_delete for v in f.verts]):
-        #        faces_to_delete.append(f)
-        
-        #edges_to_delete = []
-        #for ed in trimmed_bme.edges:
-        #    if all([v in to_delete for v in ed.verts]):
-        #        edges_to_delete.append(ed)
-            
-        print('deleting %i verts' % len(to_delete))
+                below_verts.add(v)
         
         
-        bmesh.ops.delete(trimmed_bme, geom = to_delete, context = 1)
+        above_faces = set()
+        for f in trimmed_bme.face:
+            if all([v not in below_verts for v in f.verts]):
+                above_faces.add(f)
+        
+        
+        
+        
+        
+        
+        #bmesh.ops.delete(trimmed_bme, geom = to_delete, context = 1)
   
-        trimmed_bme.verts.ensure_lookup_table()
-        trimmed_bme.faces.ensure_lookup_table()
-        trimmed_bme.edges.ensure_lookup_table()
-        trimmed_bme.verts.index_update()
-        trimmed_bme.edges.index_update()
-        trimmed_bme.faces.index_update()
+        #trimmed_bme.verts.ensure_lookup_table()
+        #trimmed_bme.faces.ensure_lookup_table()
+        #trimmed_bme.edges.ensure_lookup_table()
+        #trimmed_bme.verts.index_update()
+        #trimmed_bme.edges.index_update()
+        #trimmed_bme.faces.index_update()
         
-        to_delete = []
-        for v in trimmed_bme.verts:
-            if len(v.link_edges) < 2:
-                to_delete.append(v)
+        #to_delete = []
+        #for v in trimmed_bme.verts:
+        #    if len(v.link_edges) < 2:
+        #        to_delete.append(v)
                 
-        print('deleting %i loose verts' % len(to_delete))
-        bmesh.ops.delete(trimmed_bme, geom = to_delete, context = 1)
-        trimmed_bme.verts.ensure_lookup_table()
-        trimmed_bme.faces.ensure_lookup_table()
-        trimmed_bme.edges.ensure_lookup_table()
-        trimmed_bme.verts.index_update()
-        trimmed_bme.edges.index_update()
-        trimmed_bme.faces.index_update()
+        #print('deleting %i loose verts' % len(to_delete))
+        #bmesh.ops.delete(trimmed_bme, geom = to_delete, context = 1)
+        #trimmed_bme.verts.ensure_lookup_table()
+        #trimmed_bme.faces.ensure_lookup_table()
+        #trimmed_bme.edges.ensure_lookup_table()
+        #trimmed_bme.verts.index_update()
+        #trimmed_bme.edges.index_update()
+        #trimmed_bme.faces.index_update()
         
                 
-        eds = [ed for ed in trimmed_bme.edges if len(ed.link_faces) == 1]
+        #eds = [ed for ed in trimmed_bme.edges if len(ed.link_faces) == 1]
         
-        gdict = bmesh.ops.extrude_edge_only(trimmed_bme, edges = eds)
-        bme.edges.ensure_lookup_table()
-        new_edges = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMEdge)]
-        trimmed_bme.verts.ensure_lookup_table()
-        trimmed_bme.edges.ensure_lookup_table()
-        trimmed_bme.verts.index_update()
-        trimmed_bme.edges.index_update()
-        trimmed_bme.faces.index_update()
+        #gdict = bmesh.ops.extrude_edge_only(trimmed_bme, edges = eds)
+        #bme.edges.ensure_lookup_table()
+        #new_edges = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMEdge)]
+        #trimmed_bme.verts.ensure_lookup_table()
+        #trimmed_bme.edges.ensure_lookup_table()
+        #trimmed_bme.verts.index_update()
+        #trimmed_bme.edges.index_update()
+        #trimmed_bme.faces.index_update()
         
-        loops = edge_loops_from_bmedges(trimmed_bme, [ed.index for ed in new_edges])
-        print('there are %i loops' % len(loops))
-        for loop in loops:
-            if len(loop) < 50: continue
-            for vi in loop:
-                v = trimmed_bme.verts[vi]
-                if not v.is_valid:
-                    print('invalid vert')
-                    continue
-                a = imx * mx2 * trimmed_bme.verts[vi].co
-                res = bvh.ray_cast(a, Z, 5)
-                if res[0] != None:
-                    v.co = res[0]
+        #loops = edge_loops_from_bmedges(trimmed_bme, [ed.index for ed in new_edges])
+        #print('there are %i loops' % len(loops))
+        #for loop in loops:
+        #    if len(loop) < 50: continue
+        #    for vi in loop:
+        #        v = trimmed_bme.verts[vi]
+        #        if not v.is_valid:
+        #            print('invalid vert')
+        #            continue
+        #        a = imx * mx2 * trimmed_bme.verts[vi].co
+        #        res = bvh.ray_cast(a, Z, 5)
+        #        if res[0] != None:
+        #           v.co = res[0]
         
         trimmed_model = bpy.data.meshes.new('Trimmed_Model')
         trimmed_obj = bpy.data.objects.new('Trimmed_Model', trimmed_model)
         trimmed_bme.to_mesh(trimmed_model)
         trimmed_obj.matrix_world = mx2
         context.scene.objects.link(trimmed_obj)
-                    
+        
+        return {'FINISHED'}            
         trimmed_bme.verts.ensure_lookup_table()
         for i in range(10):        
             gdict = bmesh.ops.extrude_edge_only(trimmed_bme, edges = new_edges)
@@ -3408,7 +3015,7 @@ def occlusal_surface_frame_change(scene):
     n = scene.odc_splint_index
     splint = scene.odc_splints[n]
     #TODO...get the models better?
-    plane = bpy.data.objects.get('Occlusal Plane')
+    plane = bpy.data.objects.get('Dynamic Occlusal Surface')
     jaw = bpy.data.objects.get(splint.opposing)
     
     if plane == None: return
@@ -3513,7 +3120,7 @@ class D3SPLINT_OT_splint_subtract_surface(bpy.types.Operator):
         
         Model = bpy.data.objects.get(splint.model)
         Shell = bpy.data.objects.get('Splint Shell')
-        Plane = bpy.data.objects.get('Occlusal Plane')
+        Plane = bpy.data.objects.get('Dynamic Occlusal Surface')
 
         if Shell == None:
             self.report({'ERROR'}, 'Need to calculate splint shell first')
@@ -3601,117 +3208,7 @@ class D3SPLINT_OT_splint_subtract_surface(bpy.types.Operator):
         splint.ops_string += 'SubtractSurface:'
         return {'FINISHED'}
     
-class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
-    """Finish the Booleans"""
-    bl_idname = "d3splint.splint_finish_booleans"
-    bl_label = "Finalize the Splint"
-    bl_options = {'REGISTER', 'UNDO'}
-    
-    solver = EnumProperty(
-        description="Boolean Method",
-        items=(("BMESH", "Bmesh", "Faster/More Errors"),
-               ("CARVE", "Carve", "Slower/Less Errors")),
-        default = "BMESH")
-    
-    @classmethod
-    def poll(cls, context):
-        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
-        #    return True
-        #else:
-        #    return False
-        return True
-    
-    def execute(self, context):
-        
-        n = context.scene.odc_splint_index
-        splint = context.scene.odc_splints[n]
-        
-        if splint.finalize_splint:
-            self.report({'WARNING'}, 'You have already finalized, this will remove or alter existing modifiers and try again')
-            
-        Shell = bpy.data.objects.get('Splint Shell')
-        Passive = bpy.data.objects.get('Passive Spacer')
-        
-        if Shell == None:
-            self.report({'ERROR'}, 'Need to calculate splint shell first')
-            return {'CANCELLED'}
-        
-        if Passive == None:
-            self.report({'ERROR'}, 'Need to make passive spacer first')    
-            return {'CANCELLED'}
-        if context.mode != 'OBJECT':
-            bpy.ops.object.mode_set(mode = 'OBJECT')
-        
-        tracking.trackUsage("D3Splint:FinishBoolean",None)    
-        
-        
-        #don't add multiple boolean modifiers
-        if 'Passive Fit' not in Shell.modifiers:
-            bool_mod = Shell.modifiers.new('Passive Fit', type = 'BOOLEAN')
-            bool_mod.operation = 'DIFFERENCE'
-        
-        bool_mod.solver = self.solver
-            
-        #update in case they changed the spacer
-        bool_mod.object = Passive
-        Passive.hide = True 
-        
-        bme = bmesh.new()
-        bme.from_object(Shell, context.scene)
-        bme.faces.ensure_lookup_table()
-        bme.verts.ensure_lookup_table()
-        total_faces = set(bme.faces[:])
-        islands = []
-        iters = 0
-        while len(total_faces) and iters < 100:
-            iters += 1
-            seed = total_faces.pop()
-            island = flood_selection_faces(bme, {}, seed, max_iters = 10000)
-            islands += [island]
-            total_faces.difference_update(island)
-            
-        best = max(islands, key = len)
-        
-        total_faces = set(bme.faces[:])
-        del_faces = total_faces - best
-        
-        bmesh.ops.delete(bme, geom = list(del_faces), context = 3)
-        del_verts = []
-        for v in bme.verts:
-            if all([f in del_faces for f in v.link_faces]):
-                del_verts += [v]        
-        bmesh.ops.delete(bme, geom = del_verts, context = 1)
-        
-        
-        del_edges = []
-        for ed in bme.edges:
-            if len(ed.link_faces) == 0:
-                del_edges += [ed]
-        bmesh.ops.delete(bme, geom = del_edges, context = 4) 
-        
-        
-        if 'Final Splint' not in bpy.data.objects:
-            me = bpy.data.meshes.new('Final Splint')
-            ob = bpy.data.objects.new('Final Splint', me)
-            context.scene.objects.link(ob)
-            ob.matrix_world = Shell.matrix_world
-        else:
-            ob = bpy.data.objects.get('Final Splint')
-            me = ob.data
-            
-        bme.to_mesh(me)
-        bme.free()
-        
-        for obj in context.scene.objects:
-            obj.hide = True
-            
-        context.scene.objects.active = ob
-        ob.select = True
-        ob.hide = False
-        
-        
-        splint.finalize_splint = True
-        return {'FINISHED'}
+
     
         
 class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
@@ -3752,7 +3249,7 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
         
         
         #filter the occlusal surface verts
-        Plane = bpy.data.objects.get('Occlusal Plane')
+        Plane = bpy.data.objects.get('Dynamic Occlusal Surface')
         if Plane == None:
             self.report({'ERROR'}, 'Need to mark occlusal curve on opposing object to get reference plane')
             return {'CANCELLED'}
@@ -3868,7 +3365,7 @@ class D3SPLINT_OT_splint_reset_functional_surface(bpy.types.Operator):
         splint = context.scene.odc_splints[n]
         
         #filter the occlusal surface verts
-        Plane = bpy.data.objects.get('Occlusal Plane')
+        Plane = bpy.data.objects.get('Dynamic Occlusal Surface')
         if Plane == None:
             self.report({'ERROR'}, 'Need to mark occlusal curve on opposing object to get reference plane')
             return {'CANCELLED'}
@@ -3891,8 +3388,7 @@ class D3SPLINT_OT_splint_reset_functional_surface(bpy.types.Operator):
         return {'FINISHED'}
     
     
-    
-    
+   
 class D3SPLINT_OT_splint_restart_functional_surface(bpy.types.Operator):
     """Turn the functional surface calculation on"""
     bl_idname = "d3splint.start_surface_calculation"
@@ -4143,29 +3639,27 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         interval_start = start
         
         self.bme = bmesh.new()
-        ob = bpy.data.objects.get('Based_Model')
+        
         ob1 = bpy.data.objects.get('Trimmed_Model')
-        if not ob:
-            self.report({'ERROR'}, 'Must trim the upper model first')
-            return {'CANCELLED'}
         
         if not ob1:
             self.report({'ERROR'}, 'Must trim the upper model first')
             return {'CANCELLED'}
         
-        if not ob.modifiers.get('Displace'):
-            self.report({'ERROR'}, 'New version requires you to Trim the Model again')
-            return {'CANCELLED'}
-        
-        
         n = context.scene.odc_splint_index
         splint = context.scene.odc_splints[n]
         splint.passive_value = self.radius
-        
-        self.bme.from_object(ob, context.scene)  #this object should have a displace modifier
+        self.bme = bmesh.new()
+        self.bme.from_object(ob1, context.scene)  #this object should have a displace modifier
         self.bme.verts.ensure_lookup_table()
         
-        mx = ob.matrix_world
+        
+        for v in self.bme.verts:
+            v.co -= .15 * v.normal
+            
+        self.bme.normal_update()
+        
+        mx = ob1.matrix_world
         
         meta_data = bpy.data.metaballs.new('Passive Spacer')
         meta_obj = bpy.data.objects.new('Meta Surface Spacer', meta_data)
@@ -4364,18 +3858,21 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         for ob in context.scene.objects:
             ob.hide = True
         
+        Master.hide = False
+        
+        if 'Blokcout Wax' in bpy.data.objects:
+            bwax = bpy.data.objects.get('Blockout Wax')
+            bwax.hide = False
+            
         bme.to_mesh(new_ob.data)
         bme.free()
         new_ob.hide = False    
         context.scene.objects.active = new_ob
         new_ob.select = True
         
-        ob = bpy.data.objects.get('Based_Model')
-        ob.hide = False
-        
         print('processed in %f seconds' % (time.time() - start))
         bpy.ops.view3d.viewnumpad(type = 'RIGHT')
-        tracking.trackUsage("D3Splint:PassiveOffset",self.radius)
+        tracking.trackUsage("D3Splint:PassiveOffset",str(self.radius)[0:3])
         n = context.scene.odc_splint_index
         splint = context.scene.odc_splints[n]
         splint.passive_offset = True
@@ -4587,9 +4084,7 @@ def register():
     bpy.utils.register_class(D3SPLINT_OT_survey_model_axis)
     bpy.utils.register_class(D3SPLINT_OT_blockout_model_meta)
     
-    bpy.utils.register_class(D3SPLINT_OT_splint_margin)
-    bpy.utils.register_class(D3SPLINT_OT_splint_buccal_marks)
-    bpy.utils.register_class(D3SPLINT_OT_splint_occlusal_arch)
+    bpy.utils.register_class(D3SPLINT_OT_splint_mark_margin)
     bpy.utils.register_class(D3SPLINT_OT_convexify_model)
     bpy.utils.register_class(D3SPLINT_OT_join_convex)
     bpy.utils.register_class(D3SPLINT_OT_splint_trim_model)
@@ -4610,7 +4105,6 @@ def register():
     
     bpy.utils.register_class(D3SPLINT_OT_splint_subtract_surface)
     bpy.utils.register_class(D3SPLINT_OT_splint_go_sculpt)
-    bpy.utils.register_class(D3SPLINT_OT_splint_finish_booleans)
     #bpy.utils.register_class(D3SPLINT_OT_splint_open_pin_on_articulator)
     #Experimental
     #bpy.utils.register_class(D3SPLINT_OT_splint_margin_detail)
@@ -4640,9 +4134,7 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_survey_model_axis)
     bpy.utils.unregister_class(D3SPLINT_OT_blockout_model_meta)
     
-    bpy.utils.unregister_class(D3SPLINT_OT_splint_margin)
-    bpy.utils.unregister_class(D3SPLINT_OT_splint_buccal_marks)
-    bpy.utils.unregister_class(D3SPLINT_OT_splint_occlusal_arch)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_mark_margin)
     bpy.utils.unregister_class(D3SPLINT_OT_convexify_model)
     bpy.utils.unregister_class(D3SPLINT_OT_join_convex)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_trim_model)
@@ -4663,7 +4155,7 @@ def unregister():
    
     bpy.utils.unregister_class(D3SPLINT_OT_splint_subtract_surface)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_go_sculpt)
-    bpy.utils.unregister_class(D3SPLINT_OT_splint_finish_booleans)
+    
     #bpy.utils.unregister_class(D3SPLINT_OT_splint_open_pin_on_articulator)
 
 if __name__ == "__main__":
