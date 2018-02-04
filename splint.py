@@ -1366,14 +1366,14 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
                 islands += [island]
                 below_faces.difference_update(island)
         
-        print('There are %i islands in below verts' % len(islands))    
-        to_keep = set()
-        for isl in islands:
-            print('Island with %i faces' % len(isl))
-            if len(isl) < 3000:
-                above_faces.update(isl)
+            print('There are %i islands in below verts' % len(islands))    
+            
+            for isl in islands:
+                print('Island with %i faces' % len(isl))
+                if len(isl) < 3000:
+                    above_faces.update(isl)
         
-        print('keeping %i faces' % len(to_keep))
+            
         
         #above_faces.update(to_keep)
         
