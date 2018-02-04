@@ -3067,14 +3067,15 @@ class D3SPLINT_OT_splint_join_rim(bpy.types.Operator):
         
         
         Shell = bpy.data.objects.get('Splint Shell')
-        Rim = bpy.data.objects.get('Flat Plane')
+        Rim = bpy.data.objects.get('Wax Rim')
         
         if Shell == None:
             self.report({'ERROR'}, 'Need to calculate splint shell first')
-        
+            return {'CANCELLED'}
         if Rim == None:
             self.report({'ERROR'}, 'Need to calculate rim first')
-            
+            return {'CANCELLED'}
+        
         tracking.trackUsage("D3Splint:JoinRim",None)
         bool_mod = Shell.modifiers.new('Join Rim', type = 'BOOLEAN')
         bool_mod.operation = 'UNION'
