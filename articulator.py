@@ -27,19 +27,17 @@ def thirty_steps(frame):
     return r
 
 
-def three_way_envelope_l(frame):
+def three_way_envelope_l(frame, factor, resolution):
     #protrusion
-    print('Frame number %i' % frame)
-    if frame < 60:
-        R = .2 + .8 * abs(math.sin(math.pi * frame/120))
-            
-            
+    if frame < resolution:
+        R = .2 + factor * .8 * abs(math.sin(math.pi * frame/(2*resolution)))
+                   
     #right excursion
-    elif frame >= 60 and frame < 120:
-        R = .2 + .8 * abs(math.sin(math.pi * (frame-60)/120))
+    elif frame >= resolution and frame < 2 * resolution:
+        R = .2 + factor * .8 * abs(math.sin(math.pi * (frame-resolution)/(2*resolution)))
             
     #left excursion
-    elif frame >=120 and frame < 180:
+    elif frame >=2*resolution and frame < 3*resolution:
         R = .2
         
     else:
@@ -49,19 +47,18 @@ def three_way_envelope_l(frame):
             
     
     
-def three_way_envelope_r(frame):
+def three_way_envelope_r(frame, factor, resolution):
     #protrusion
-    print('Frame number %i' % frame)
-    if frame < 60:
-        R = .2 + .8 * abs(math.sin(math.pi * frame/120))
+    if frame < resolution:
+        R = .2 + factor * .8 * abs(math.sin(math.pi * frame/(2*resolution)))
              
     #right excursion
-    elif frame >= 60 and frame < 120:
+    elif frame >= resolution and frame < 2 * resolution:
         R = .2        
             
     #left excursion
-    elif frame >=120 and frame < 180:
-        R = .2 + .8 * abs(math.sin(math.pi * (frame-120)/120))
+    elif frame >=2*resolution and frame < 3*resolution:
+        R = .2 + factor * .8 * abs(math.sin(math.pi * (frame-2*resolution)/(2*resolution)))
         
     else:
         R = .2
@@ -119,10 +116,47 @@ def load_driver_namespace():
         bpy.app.driver_namespace['threeway_envelope_l'] = three_way_envelope_l
 
 
+def occlusal_surface_frame_change(scene):
+
+    if not len(scene.odc_splints): return
+    n = scene.odc_splint_index
+    splint = scene.odc_splints[n]
+    #TODO...get the models better?
+    plane = bpy.data.objects.get('Dynamic Occlusal Surface')
+    jaw = bpy.data.objects.get(splint.opposing)
+    
+    if plane == None: return
+    if jaw == None: return
+    
+    mx_jaw = jaw.matrix_world
+    mx_pln = plane.matrix_world
+    imx_j = mx_jaw.inverted()
+    imx_p = mx_pln.inverted()
+    
+    bvh = splint_cache.mesh_cache['bvh']
+    if splint.jaw_type == 'MAXILLA':
+        Z = Vector((0,0,1))
+    else:
+        Z = Vector((0,0,-1))
+    for v in plane.data.vertices:
+        
+        a = mx_pln * v.co
+        b = mx_pln * (v.co + 10 * Z)
+        
+        hit = bvh.ray_cast(imx_j * a, imx_j * b - imx_j * a)
+        
+        if hit[0]:
+            #check again
+            hit2 = bvh.ray_cast(hit[0], imx_j * b - hit[0])
             
+            if hit2[0]:
+                v.co = imx_p * mx_jaw * hit[0]
+            else:
+                v.co = imx_p * mx_jaw * hit[0]            
     
 class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
-    """Create Arcon Style semi adjustable articulator from parameters"""
+    """Create Arcon Style semi adjustable articulator from parameters \n or modify the existing articulator
+    """
     bl_idname = "d3splint.generate_articulator"
     bl_label = "Create Arcon Articulator"
     bl_options = {'REGISTER', 'UNDO'}
@@ -137,6 +171,11 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
     guideance_delay_lat = FloatProperty(default = .1, description = 'Lateral movement before guidance starts')
     
     auto_mount = BoolProperty(default = True, description = 'Use if Upper and Lower casts are already in mounted position')
+    
+    resolution = IntProperty(name = 'Resolution',default = 30, min = 10, max = 50, description = 'Number of steps along each condyle to animate')
+    factor = FloatProperty(name = 'Range of Motion', default = .75, min = .3, max = 1.0, description = 'Percentage of condyles to use in motion')
+    
+    
     @classmethod
     def poll(cls, context):
         
@@ -149,8 +188,9 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
                                                          self.canine_guidance,
                                                          self.incisal_guidance)))
         context.scene.frame_start = 0
-        context.scene.frame_end = 180
+        context.scene.frame_end = 3 * self.resolution
         context.scene.frame_set(0)
+        
         
         #add 2 bezier paths named right and left condyle, move them to the condyle width
         if 'Articulator' in bpy.data.objects:
@@ -281,10 +321,6 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         
         bme.to_mesh(guide_data)
         
-        
-        
-        
-            
         art_data = bpy.data.armatures.new('Articulator')
         art_data.draw_type = 'STICK'
         art_arm = bpy.data.objects.new('Articulator',art_data)
@@ -344,8 +380,8 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         v.targets[0].id_type = 'SCENE'
         v.targets[0].id = context.scene
         v.targets[0].data_path = "frame_current"
-        d.expression = "threeway_envelope_r(frame)"
-        
+        #d.expression = "threeway_envelope_r(frame) * " + str(self.range_of_motion)[0:3]
+        d.expression = 'threeway_envelope_r(frame,'  + str(self.factor) + ',' + str(self.resolution)[0:4] + ')'
         
         pboneL = art_arm.pose.bones.get('Left Condyle')
         cons = pboneL.constraints.new(type = 'FOLLOW_PATH')
@@ -357,7 +393,8 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         v.targets[0].id_type = 'SCENE'
         v.targets[0].id = context.scene
         v.targets[0].data_path = "frame_current"
-        d.expression = "threeway_envelope_l(frame)"
+        #d.expression = "threeway_envelope_l(frame) * " + str(self.range_of_motion)[0:3]
+        d.expression = 'threeway_envelope_l(frame,'  + str(self.factor) + ',' + str(self.resolution)[0:4] + ')'
         
         cons = pboneR.constraints.new(type = 'LOCKED_TRACK')
         cons.target = art_arm
@@ -437,7 +474,20 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         #https://blender.stackexchange.com/questions/19602/child-of-constraint-set-inverse-with-python
          
         bpy.ops.object.mode_set(mode = 'OBJECT')
-        bpy.ops.view3d.viewnumpad(type = 'RIGHT')
+        
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        maxilla = splint.get_maxilla()
+        Maxilla = bpy.data.objects.get(maxilla)
+        if Maxilla:
+            for ob in context.scene.objects:
+                ob.select = False
+            Maxilla.hide = False
+            context.scene.objects.active = Maxilla
+            Maxilla.select = True
+        #bpy.ops.view3d.viewnumpad(type = 'RIGHT')
+        
+        bpy.ops.d3splint.enable_articulator_visualizations()
         
         if not self.auto_mount:
             return {'FINISHED'}
@@ -451,7 +501,8 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         if not Model:
             self.report({'WARNING'},"Please use mark opposing model and then mount")
             return {'Finished'}
-            
+        
+        Model.hide = False    
         cons = Model.constraints.new(type = 'CHILD_OF')
         cons.target = art_arm
         cons.subtarget = 'Mandibular Bow'
@@ -493,7 +544,8 @@ class D3Splint_OT_articulator_set_mode(bpy.types.Operator):
         
     mode = EnumProperty(name = 'Articulator Mode', items = mode_items, default = 'PROTRUSIVE')
     
-    
+    resolution = IntProperty(name = "Condyle Steps", default = 30, min = 10, max = 50, description = 'Number of steps to divide the condylar path into.  More gives smoother surface')
+    factor = FloatProperty(name = "Range of Motion", default = 0.8, min = 0.3, max = 1.0, description = 'Percentage of condylar path to animate over, smaller numbers give smaller envelope')
     @classmethod
     def poll(cls, context):
         
@@ -534,34 +586,37 @@ class D3Splint_OT_articulator_set_mode(bpy.types.Operator):
         
         
         if self.mode == 'PROTRUSIVE':
-            dl.expression = '.2 + .8 * abs(sin(pi * frame/120))'
-            dr.expression = '.2 + .8 * abs(sin(pi * frame/120))'
+            #double resolution
+            dl.expression = '.2 + .8 * abs(sin(pi * frame/' + str(4 * self.resolution)[0:4] +  ')) * ' + str(self.factor)[0:4]
+            dr.expression = '.2 + .8 * abs(sin(pi * frame/' + str(4 * self.resolution)[0:4] +  ')) * ' + str(self.factor)[0:4]
            
            
             context.scene.frame_start = 0
-            context.scene.frame_end = 60
+            context.scene.frame_end = 2 * self.resolution
            
            
         elif self.mode == 'RIGHT_EXCURSION':
-        
+            #double resolution
             dr.expression = '.2'
-            dl.expression = '.2 + .8 * abs(sin(pi * frame/120))'
+            dl.expression = '.2 + .8 * abs(sin(pi * frame/' + str(4 * self.resolution)[0:4] +  ')) * ' + str(self.factor)[0:4]
             context.scene.frame_start = 0
-            context.scene.frame_end = 60
+            context.scene.frame_end = context.scene.frame_end = 2 * self.resolution
             
             
         elif self.mode == 'LEFT_EXCURSION':
-            dr.expression = '.2 + .8 * abs(sin(pi * frame/120))'
+            #double resolution
+            dr.expression = '.2 + .8 * abs(sin(pi * frame/' + str(4 * self.resolution)[0:4] +  ')) * ' + str(self.factor)[0:4]
             dl.expression = '.2'
             context.scene.frame_start = 0
-            context.scene.frame_end = 60
+            context.scene.frame_end = context.scene.frame_end = 2 * self.resolution
             
             
         elif self.mode == 'RELAX_RAMP':
-            dr.expression = '.2 - .2 * abs(sin(pi * frame/120))'
-            dl.expression = '.2 - .2 * abs(sin(pi * frame/120))'
+            #double resolution
+            dr.expression = '.2 - .2 * abs(sin(pi * frame/' + str(4 * self.resolution)[0:4] + ')) * ' + str(self.factor)[0:4]
+            dl.expression = '.2 - .2 * abs(sin(pi * frame/' + str(4 * self.resolution)[0:4] + ')) * ' + str(self.factor)[0:4]
             context.scene.frame_start = 0
-            context.scene.frame_end = 60
+            context.scene.frame_end = 2 * self.resolution
             
         elif self.mode == '3WAY_ENVELOPE':
             
@@ -569,22 +624,22 @@ class D3Splint_OT_articulator_set_mode(bpy.types.Operator):
                 bpy.app.driver_namespace['threeway_envelope_r'] = three_way_envelope_r
             if 'threeway_envelope_l' not in bpy.app.driver_namespace:
                 bpy.app.driver_namespace['threeway_envelope_l'] = three_way_envelope_l
-            #protrusion
-            dl.expression = 'threeway_envelope_l(frame)'
-            dr.expression = 'threeway_envelope_r(frame)'
+            
+            dl.expression = 'threeway_envelope_l(frame,'  + str(self.factor) + ',' + str(self.resolution)[0:4] + ')'
+            dr.expression = 'threeway_envelope_r(frame,'  + str(self.factor) + ',' + str(self.resolution)[0:4] + ')'
         
             context.scene.frame_start = 0
-            context.scene.frame_end = 180
+            context.scene.frame_end = 3 * self.resolution
             
             
                 
         elif self.mode == 'FULL_ENVELOPE':
             
-            dr.expression = ".2 + .8 * fmod(frame,30)/30"
-            dl.expression = ".2 + .8 * floor(frame/30)/30"
+            dr.expression = ".2 + .8 * fmod(frame,"  + str(self.resolution) +  ")/" + str(self.resolution)
+            dl.expression = ".2 + .8 * floor(frame/" + str(self.resolution) +  ")/" + str(self.resolution)
         
             context.scene.frame_start = 0
-            context.scene.frame_end = 900
+            context.scene.frame_end = self.resolution ** 2
             
         return {'FINISHED'}
 
@@ -770,19 +825,318 @@ class D3SPLINT_OT_recover_mandible_mounting(bpy.types.Operator):
     
         return {'FINISHED'}
 
-      
+class D3SPLINT_OT_articulator_view(bpy.types.Operator):
+    """View the scene in a way that makes sense for assessing articulation"""
+    bl_idname = "d3splint.articulator_view"
+    bl_label = "Articulator VIew"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    
+
+    @classmethod
+    def poll(cls, context):
+        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
+        #    return True
+        #else:
+        #    return False
+        return True
+    
+    def execute(self, context):
+        
+        if not len(context.scene.odc_splints):
+            return {'CANCELLED'}
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        Articulator = bpy.data.objects.get('Articulator')
+        
+        Max = bpy.data.objects.get(splint.get_maxilla())
+        Mand = bpy.data.objects.get(splint.get_mandible())
+        
+        for ob in bpy.data.objects:
+            ob.hide = True
+        if Articulator:
+            Articulator.hide = False
+        if Max:
+            Max.hide = False
+        if Mand:
+            Mand.hide = False
+            
+        return {'FINISHED'}
+        
+        
+class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
+    """Create functional surface using envelope of motion on articulator"""
+    bl_idname = "d3splint.splint_animate_articulator"
+    bl_label = "Animate on Articulator"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    
+    resolution = IntProperty(name = 'Resolution', description = "Number of setps along the condyle to create surface.  10-40 is reasonable.  Larger = Slower", default = 20)
+    range_of_motion = FloatProperty(name = 'Range of Motion', min = 0.2, max = 1.0, description = 'Percent of condylar path to animate, typically .2 to 1.0', default = 0.8)
+    force_full = BoolProperty(name = 'Force Full Range', default = False)
+    @classmethod
+    def poll(cls, context):
+        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
+        #    return True
+        #else:
+        #    return False
+        return True
+    
+    def execute(self, context):
+        splint = context.scene.odc_splints[0]
+        Model = bpy.data.objects.get(splint.opposing)
+        Master = bpy.data.objects.get(splint.model)
+        if Model == None:
+            self.report({'ERROR'}, 'No Opposing Model')
+            return {'CANCELLED'}
+        
+        if not splint_cache.is_object_valid(Model):
+            splint_cache.clear_mesh_cache()
+            bme = bmesh.new()
+            
+            bme.from_mesh(Model.data)    
+            bme.faces.ensure_lookup_table()
+            bme.verts.ensure_lookup_table()
+            
+            bvh = BVHTree.FromBMesh(bme)
+            splint_cache.write_mesh_cache(Model, bme, bvh)
+        
+        if self.force_full:
+            bpy.ops.d3splint.articulator_mode_set(mode = 'FULL_ENVELOPE')
+        
+        #filter the occlusal surface verts
+        Plane = bpy.data.objects.get('Dynamic Occlusal Surface')
+        if Plane == None:
+            self.report({'ERROR'}, 'Need to mark occlusal curve on opposing object to get reference plane')
+            return {'CANCELLED'}
+        
+        Shell = bpy.data.objects.get('Splint Shell')
+        if Shell == None:
+            self.report({'WARNING'}, 'There is no splint shell, however this OK.')
+            
+        if Shell:
+            
+            if len(Shell.modifiers):
+                Shell.select = True
+                Shell.hide = False
+                context.scene.objects.active = Shell
+                
+                for mod in Shell.modifiers:
+                    bpy.ops.object.modifier_apply(modifier = mod.name)
+            
+            bme = bmesh.new()
+            bme.from_mesh(Plane.data)
+            bme.verts.ensure_lookup_table()
+            
+            #reset occusal plane if animate articulator has happened already
+            if "AnimateArticulator" in splint.ops_string:
+                for v in bme.verts:
+                    v.co[2] = 0
+                
+            mx_p = Plane.matrix_world
+            imx_p = mx_p.inverted()
+            
+            mx_s = Shell.matrix_world
+            imx_s = mx_s.inverted()
+            
+            keep_verts = set()
+            if splint.jaw_type == 'MAXILLA':
+                Z = Vector((0,0,1))
+            else:
+                Z = Vector((0,0,-1))
+            for v in bme.verts:
+                ray_orig = mx_p * v.co
+                ray_target = mx_p * v.co + 5 * Z
+                ok, loc, no, face_ind = Shell.ray_cast(imx_s * ray_orig, imx_s * ray_target - imx_s*ray_orig)
+            
+                if ok:
+                    keep_verts.add(v)
+        
+            print('there are %i keep verts' % len(keep_verts))
+            front = set()
+            for v in keep_verts:
+        
+                immediate_neighbors = [ed.other_vert(v) for ed in v.link_edges if ed.other_vert(v) not in keep_verts]
+            
+                front.update(immediate_neighbors)
+                front.difference_update(keep_verts)
+            
+            keep_verts.update(front)
+        
+            for i in range(0,10):
+                new_neighbors = set()
+                for v in front:
+                    immediate_neighbors = [ed.other_vert(v) for ed in v.link_edges if ed.other_vert(v) not in front]
+                    new_neighbors.update(immediate_neighbors)
+                    
+                keep_verts.update(front)
+                front = new_neighbors
+                
+            delete_verts = [v for v in bme.verts if v not in keep_verts]
+            bmesh.ops.delete(bme, geom = delete_verts, context = 1)
+            bme.to_mesh(Plane.data)
+        
+        
+        for ob in bpy.data.objects:
+            if ob.type == 'MESH':
+                ob.hide = True
+            elif ob.type == 'CURVE':
+                ob.hide = True
+                
+        Model.hide = False
+        Master.hide = False
+        Plane.hide = False
+        
+
+        tracking.trackUsage("D3Splint:CreateSurface",None)
+        context.scene.frame_current = -1
+        context.scene.frame_current = 0
+        splint.ops_string += 'AnimateArticulator:'
+        print('adding the handler!')
+        
+        handlers = [hand.__name__ for hand in bpy.app.handlers.frame_change_pre]
+        
+        if occlusal_surface_frame_change.__name__ not in handlers:
+            bpy.app.handlers.frame_change_pre.append(occlusal_surface_frame_change)
+        
+        else:
+            print('handler already in there')
+            
+        bpy.ops.screen.animation_play()
+        
+        return {'FINISHED'}
+    
+
+
+class D3SPLINT_OT_splint_reset_functional_surface(bpy.types.Operator):
+    """Flatten the Functional Surface and Re-Set it"""
+    bl_idname = "d3splint.reset_functional_surface"
+    bl_label = "Reset Functional Surface"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    
+    @classmethod
+    def poll(cls, context):
+        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
+        #    return True
+        #else:
+        #    return False
+        return True
+    
+    def execute(self, context):
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        
+        #filter the occlusal surface verts
+        Plane = bpy.data.objects.get('Dynamic Occlusal Surface')
+        if Plane == None:
+            self.report({'ERROR'}, 'Need to mark occlusal curve on opposing object to get reference plane')
+            return {'CANCELLED'}
+        
+        bme_shell = bmesh.new()
+        
+        bme = bmesh.new()
+        bme.from_mesh(Plane.data)
+        bme.verts.ensure_lookup_table()
+        
+        #reset occusal plane if animate articulator has happened already
+        
+        for v in bme.verts:
+            v.co[2] = 0
+        
+            
+            
+        bme.to_mesh(Plane.data)
+        Plane.data.update()
+        return {'FINISHED'}
+    
+    
+   
+class D3SPLINT_OT_splint_restart_functional_surface(bpy.types.Operator):
+    """Turn the functional surface calculation on"""
+    bl_idname = "d3splint.start_surface_calculation"
+    bl_label = "Start Surface Calculation"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    
+    @classmethod
+    def poll(cls, context):
+        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
+        #    return True
+        #else:
+        #    return False
+        return True
+    
+    def execute(self, context):
+        tracking.trackUsage("D3Splint:RestartFunctionalSurface",None)
+        print('removing the handler')
+        
+        
+        handlers = [hand.__name__ for hand in bpy.app.handlers.frame_change_pre]
+        
+        if occlusal_surface_frame_change.__name__ not in handlers:
+        
+            bpy.app.handlers.frame_change_pre.append(occlusal_surface_frame_change)
+        
+        else:
+            print('alrady added')
+            
+        return {'FINISHED'}
+    
+    
+class D3SPLINT_OT_splint_stop_functional_surface(bpy.types.Operator):
+    """Stop functional surface calculation to improve responsiveness"""
+    bl_idname = "d3splint.stop_surface_calculation"
+    bl_label = "Stop Surface Calculation"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    
+    @classmethod
+    def poll(cls, context):
+        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
+        #    return True
+        #else:
+        #    return False
+        return True
+    
+    def execute(self, context):
+        tracking.trackUsage("D3Splint:StopFunctionalSurface",None)
+        print('removing the handler')
+        
+        
+        handlers = [hand.__name__ for hand in bpy.app.handlers.frame_change_pre]
+        
+        if occlusal_surface_frame_change.__name__ in handlers:
+        
+            bpy.app.handlers.frame_change_pre.remove(occlusal_surface_frame_change)
+        
+        else:
+            print('alrady removed')
+            
+        return {'FINISHED'}
+        
 def register():
     bpy.utils.register_class(D3SPLINT_OT_generate_articulator)
+    bpy.utils.register_class(D3SPLINT_OT_articulator_view)
     bpy.utils.register_class(D3Splint_OT_articulator_set_mode)
     bpy.utils.register_class(D3SPLINT_OT_splint_open_pin_on_articulator)
     bpy.utils.register_class(D3SPLINT_OT_recover_mandible_mounting)
+    bpy.utils.register_class(D3SPLINT_OT_splint_create_functional_surface)
+    bpy.utils.register_class(D3SPLINT_OT_splint_stop_functional_surface)
+    bpy.utils.register_class(D3SPLINT_OT_splint_restart_functional_surface)
+    bpy.utils.register_class(D3SPLINT_OT_splint_reset_functional_surface)
     
     
 def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_generate_articulator)
+    bpy.utils.unregister_class(D3SPLINT_OT_articulator_view)
     bpy.utils.unregister_class(D3Splint_OT_articulator_set_mode)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_open_pin_on_articulator)
     bpy.utils.unregister_class(D3SPLINT_OT_recover_mandible_mounting)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_create_functional_surface)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_stop_functional_surface)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_restart_functional_surface)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_reset_functional_surface)
     
 if __name__ == "__main__":
     register()

@@ -126,9 +126,8 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         row.operator("wm.url_open", text = "", icon="INFO").url = "www.d3tool.com"
         #row.operator("d3splint.start_guide_help", text = "", icon = 'QUESTION')
         #row.operator("d3splint.stop_help", text = "", icon = 'CANCEL')
-        row = layout.row()
-        row.template_list("SCENE_UL_odc_splints","", sce, "odc_splints", sce, "odc_splint_index")
-        
+        #row = layout.row()
+        #row.template_list("SCENE_UL_odc_splints","", sce, "odc_splints", sce, "odc_splint_index")
         
         
         box = layout.box()
@@ -137,13 +136,14 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         if not hasattr(context.scene , "odc_splints"):
             col = box.column()
             col.label('ERROR with addon installation', icon = 'ERROR')
+            return
         elif len(context.scene.odc_splints) == 0:
             row = box.row()
             col = row.column()
             col.label('Jaw Type')
             #col = row.column()
             col.prop(prefs, 'default_jaw_type', text = '')
-            
+            col.prop(prefs, 'default_workflow_type', text = '')
         else:
             n = context.scene.odc_splint_index
             splint =context.scene.odc_splints[n]
@@ -153,7 +153,8 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
             col.label('Jaw Type')
             #col = row.column()
             col.prop(splint, 'jaw_type', text = '')
-        
+            col.prop(splint, 'workflow_type', text = '')
+            
         row = layout.row()
         row.operator("import_mesh.stl", text = 'Import STL Models')
                 
@@ -165,6 +166,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         row = layout.row()
         row.operator("d3splint.pick_model", text = "Set Splint Model", icon = ico)
         
+        if not splint: return
         if splint and splint.opposing_set: 
             ico = 'CHECKBOX_HLT'
         else:
@@ -178,6 +180,23 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
             ico = 'CHECKBOX_DEHLT'
         row = layout.row()
         row.operator("d3splint.splint_mark_landmarks", text = "Set Landmarks", icon = ico)
+        
+        
+        row = layout.row()
+        row.label('Initial Mounting and Articulation')
+        row = layout.row()
+        col = row.column()
+        col.operator("d3splint.generate_articulator", text = "Set Initial Values")
+        #col.operator("d3splint.splint_mount_articulator", text = "Mount on Articulator")
+    
+        row = layout.row()
+        col = row.column()
+    
+        col.operator("d3splint.open_pin_on_articulator", text = "Change Pin Setting" )
+        col.operator("d3splint.recover_mounting_relationship", text = "Recover Mounting" )
+        
+        row = layout.row()
+        row.label('Survey and HoC')
         
         if splint and splint.curve_max: 
             ico = 'CHECKBOX_HLT'
@@ -193,10 +212,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         row = layout.row()
         row.operator("d3splint.draw_occlusal_curve_mand", text = "Mark Mand Curve", icon = ico)
         
-        
-        row = layout.row()
-        row.label('Survey and HoC')
-            
+         
         row = layout.row()
         col = row.column()
         
@@ -258,112 +274,153 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
             ico = 'CHECKBOX_DEHLT'
         col.operator("d3splint.splint_offset_shell", text = "Splint Shell", icon = ico)
         
-        if splint and splint.passive_offset: 
-            ico = 'CHECKBOX_HLT'
-        else:
-            ico = 'CHECKBOX_DEHLT'
-        col.operator("d3splint.splint_passive_spacer", text = "Passivity Offset", icon = ico)
         
-        if splint and splint.remove_undercuts: 
-            ico = 'CHECKBOX_HLT'
-        else:
-            ico = 'CHECKBOX_DEHLT'
-        col.operator("d3splint.meta_blockout_trimmed_model2", text = "Undercut Blockout", icon = ico)
-        
-        row = layout.row()
-        row.label('Virtual Wax Tools')
-        
-        row = layout.row()
-        col = row.column()
-        if splint and "MakeRim" in splint.ops_string: 
-            ico = 'FILE_TICK'
-        else:
-            ico = 'NONE'
-        col.operator("d3splint.splint_rim_from_dual_curves", text = "Splint Wax Rim", icon = ico)
-        
-        if splint and "JoinRim" in splint.ops_string: 
-            ico = 'FILE_TICK'
-        else:
-            ico = 'NONE'
-        col.operator("d3splint.splint_join_rim", text = "Fuse Rim to Shell", icon = ico)
-        
-        row = layout.row()
-        col = row.column()
-        col.operator("d3splint.draw_meta_scaffold_curve", text = 'Draw Wax Curve')
-        col.operator("d3splint.virtual_wax_on_curve", text = 'Add Virtual Wax')
-        col.operator("d3splint.splint_join_meta_shell", text = 'Fuse Virtual Wax')
-        
-        row = layout.row()
-        col = row.column()
-        col.operator("d3splint.anterior_deprogrammer_element", text = 'Anterior Deprogrammer Ramp')
-        col.operator("d3splint.splint_join_deprogrammer", text = 'Fuse Deprogrammer')
-        
-        
-        row = layout.row()
-        row.label('Flat Plane Tools')
-        row = layout.row()
-        col = row.column()
-        col.operator("d3splint.splint_manual_flat_plane", text = "Mark Opposing Contacts")
-        col.operator("d3splint.subtract_posterior_surface", text = 'Subtract Posterior Plane')
-        
-        
-        row = layout.row()
-        row.label('Auto Refinement Tools')
-        row = layout.row()
-        col = row.column()
-        col.operator("d3splint.auto_sculpt_concavities", text = 'Auto Sculpt Concavities')
-        col.operator("d3splint.meta_blockout_shell", text = 'Blockout Large Concavities')
-        
-        
-        row = layout.row()
-        row.prop(prefs, "show_occlusal_mod")
-        if get_settings().show_occlusal_mod:
+        if splint.workflow_type == 'FREEFORM':
             row = layout.row()
-            row.label('Occlusal Modification [BETA!]')
-        
+            row.label('Virtual Wax Tools')
+            
             row = layout.row()
             col = row.column()
-            col.operator("d3splint.convexify_lower", text = "Make Convex (FAST)")
-            col.operator("d3splint.convexify_lower", text = "Make Convex (SLOW)").method1 = 'CARVE'
-            col.operator("d3splint.join_convex_lower", text = "Join Convex Elements")
+            if splint and "MakeRim" in splint.ops_string: 
+                ico = 'FILE_TICK'
+            else:
+                ico = 'NONE'
+            col.operator("d3splint.splint_rim_from_dual_curves", text = "Splint Wax Rim", icon = ico)
             
-        row = layout.row()
-        row.label('Articulation/Mounting/Occlusion')
-        
-        row = layout.row()
-        row.operator("d3splint.subtract_opposing_model", text = 'Grind MIP')
-        row = layout.row()
-        if splint and "GenArticulator" in splint.ops_string: 
-            ico = 'FILE_TICK'
-        else:
-            ico = 'NONE'
-        col = row.column()
-        col.operator("d3splint.generate_articulator", text = "Generate Articulator", icon = ico)
-        #col.operator("d3splint.splint_mount_articulator", text = "Mount on Articulator")
-        
-        row = layout.row()
-        col = row.column()
-        
-        col.operator("d3splint.open_pin_on_articulator", text = "Change Pin Setting" )
-        col.operator("d3splint.recover_mounting_relationship", text = "Recover Mounting" )
-        col.operator("d3splint.articulator_mode_set", text = "Choose Articulator Motion")
-        
-        if splint and "AnimateArticulator" in splint.ops_string: 
-            ico = 'FILE_TICK'
-        else:
-            ico = 'NONE'
+            if splint and "JoinRim" in splint.ops_string: 
+                ico = 'FILE_TICK'
+            else:
+                ico = 'NONE'
+            col.operator("d3splint.splint_join_rim", text = "Fuse Rim to Shell", icon = ico)
             
+            row = layout.row()
+            col = row.column()
+            col.operator("d3splint.draw_meta_scaffold_curve", text = 'Draw Wax Curve')
+            col.operator("d3splint.virtual_wax_on_curve", text = 'Add Virtual Wax')
+            col.operator("d3splint.splint_join_meta_shell", text = 'Fuse Virtual Wax')
+            
+            row = layout.row()
+            col = row.column()
+            col.operator("d3splint.anterior_deprogrammer_element", text = 'Anterior Deprogrammer Ramp')
+            col.operator("d3splint.splint_join_deprogrammer", text = 'Fuse Deprogrammer')
         
-        col.operator("d3splint.splint_animate_articulator", text = "Generate Functional Surface", icon = ico)
-        col.operator("d3splint.stop_surface_calculation", text = "Stop Surface Calculation")
-        col.operator("d3splint.start_surface_calculation", text = "Re-Start Surface Calculation")
-        col.operator("d3splint.reset_functional_surface", text = "Re-set Functional Surface")
-        if splint and "SubtractSurface" in splint.ops_string: 
-            ico = 'FILE_TICK'
-        else:
-            ico = 'NONE'
-        row = layout.row()
-        col.operator("d3splint.splint_subtract_surface", text = "Subtract Functional Surface", icon = ico)
+        if splint.workflow_type == 'DEPROGRAMMER':
+            row = layout.row()
+            col = row.column()
+            col.operator("d3splint.anterior_deprogrammer_element", text = 'Anterior Deprogrammer Ramp')
+            col.operator("d3splint.splint_join_deprogrammer", text = 'Fuse Deprogrammer')
+            
+            
+        if splint.workflow_type in {'FLAT_PLANE', 'MICHIGAN'}:
+            
+            row = layout.row()
+            col = row.column()
+            if splint and "MakeRim" in splint.ops_string: 
+                ico = 'FILE_TICK'
+            else:
+                ico = 'NONE'
+            
+            if splint.workflow_type == 'FLAT_PLANE':
+                col.operator("d3splint.splint_rim_from_dual_curves", text = "Splint Wax Rim", icon = ico).ap_segment = 'POSTERIOR_ONLY'
+            
+            elif splint.workflow_type == 'MICHIGAN':
+                col.operator("d3splint.splint_rim_from_dual_curves", text = "Splint Wax Rim", icon = ico).ap_segment = 'FULL_RIM'
+            
+            if splint and "JoinRim" in splint.ops_string: 
+                ico = 'FILE_TICK'
+            else:
+                ico = 'NONE'
+            col.operator("d3splint.splint_join_rim", text = "Fuse Rim to Shell", icon = ico)
+            
+            row = layout.row()
+            row.label('Auto Refinement Tools')
+            row = layout.row()
+            col = row.column()
+            col.operator("d3splint.meta_blockout_shell", text = 'Blockout Large Concavities')
+            col.operator("d3splint.auto_sculpt_concavities", text = 'Auto Sculpt Concavities')
+        
+            row = layout.row()
+            row.label('Manual Flat Plane')
+            row = layout.row()
+            col = row.column()
+            col.operator("d3splint.splint_manual_flat_plane", text = "Mark Opposing Contacts")
+            col.operator("d3splint.subtract_posterior_surface", text = 'Subtract Posterior Plane')
+        
+            row = layout.row()
+            row.label('Create Low Value Surface')
+            
+            row = layout.row()
+            col = row.column()
+            col.operator("d3splint.splint_animate_articulator", text = "Generate Surface").force_full = True
+            col.operator("d3splint.splint_subtract_surface", text = "Subtract Surface")
+        
+        if splint.workflow_type == 'MICHIGAN':
+            
+            row = layout.row()
+            row.label('Ramp and Guidance')
+            
+            row = layout.row()
+            col = row.column()
+            
+            col.operator("d3splint.generate_articulator", text = "Set Steeper Articulator Values")
+            
+            col.operator("d3splint.splint_rim_from_dual_curves", text = "Add Anterior Ramp").ap_segment = 'ANTERIOR_ONLY'
+            
+            
+            col.operator("d3splint.splint_join_rim", text = "Fuse Anterior Rim")
+            col.operator("d3splint.splint_animate_articulator", text = "Generate New Surface").force_full = True
+            col.operator("d3splint.splint_subtract_surface", text = "Subtract Surface")
+            
+            
+        #row = layout.row()
+        #row.prop(prefs, "show_occlusal_mod")
+        #if get_settings().show_occlusal_mod:
+        #    row = layout.row()
+        #    row.label('Occlusal Modification [BETA!]')
+        
+        #    row = layout.row()
+        #    col = row.column()
+        #    col.operator("d3splint.convexify_lower", text = "Make Convex (FAST)")
+        #    col.operator("d3splint.convexify_lower", text = "Make Convex (SLOW)").method1 = 'CARVE'
+        #    col.operator("d3splint.join_convex_lower", text = "Join Convex Elements")
+        
+        if splint.workflow_type == 'FREEFORM':    
+            row = layout.row()
+            row.label('Articulation/Mounting/Occlusion')
+            
+            row = layout.row()
+            row.operator("d3splint.subtract_opposing_model", text = 'Grind MIP')
+            row = layout.row()
+            if splint and "GenArticulator" in splint.ops_string: 
+                ico = 'FILE_TICK'
+            else:
+                ico = 'NONE'
+            col = row.column()
+            col.operator("d3splint.generate_articulator", text = "Generate Articulator", icon = ico)
+            #col.operator("d3splint.splint_mount_articulator", text = "Mount on Articulator")
+            
+            row = layout.row()
+            col = row.column()
+            
+            col.operator("d3splint.open_pin_on_articulator", text = "Change Pin Setting" )
+            col.operator("d3splint.recover_mounting_relationship", text = "Recover Mounting" )
+            col.operator("d3splint.articulator_mode_set", text = "Choose Articulator Motion")
+            
+            if splint and "AnimateArticulator" in splint.ops_string: 
+                ico = 'FILE_TICK'
+            else:
+                ico = 'NONE'
+                
+            col.operator("d3splint.splint_animate_articulator", text = "Generate Functional Surface", icon = ico)
+            col.operator("d3splint.stop_surface_calculation", text = "Stop Surface Calculation")
+            col.operator("d3splint.start_surface_calculation", text = "Re-Start Surface Calculation")
+            col.operator("d3splint.reset_functional_surface", text = "Re-set Functional Surface")
+            if splint and "SubtractSurface" in splint.ops_string: 
+                ico = 'FILE_TICK'
+            else:
+                ico = 'NONE'
+            
+            col.operator("d3splint.splint_subtract_surface", text = "Subtract Functional Surface", icon = ico)
         
         
         row = layout.row()
@@ -399,7 +456,19 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         
         
         row = layout.row()
-        row.label('Finalize Steps')
+        row.label('Fit and Finalization')
+        
+        if splint and splint.passive_offset: 
+            ico = 'CHECKBOX_HLT'
+        else:
+            ico = 'CHECKBOX_DEHLT'
+        col.operator("d3splint.splint_passive_spacer", text = "Passivity Offset", icon = ico)
+        
+        if splint and splint.remove_undercuts: 
+            ico = 'CHECKBOX_HLT'
+        else:
+            ico = 'CHECKBOX_DEHLT'
+        col.operator("d3splint.meta_blockout_trimmed_model2", text = "Undercut Blockout", icon = ico)
         
         row = layout.row()
         if splint and splint.finalize_splint: 

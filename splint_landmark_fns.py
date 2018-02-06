@@ -788,6 +788,9 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         bpy.ops.view3d.viewnumpad(type = 'FRONT')
          
         self.splint.landmarks_set = True
+        
+        if 'Articulator' not in context.scene.objects:
+            bpy.ops.d3splint.generate_articulator('EXEC_DEFAULT')
         tracking.trackUsage("D3Splint:SplintLandmarks",None)
 
 class D3SPLINT_OT_splint_paint_margin(bpy.types.Operator):
@@ -1152,6 +1155,7 @@ class D3SPLINT_OT_pick_model(bpy.types.Operator):
             my_item.model_set = True
             
             my_item.jaw_type = prefs.default_jaw_type
+            my_item.workflow_type = prefs.default_workflow_type
             
         if "Model Mat" not in bpy.data.materials:
             mat = bpy.data.materials.new('Model Mat')

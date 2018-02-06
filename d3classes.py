@@ -126,6 +126,19 @@ class D3SplintRestoration(bpy.types.PropertyGroup):
                                               default = "MAXILLA",
                                               description = 'Appliance is on upper or lower jaw')
         
+        
+        
+        
+        cls.workflow_type = bpy.props.EnumProperty(name = 'Workflow Type', 
+                                              items = [('FREEFORM', 'Freeform', 'Exposes all D3Splint tools with no recommended sequence'),
+                                                       ('DEPROGRAMMER', 'Anterior Deprogrammer', 'An antomic shell with anterior deprogrammer element'),
+                                                       ('FLAT_PLANE', 'Flat Plane', 'A flat plane splint with even contact'),
+                                                       ('MICHIGAN', 'Michigan Style', 'A flat posterior plane with anterior ramp/guidance'),],
+                                              default = "FLAT_PLANE",
+                                              description = 'Use the simple workflow filter to expose recommende sequence')
+        
+        
+        
         cls.bone = bpy.props.StringProperty(name="Bone",default="")
         cls.refractory = bpy.props.StringProperty(name="Rrefractory model",default="")
         cls.axis = bpy.props.StringProperty(name="Splint Insertion",default="")

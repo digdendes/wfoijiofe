@@ -1148,6 +1148,7 @@ class D3SPLINT_OT_splint_subtract_MIP_bite(bpy.types.Operator):
                     n_ray_casted += 1
                     
         sbme.to_mesh(Shell.data)
+        sbme.free()
         Shell.data.update()
                 
         Opposing.hide = True

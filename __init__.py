@@ -24,7 +24,7 @@
 bl_info = {
     'name': "D3T Splint Module",
     'author': "Patrick R. Moore",
-    'version': (0,3,2),
+    'version': (0,3,3),
     'blender': (2, 7, 9),
     'api': "3c04373",
     'location': "3D View -> Tool Shelf",
@@ -154,6 +154,14 @@ class D3SplintAddonPreferences(AddonPreferences):
     
     
     
+    default_workflow_type = bpy.props.EnumProperty(name = 'Workflow Type', 
+                                              items = [('FREEFORM', 'Freeform', 'Exposes all D3Splint tools with no recommended sequence'),
+                                                       ('DEPROGRAMMER', 'Anterior Deprogrammer', 'An antomic shell with anterior deprogrammer element'),
+                                                       ('FLAT_PLANE', 'Flat Plane', 'A flat plane splint with even contact'),
+                                                       ('MICHIGAN', 'Michigan Style', 'A flat posterior plane with anterior ramp/guidance'),],
+                                              default = "FLAT_PLANE",
+                                              description = 'Use the simple workflow filter to expose recommende sequence')
+    
     ###### Articulator Defaults   ############
     ##########################################
     def_intra_condyle_width = IntProperty(default = 110, description = 'Width between condyles in mm')
@@ -274,7 +282,7 @@ def register():
     
     import d3classes, odcutils, crown, margin, bridge, splint, implant, panel, help, flexible_tooth, bracket_placement, denture_base, occlusion, ortho, curve_partition, articulator, splint_landmark_fns # , odcmenus, bgl_utils
     import healing_abutment, model_work, tracking, import_export, splint_booleans, splint_face_bow
-    import meta_modelling, model_labels, splint_occlusal_surfaces, incremental_save
+    import meta_modelling, model_labels, splint_occlusal_surfaces, incremental_save, articulator_handlers
     
     #register them
     d3classes.register()
@@ -294,7 +302,9 @@ def register():
     model_labels.register()
     splint_occlusal_surfaces.register()
     incremental_save.register()
+    articulator_handlers.register()
     panel.register()
+    
     
     #register this module
     bpy.utils.register_class(D3SplintAddonPreferences)
@@ -314,7 +324,7 @@ def unregister():
                     panel, curve_partition, articulator, 
                     splint_landmark_fns, model_work, tracking, 
                     splint_booleans, import_export,splint_face_bow,
-                    meta_modeling)
+                    meta_modelling, articulator_handlers)
     
     bpy.app.handlers.save_pre.remove(save_pre_method)
     bpy.app.handlers.load_post.remove(load_post_method)
@@ -338,6 +348,7 @@ def unregister():
     import_export.unregister()
     splint_face_bow.unregister()
     meta_modelling.unregister()
+    articulator_handlers.unregister()
     #unregister this module
  
 if __name__ == "__main__":
