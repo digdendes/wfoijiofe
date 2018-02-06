@@ -63,7 +63,7 @@ class D3Splint_place_text_on_model(bpy.types.Operator):
         
         
         if (mx * new_loc - cursor_loc).length > 1:
-            self.report('ERROR', "Cursor not close to active object.  Right click model to select, Left click to place cursor, then Re-Do")
+            self.report({'ERROR'}, "Cursor not close to active object.  Right click model to select, Left click to place cursor, then Re-Do")
             return {'CANCELLED'}
         
         v3d = context.space_data

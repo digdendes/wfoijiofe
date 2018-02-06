@@ -535,7 +535,7 @@ class D3SPLINT_OT_blockout_splint_shell(bpy.types.Operator):
         
         Shell = bpy.data.objects.get('Splint Shell')
         if Shell == None:
-            self.report('ERROR','Need to have a splint shell created')
+            self.report({'ERROR'},'Need to have a splint shell created')
             return {'CANCELLED'}
                 
 
@@ -767,12 +767,12 @@ class D3SPLINT_OT_blockout_trimmed_model(bpy.types.Operator):
         
         Model = bpy.data.objects.get(splint.model)
         if Model == None:
-            self.report('ERROR','Need to set the model first')
+            self.report({'ERROR'},'Need to set the model first')
             return {'CANCELLED'}
         
         Axis = bpy.data.objects.get('Insertion Axis')
         if Axis == None:
-            self.report('ERROR','Need to set survey from view first, then adjust axis arrow')
+            self.report({'ERROR'},'Need to set survey from view first, then adjust axis arrow')
             return {'CANCELLED'}
         
         
@@ -966,12 +966,12 @@ class D3SPLINT_OT_blockout_trimmed_model2(bpy.types.Operator):
         
         Model = bpy.data.objects.get(splint.model)
         if Model == None:
-            self.report('ERROR','Need to set the model first')
+            self.report({'ERROR'},'Need to set the model first')
             return {'CANCELLED'}
         
         Axis = bpy.data.objects.get('Insertion Axis')
         if Axis == None:
-            self.report('ERROR','Need to set survey from view first, then adjust axis arrow')
+            self.report({'ERROR'},'Need to set survey from view first, then adjust axis arrow')
             return {'CANCELLED'}
         
         
@@ -1383,7 +1383,7 @@ class D3SPLINT_OT_sculpt_concavities(bpy.types.Operator):
         
         Shell = bpy.data.objects.get('Splint Shell')
         if Shell == None:
-            self.report('ERROR','Need to have a splint shell created')
+            self.report({'ERROR'},'Need to have a splint shell created')
             return {'CANCELLED'}
                 
         context.scene.objects.active = Shell

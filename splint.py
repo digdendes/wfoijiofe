@@ -737,7 +737,7 @@ class D3SPLINT_OT_survey_model(bpy.types.Operator):
         
         Model = bpy.data.objects.get(splint.model)
         if Model == None:
-            self.report('ERROR','Need to set the model first')
+            self.report({'ERROR'},'Need to set the model first')
             return {'CANCELLED'}
         
         loc = Model.location
@@ -854,7 +854,7 @@ class D3SPLINT_OT_blockout_model_meta(bpy.types.Operator):
         
         Model = bpy.data.objects.get(splint.model)
         if Model == None:
-            self.report('ERROR','Need to set the model first')
+            self.report({'ERROR'},'Need to set the model first')
             return {'CANCELLED'}
         
         if 'Insertion Axis' in bpy.data.objects:
@@ -938,12 +938,12 @@ class D3SPLINT_OT_survey_model_axis(bpy.types.Operator):
         
         Model = bpy.data.objects.get(splint.model)
         if Model == None:
-            self.report('ERROR','Need to set the model first')
+            self.report({'ERROR'},'Need to set the model first')
             return {'CANCELLED'}
         
         Axis = bpy.data.objects.get('Insertion Axis')
         if Axis == None:
-            self.report('ERROR','Need to set survey from view first, then adjust axis arrow')
+            self.report({'ERROR'},'Need to set survey from view first, then adjust axis arrow if needed')
             return {'CANCELLED'}
         
         
