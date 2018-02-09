@@ -24,7 +24,7 @@
 bl_info = {
     'name': "D3T Splint Module",
     'author': "Patrick R. Moore",
-    'version': (0,3,5),
+    'version': (0,3,6),
     'blender': (2, 7, 9),
     'api': "3c04373",
     'location': "3D View -> Tool Shelf",
@@ -156,9 +156,11 @@ class D3SplintAddonPreferences(AddonPreferences):
     
     default_workflow_type = bpy.props.EnumProperty(name = 'Workflow Type', 
                                               items = [('FREEFORM', 'Freeform', 'Exposes all D3Splint tools with no recommended sequence'),
+                                                       ('SIMPLE_SHELL', 'Simple Shell', 'Basic anatomical offset shell, wear guard, thick retainer etc'),
                                                        ('DEPROGRAMMER', 'Anterior Deprogrammer', 'An antomic shell with anterior deprogrammer element'),
                                                        ('FLAT_PLANE', 'Flat Plane', 'A flat plane splint with even contact'),
-                                                       ('MICHIGAN', 'Michigan Style', 'A flat posterior plane with anterior ramp/guidance'),],
+                                                       ('MICHIGAN', 'Michigan Style', 'A flat posterior plane with anterior ramp/guidance'),
+                                                       ('BITE_POSITIONER', 'Bite Positioner', 'A flat wafer, surgical occlusal stent or jaw positining jig')],
                                               default = "FLAT_PLANE",
                                               description = 'Use the simple workflow filter to expose recommende sequence')
     

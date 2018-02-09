@@ -182,35 +182,38 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         row.operator("d3splint.splint_mark_landmarks", text = "Set Landmarks", icon = ico)
         
         
-        row = layout.row()
-        row.label('Initial Mounting and Articulation')
-        row = layout.row()
-        col = row.column()
-        col.operator("d3splint.generate_articulator", text = "Set Initial Values")
-        #col.operator("d3splint.splint_mount_articulator", text = "Mount on Articulator")
-    
-        row = layout.row()
-        col = row.column()
-    
-        col.operator("d3splint.open_pin_on_articulator", text = "Change Pin Setting" )
-        col.operator("d3splint.recover_mounting_relationship", text = "Recover Mounting" )
+        if splint.workflow_type!= 'SIMPLE_SHELL':
+            row = layout.row()
+            row.label('Initial Mounting and Articulation')
+            row = layout.row()
+            col = row.column()
+            col.operator("d3splint.generate_articulator", text = "Set Initial Values")
+            #col.operator("d3splint.splint_mount_articulator", text = "Mount on Articulator")
         
-        row = layout.row()
-        row.label('Survey and HoC')
+            row = layout.row()
+            col = row.column()
         
-        if splint and splint.curve_max: 
-            ico = 'CHECKBOX_HLT'
-        else:
-            ico = 'CHECKBOX_DEHLT'
-        row = layout.row()
-        row.operator("d3splint.draw_occlusal_curve_max", text = "Mark Max Curve", icon = ico)
-
-        if splint and splint.curve_mand: 
-            ico = 'CHECKBOX_HLT'
-        else:
-            ico = 'CHECKBOX_DEHLT'
-        row = layout.row()
-        row.operator("d3splint.draw_occlusal_curve_mand", text = "Mark Mand Curve", icon = ico)
+            col.operator("d3splint.open_pin_on_articulator", text = "Change Pin Setting" )
+            col.operator("d3splint.recover_mounting_relationship", text = "Recover Mounting" )
+            
+            row = layout.row()
+            row.label('Survey and HoC')
+            
+            
+            if splint.workflow_type != 'DEPROGRAMMER':
+                if splint and splint.curve_max: 
+                    ico = 'CHECKBOX_HLT'
+                else:
+                    ico = 'CHECKBOX_DEHLT'
+                row = layout.row()
+                row.operator("d3splint.draw_occlusal_curve_max", text = "Mark Max Curve", icon = ico)
+    
+                if splint and splint.curve_mand: 
+                    ico = 'CHECKBOX_HLT'
+                else:
+                    ico = 'CHECKBOX_DEHLT'
+                row = layout.row()
+                row.operator("d3splint.draw_occlusal_curve_mand", text = "Mark Mand Curve", icon = ico)
         
          
         row = layout.row()
@@ -273,6 +276,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         else:
             ico = 'CHECKBOX_DEHLT'
         col.operator("d3splint.splint_offset_shell", text = "Splint Shell", icon = ico)
+        
         
         
         if splint.workflow_type == 'FREEFORM':
@@ -338,40 +342,43 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
             col = row.column()
             col.operator("d3splint.meta_blockout_shell", text = 'Blockout Large Concavities')
             col.operator("d3splint.auto_sculpt_concavities", text = 'Auto Sculpt Concavities')
-        
+            col.operator("d3splint.remesh_smooth_inflate", text = 'Remesh/Smooth')
+            
             row = layout.row()
-            row.label('Manual Flat Plane')
+            row.label('Posterior Flat Plane')
             row = layout.row()
             col = row.column()
             col.operator("d3splint.splint_manual_flat_plane", text = "Mark Opposing Contacts")
             col.operator("d3splint.subtract_posterior_surface", text = 'Subtract Posterior Plane')
         
             row = layout.row()
-            row.label('Create Low Value Surface')
-            
-            row = layout.row()
-            col = row.column()
-            col.operator("d3splint.splint_animate_articulator", text = "Generate Surface").force_full = True
-            col.operator("d3splint.splint_subtract_surface", text = "Subtract Surface")
-        
-        if splint.workflow_type == 'MICHIGAN':
-            
-            row = layout.row()
-            row.label('Ramp and Guidance')
+            row.label('Ramp Articulator and Guidance')
             
             row = layout.row()
             col = row.column()
             
-            col.operator("d3splint.generate_articulator", text = "Set Steeper Articulator Values")
+            col.operator("d3splint.generate_articulator", text = "Set Articulator Values")
             
             col.operator("d3splint.splint_rim_from_dual_curves", text = "Add Anterior Ramp").ap_segment = 'ANTERIOR_ONLY'
             
             
             col.operator("d3splint.splint_join_rim", text = "Fuse Anterior Rim")
-            col.operator("d3splint.splint_animate_articulator", text = "Generate New Surface").force_full = True
-            col.operator("d3splint.splint_subtract_surface", text = "Subtract Surface")
             
+            op_props = col.operator("d3splint.splint_animate_articulator", text = "Generate Functional Surface")
+            op_props.mode = 'FULL_ENVELOPE'
+            op_props.relax_ramp_length = .8 
+            op_props.range_of_motion  =  7
+            op_props.use_relax = True
+            op_props.resolution = 20
             
+            row = layout.row()
+            row.label('Finalize Occlusion')
+            row = layout.row()
+            col = row.column()
+            col.operator("d3splint.splint_subtract_surface", text = "Subtract Functional Surface")
+            col.operator("d3splint.subtract_posterior_surface", text = 'Subtract Posterior Plane')
+            col.operator("d3splint.remesh_smooth_inflate", text = 'Remesh/Smooth')
+            col.operator("d3splint.subtract_opposing_model", text = 'Grind MIP')
         #row = layout.row()
         #row.prop(prefs, "show_occlusal_mod")
         #if get_settings().show_occlusal_mod:
@@ -423,29 +430,31 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
             col.operator("d3splint.splint_subtract_surface", text = "Subtract Functional Surface", icon = ico)
         
         
-        row = layout.row()
-        row.label('Sculpt and Refinement')
         
-        if context.mode == 'OBJECT':
+        if splint.workflow_type not in {'SIMPLE_SHELL','DEPROGRAMMER'}:
             row = layout.row()
-            row.operator("d3splint.splint_start_sculpt", text = "Go to Sculpt")
-        
-        if context.mode == 'SCULPT': #TODO other checks for sculpt object and stuff
+            row.label('Manual Sculpt and Refinement')
             
-            paint_settings = sce.tool_settings.unified_paint_settings
-            sculpt_settings = context.tool_settings.sculpt
-            row= layout.row()
-            col = row.column()
-            col.template_ID_preview(sculpt_settings, "brush", new="brush.add", rows=3, cols=8)
+            if context.mode == 'OBJECT':
+                row = layout.row()
+                row.operator("d3splint.splint_start_sculpt", text = "Go to Sculpt")
             
+            if context.mode == 'SCULPT': #TODO other checks for sculpt object and stuff
+                
+                paint_settings = sce.tool_settings.unified_paint_settings
+                sculpt_settings = context.tool_settings.sculpt
+                row= layout.row()
+                col = row.column()
+                col.template_ID_preview(sculpt_settings, "brush", new="brush.add", rows=3, cols=8)
+                
+                
+                brush = sculpt_settings.brush
+                row = layout.row()
+                row.prop(brush, "stroke_method")
             
-            brush = sculpt_settings.brush
-            row = layout.row()
-            row.prop(brush, "stroke_method")
-        
-            
-            row = layout.row()
-            row.operator("object.mode_set", text = 'Finish Paint/Sculpt')
+                
+                row = layout.row()
+                row.operator("object.mode_set", text = 'Finish Paint/Sculpt')
             
         #    row = layout.row()
         #    row.prop(paint_settings, "unprojected_radius")

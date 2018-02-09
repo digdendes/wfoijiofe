@@ -27,6 +27,33 @@ def thirty_steps(frame):
     return r
 
 
+
+def full_envelope_with_relax(frame, condy_length, resolution, use_relax, relax_length, right_left):
+    
+    if frame > resolution * (resolution + 1):
+        frame = resolution * (resolution + 1)
+        
+    factor = min(1, condy_length/8)
+    
+    
+    r_factor = min(1, relax_length/2)
+    
+    if frame < resolution**2:
+        if right_left == 'R':
+            R = .2 + factor * .8 * math.fmod(frame,resolution)/resolution
+        else:
+            R = .2 + factor * .8 * math.floor(frame/resolution)/resolution
+            
+            
+    else:#retrusion
+    
+        R = .2 - r_factor * .2 * (frame - resolution**2)/resolution
+        
+        
+    return R
+
+
+
 def three_way_envelope_l(frame, factor, resolution):
     #protrusion
     if frame < resolution:
@@ -116,6 +143,9 @@ def load_driver_namespace():
         bpy.app.driver_namespace['threeway_envelope_l'] = three_way_envelope_l
 
 
+    if 'full_envelope_with_relax' not in bpy.app.driver_namespace:
+        bpy.app.driver_namespace['full_envelope_with_relax'] = full_envelope_with_relax
+        
 def occlusal_surface_frame_change(scene):
 
     if not len(scene.odc_splints): return
@@ -173,7 +203,7 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
     auto_mount = BoolProperty(default = True, description = 'Use if Upper and Lower casts are already in mounted position')
     
     resolution = IntProperty(name = 'Resolution',default = 30, min = 10, max = 50, description = 'Number of steps along each condyle to animate')
-    factor = FloatProperty(name = 'Range of Motion', default = .75, min = .3, max = 1.0, description = 'Percentage of condyles to use in motion')
+    factor = FloatProperty(name = 'Range of Motion', default = 5, min = 1, max = 8.0, description = 'Distance down condylaer inclines to use in motion')
     
     
     @classmethod
@@ -381,7 +411,9 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         v.targets[0].id = context.scene
         v.targets[0].data_path = "frame_current"
         #d.expression = "threeway_envelope_r(frame) * " + str(self.range_of_motion)[0:3]
-        d.expression = 'threeway_envelope_r(frame,'  + str(self.factor) + ',' + str(self.resolution)[0:4] + ')'
+        
+        cfactor = min(8.0, self.factor/8.0)
+        d.expression = 'threeway_envelope_r(frame,'  + str(cfactor)[0:4] + ',' + str(self.resolution) + ')'
         
         pboneL = art_arm.pose.bones.get('Left Condyle')
         cons = pboneL.constraints.new(type = 'FOLLOW_PATH')
@@ -394,7 +426,7 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         v.targets[0].id = context.scene
         v.targets[0].data_path = "frame_current"
         #d.expression = "threeway_envelope_l(frame) * " + str(self.range_of_motion)[0:3]
-        d.expression = 'threeway_envelope_l(frame,'  + str(self.factor) + ',' + str(self.resolution)[0:4] + ')'
+        d.expression = 'threeway_envelope_l(frame,'  + str(cfactor)[0:4] + ',' + str(self.resolution) + ')'
         
         cons = pboneR.constraints.new(type = 'LOCKED_TRACK')
         cons.target = art_arm
@@ -545,7 +577,14 @@ class D3Splint_OT_articulator_set_mode(bpy.types.Operator):
     mode = EnumProperty(name = 'Articulator Mode', items = mode_items, default = 'PROTRUSIVE')
     
     resolution = IntProperty(name = "Condyle Steps", default = 30, min = 10, max = 50, description = 'Number of steps to divide the condylar path into.  More gives smoother surface')
-    factor = FloatProperty(name = "Range of Motion", default = 0.8, min = 0.3, max = 1.0, description = 'Percentage of condylar path to animate over, smaller numbers give smaller envelope')
+    
+    range_of_motion = FloatProperty(name = "Range of Motion", default = 5, min = 1.0, max = 8.0, description = 'Length in mm to move along the condylar paths')
+    
+    use_relax = BoolProperty(name = 'Use Relax Ramp', default = False)
+    relax_ramp_length = FloatProperty(name = 'Relax Ramp Length', min = 0.1, max = 2.0, description = 'Length of condylar path to animate, typically .2 to 1.0', default = 0.8)
+    
+    
+    
     @classmethod
     def poll(cls, context):
         
@@ -560,6 +599,8 @@ class D3Splint_OT_articulator_set_mode(bpy.types.Operator):
       
     def execute(self, context):
         
+        factor = min(1, self.range_of_motion/8)
+        factor_r = min(2, self.relax_ramp_length/2)
         #Double Set scene to frame 0
         context.scene.frame_set(0)
         context.scene.frame_set(0)
@@ -587,8 +628,8 @@ class D3Splint_OT_articulator_set_mode(bpy.types.Operator):
         
         if self.mode == 'PROTRUSIVE':
             #double resolution
-            dl.expression = '.2 + .8 * abs(sin(pi * frame/' + str(4 * self.resolution)[0:4] +  ')) * ' + str(self.factor)[0:4]
-            dr.expression = '.2 + .8 * abs(sin(pi * frame/' + str(4 * self.resolution)[0:4] +  ')) * ' + str(self.factor)[0:4]
+            dl.expression = '.2 + .8 * abs(sin(pi * frame/' + str(4 * self.resolution)[0:4] +  ')) * ' + str(factor)[0:4]
+            dr.expression = '.2 + .8 * abs(sin(pi * frame/' + str(4 * self.resolution)[0:4] +  ')) * ' + str(factor)[0:4]
            
            
             context.scene.frame_start = 0
@@ -598,14 +639,14 @@ class D3Splint_OT_articulator_set_mode(bpy.types.Operator):
         elif self.mode == 'RIGHT_EXCURSION':
             #double resolution
             dr.expression = '.2'
-            dl.expression = '.2 + .8 * abs(sin(pi * frame/' + str(4 * self.resolution)[0:4] +  ')) * ' + str(self.factor)[0:4]
+            dl.expression = '.2 + .8 * abs(sin(pi * frame/' + str(4 * self.resolution)[0:4] +  ')) * ' + str(factor)[0:4]
             context.scene.frame_start = 0
             context.scene.frame_end = context.scene.frame_end = 2 * self.resolution
             
             
         elif self.mode == 'LEFT_EXCURSION':
             #double resolution
-            dr.expression = '.2 + .8 * abs(sin(pi * frame/' + str(4 * self.resolution)[0:4] +  ')) * ' + str(self.factor)[0:4]
+            dr.expression = '.2 + .8 * abs(sin(pi * frame/' + str(4 * self.resolution)[0:4] +  ')) * ' + str(factor)[0:4]
             dl.expression = '.2'
             context.scene.frame_start = 0
             context.scene.frame_end = context.scene.frame_end = 2 * self.resolution
@@ -613,8 +654,8 @@ class D3Splint_OT_articulator_set_mode(bpy.types.Operator):
             
         elif self.mode == 'RELAX_RAMP':
             #double resolution
-            dr.expression = '.2 - .2 * abs(sin(pi * frame/' + str(4 * self.resolution)[0:4] + ')) * ' + str(self.factor)[0:4]
-            dl.expression = '.2 - .2 * abs(sin(pi * frame/' + str(4 * self.resolution)[0:4] + ')) * ' + str(self.factor)[0:4]
+            dr.expression = '.2 - .2 * abs(sin(pi * frame/' + str(4 * self.resolution)[0:4] + ')) * ' + str(factor_r)[0:4]
+            dl.expression = '.2 - .2 * abs(sin(pi * frame/' + str(4 * self.resolution)[0:4] + ')) * ' + str(factor_r)[0:4]
             context.scene.frame_start = 0
             context.scene.frame_end = 2 * self.resolution
             
@@ -625,8 +666,8 @@ class D3Splint_OT_articulator_set_mode(bpy.types.Operator):
             if 'threeway_envelope_l' not in bpy.app.driver_namespace:
                 bpy.app.driver_namespace['threeway_envelope_l'] = three_way_envelope_l
             
-            dl.expression = 'threeway_envelope_l(frame,'  + str(self.factor) + ',' + str(self.resolution)[0:4] + ')'
-            dr.expression = 'threeway_envelope_r(frame,'  + str(self.factor) + ',' + str(self.resolution)[0:4] + ')'
+            dl.expression = 'threeway_envelope_l(frame,'  + str(factor) + ',' + str(self.resolution)[0:4] + ')'
+            dr.expression = 'threeway_envelope_r(frame,'  + str(factor) + ',' + str(self.resolution)[0:4] + ')'
         
             context.scene.frame_start = 0
             context.scene.frame_end = 3 * self.resolution
@@ -634,12 +675,23 @@ class D3Splint_OT_articulator_set_mode(bpy.types.Operator):
             
                 
         elif self.mode == 'FULL_ENVELOPE':
+            #full_envelope_with_relax(frame, condy_length, resolution, use_relax, relax_length, right_left) 
+            if 'full_envelope_with_relax' not in bpy.app.driver_namespace:
+                bpy.app.driver_namespace['full_envelope_with_relax'] = full_envelope_with_relax
             
-            dr.expression = ".2 + .8 * fmod(frame,"  + str(self.resolution) +  ")/" + str(self.resolution)
-            dl.expression = ".2 + .8 * floor(frame/" + str(self.resolution) +  ")/" + str(self.resolution)
+            variables = [str(self.range_of_motion)[0:4], str(self.resolution), str(self.use_relax), str(self.relax_ramp_length)[0:4]]
+            
+            variables_r = ','.join(variables) + ',"R"'
+            variables_l = ','.join(variables) + ',"L"'
+            
+            
+            dr.expression = "full_envelope_with_relax(frame," + variables_r + ')'
+            dl.expression = "full_envelope_with_relax(frame," + variables_l + ')'
         
+            print(dr.expression)
+            print(dl.expression)
             context.scene.frame_start = 0
-            context.scene.frame_end = self.resolution ** 2
+            context.scene.frame_end = self.resolution * (self.resolution +1)
             
         return {'FINISHED'}
 
@@ -871,9 +923,18 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     
-    resolution = IntProperty(name = 'Resolution', description = "Number of setps along the condyle to create surface.  10-40 is reasonable.  Larger = Slower", default = 20)
-    range_of_motion = FloatProperty(name = 'Range of Motion', min = 0.2, max = 1.0, description = 'Percent of condylar path to animate, typically .2 to 1.0', default = 0.8)
-    force_full = BoolProperty(name = 'Force Full Range', default = False)
+    
+    modes = ['PROTRUSIVE', 'RIGHT_EXCURSION', 'LEFT_EXCURSION', 'RELAX_RAMP', '3WAY_ENVELOPE','FULL_ENVELOPE']
+    mode_items = []
+    for m in modes:
+        mode_items += [(m, m, m)]
+        
+    mode = EnumProperty(name = 'Articulator Mode', items = mode_items, default = 'FULL_ENVELOPE')
+    resolution = IntProperty(name = 'Resolution', description = "Number of steps along the condyle to create surface.  10-40 is reasonable.  Larger = Slower", default = 20)
+    range_of_motion = FloatProperty(name = 'Range of Motion', min = 2, max = 8, description = 'Distance to allow translation down condyles', default = 0.8)
+    use_relax = BoolProperty(name = 'Use Relax Ramp', default = False)
+    relax_ramp_length = FloatProperty(name = 'Relax Ramp Length', min = 0.1, max = 2.0, description = 'Length of condylar path to animate, typically .2 to 1.0', default = 0.8)
+    
     @classmethod
     def poll(cls, context):
         #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
@@ -882,6 +943,10 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
         #    return False
         return True
     
+    def invoke(self, context, event):
+        
+        return context.window_manager.invoke_props_dialog(self)
+        
     def execute(self, context):
         splint = context.scene.odc_splints[0]
         Model = bpy.data.objects.get(splint.opposing)
@@ -901,8 +966,12 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
             bvh = BVHTree.FromBMesh(bme)
             splint_cache.write_mesh_cache(Model, bme, bvh)
         
-        if self.force_full:
-            bpy.ops.d3splint.articulator_mode_set(mode = 'FULL_ENVELOPE')
+        
+        bpy.ops.d3splint.articulator_mode_set(mode = self.mode, 
+                                              resolution = self.resolution, 
+                                              range_of_motion = self.range_of_motion, 
+                                              use_relax = self.use_relax,
+                                              relax_ramp_length = self.relax_ramp_length)
         
         #filter the occlusal surface verts
         Plane = bpy.data.objects.get('Dynamic Occlusal Surface')

@@ -785,11 +785,22 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         
         context.scene.cursor_location = Model.location
         bpy.ops.view3d.view_center_cursor()
-        bpy.ops.view3d.viewnumpad(type = 'FRONT')
-         
+        
+        if self.splint.workflow_type != 'SIMPLE_SHELL':
+            bpy.ops.view3d.viewnumpad(type = 'FRONT')
+            
+        else:
+            if self.splint.jaw_type == 'MAXILLA':
+                if Mand_Model:
+                    Mand_Model.hide = True
+                bpy.ops.view3d.viewnumpad(type = 'BOTTOM')
+            else: # self.splint.jaw_type == 'MANDIBLE':
+                Model.hide = True
+                bpy.ops.view3d.viewnumpad(type = 'TOP')
+            
         self.splint.landmarks_set = True
         
-        if 'Articulator' not in context.scene.objects:
+        if 'Articulator' not in context.scene.objects and self.splint.workflow_type != 'SIMPLE_SHELL':
             bpy.ops.d3splint.generate_articulator('EXEC_DEFAULT')
         tracking.trackUsage("D3Splint:SplintLandmarks",None)
 

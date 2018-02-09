@@ -159,8 +159,11 @@ def clear_articulator_handlers():
     if articulator_draw_handle:
         bpy.types.SpaceView3D.draw_handler_remove(articulator_draw_handle, 'WINDOW')
         articulator_draw_handle = None
-            
-        bpy.app.handlers.scene_update_pre.remove(articulator_metrics_callback)
+        
+        handlers = [hand.__name__ for hand in bpy.app.handlers.frame_change_pre]
+        
+        if articulator_metrics_callback.__name__ in handlers:
+            bpy.app.handlers.scene_update_pre.remove(articulator_metrics_callback)
         
  
 def register():
