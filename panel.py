@@ -182,7 +182,44 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         row.operator("d3splint.splint_mark_landmarks", text = "Set Landmarks", icon = ico)
         
         
-        if splint.workflow_type!= 'SIMPLE_SHELL':
+        
+        if splint.workflow_type == 'BITE_POSITIONER':
+                
+            if splint and splint.curve_max:
+                ico = 'CHECKBOX_HLT'
+            else:
+                ico = 'CHECKBOX_DEHLT'
+            row = layout.row()
+            row.operator("d3splint.draw_occlusal_curve_max", text = "Mark Max Curve", icon = ico)
+
+            if splint and splint.curve_mand: 
+                ico = 'CHECKBOX_HLT'
+            else:
+                ico = 'CHECKBOX_DEHLT'
+            row = layout.row()
+            row.operator("d3splint.draw_occlusal_curve_mand", text = "Mark Mand Curve", icon = ico)
+            
+            if splint and "MakeRim" in splint.ops_string: 
+                ico = 'FILE_TICK'
+            else:
+                ico = 'NONE'
+            row = layout.row()
+            row.operator("d3splint.surgical_bite_appliance", text = "Make Bite Rim", icon = ico)
+            
+            if splint and splint.finalize_splint: 
+                ico = 'CHECKBOX_HLT'
+            else:
+                ico = 'CHECKBOX_DEHLT'
+            
+            row = layout.row()
+            row.operator("d3splint.splint_finish_bite_boolean", text = "Finalize The Splint", icon = ico)
+            
+            row = layout.row()
+            row.operator("d3splint.export_splint_stl", text = "Export Splint STL")
+            
+            return
+            
+        if splint.workflow_type not in {'SIMPLE_SHELL','BITE_POSITIONER'}:
             row = layout.row()
             row.label('Initial Mounting and Articulation')
             row = layout.row()
@@ -315,7 +352,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
             col.operator("d3splint.splint_join_deprogrammer", text = 'Fuse Deprogrammer')
             
             
-        if splint.workflow_type in {'FLAT_PLANE', 'MICHIGAN'}:
+        if splint.workflow_type in {'FLAT_PLANE', 'MICHIGAN', 'ANTERIOR_POSITIONER', 'BITE_POSITIONER'}:
             
             row = layout.row()
             col = row.column()
@@ -324,10 +361,10 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
             else:
                 ico = 'NONE'
             
-            if splint.workflow_type == 'FLAT_PLANE':
+            if splint.workflow_type in {'FLAT_PLANE', 'ANTERIOR_POSITIONER'}:
                 col.operator("d3splint.splint_rim_from_dual_curves", text = "Splint Wax Rim", icon = ico).ap_segment = 'POSTERIOR_ONLY'
             
-            elif splint.workflow_type == 'MICHIGAN':
+            elif splint.workflow_type in {'MICHIGAN', 'BITE_POSITIONER'}:
                 col.operator("d3splint.splint_rim_from_dual_curves", text = "Splint Wax Rim", icon = ico).ap_segment = 'FULL_RIM'
             
             if splint and "JoinRim" in splint.ops_string: 
@@ -360,9 +397,11 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
             col.operator("d3splint.generate_articulator", text = "Set Articulator Values")
             
             col.operator("d3splint.splint_rim_from_dual_curves", text = "Add Anterior Ramp").ap_segment = 'ANTERIOR_ONLY'
-            
-            
             col.operator("d3splint.splint_join_rim", text = "Fuse Anterior Rim")
+            
+            if splint.workflow_type == 'ANTERIOR_POSITIONER':
+                col.operator("d3splint.anterior_deprogrammer_element", text = 'Anterior Deprogrammer Ramp')
+                col.operator("d3splint.splint_join_deprogrammer", text = 'Fuse Deprogrammer')
             
             op_props = col.operator("d3splint.splint_animate_articulator", text = "Generate Functional Surface")
             op_props.mode = 'FULL_ENVELOPE'
@@ -466,6 +505,8 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         
         row = layout.row()
         row.label('Fit and Finalization')
+        
+        col = row.column()
         
         if splint and splint.passive_offset: 
             ico = 'CHECKBOX_HLT'

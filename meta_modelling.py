@@ -22,6 +22,7 @@ import tracking
 import time
 import random
 import odcutils
+from odcutils import get_bbox_center
 
 def arch_crv_draw_callback(self, context):  
     self.crv.draw(context)
@@ -296,7 +297,218 @@ class D3SPLINT_OT_splint_virtual_wax_on_curve(bpy.types.Operator):
 
 
 
+class D3SPLINT_OT_surgical_bite_positioner(bpy.types.Operator):
+    """Create Meta Wax Rim previously defined maxillary and mandibular curves"""
+    bl_idname = "d3splint.surgical_bite_appliance"
+    bl_label = "Create Bite Wafer"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    
+    meta_type = EnumProperty(name = 'Meta Type', items = [('CUBE','CUBE','CUBE'), ('ELLIPSOID', 'ELLIPSOID','ELLIPSOID')], default = 'CUBE')
+    
+    width_offset = FloatProperty(name = 'Extra Wdith', default = 0.01, min = -3, max = 3)
+    
+    thickenss_offset = FloatProperty(name = 'Extra Thickness', default = 0.01, min = -3, max = 3)
+    
+    anterior_projection = FloatProperty(name = 'Extra Anterior Width', default = 0.01, min = -2, max = 3)
+    
+    
+    flare = IntProperty(default = 0, min = -60, max = 60, description = 'Angle off of world Z')
+    anterior_segement = FloatProperty(name = 'AP Spread', default = 0.3, min = .15, max = .5)
+    ap_segment = EnumProperty(name = 'Rim Area', items = [('ANTERIOR_ONLY','Anterior Ramp','Only builds rim anterior to AP spread'),
+                                                          ('POSTERIOR_ONLY', 'Posterior Pad','ONly builds rim posterior to AP spread'),
+                                                          ('FULL_RIM', 'Full Rim', 'Buillds a posterior pad and anteiror ramp')], default = 'FULL_RIM')
+    
+    @classmethod
+    def poll(cls, context):
+        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
+        #    return True
+        #else:
+        #    return False
+        return True
+    
+    def execute(self, context):
+        
+        MaxCurve = bpy.data.objects.get('Occlusal Curve Max')
+        if MaxCurve == None:
+            self.report({'ERROR'}, "Need to mark maxillary buccal cusps")
+            return {'CANCELLED'}
+        
+        MandCurve = bpy.data.objects.get('Occlusal Curve Mand')
+        if MandCurve == None:
+            self.report({'ERROR'}, "Need to mark mandibular lingual cusps")
+            return {'CANCELLED'}
+        
 
+        tracking.trackUsage("D3Splint:SurgicalBitePositioner",None)
+        
+
+        max_crv_data = MaxCurve.data
+        mx_max = MaxCurve.matrix_world
+        imx_max = mx_max.inverted()
+        
+        
+        mand_crv_data = MandCurve.data
+        mx_mand = MandCurve.matrix_world
+        imx_mand = mx_mand.inverted()
+        
+        
+        print('got curve object')
+        
+        meta_data = bpy.data.metaballs.new('Splint Wax Rim')
+        meta_obj = bpy.data.objects.new('Meta Surface', meta_data)
+        meta_data.resolution = .4
+        meta_data.render_resolution = .4
+        context.scene.objects.link(meta_obj)
+        
+        #get world path of the maxillary curve
+        me_max = MaxCurve.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+        bme_max = bmesh.new()
+        bme_max.from_mesh(me_max)
+        bme_max.verts.ensure_lookup_table()
+        bme_max.edges.ensure_lookup_table()
+        loops = edge_loops_from_bmedges(bme_max, [ed.index for ed in bme_max.edges])
+        vs0 = [mx_max * bme_max.verts[i].co for i in loops[0]]
+        vs_even_max, eds0 = space_evenly_on_path(vs0, [(0,1),(1,2)], 100)
+        
+        #get world path of the mandibular curve
+        me_mand = MandCurve.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+        bme_mand = bmesh.new()
+        bme_mand.from_mesh(me_mand)
+        bme_mand.verts.ensure_lookup_table()
+        bme_mand.edges.ensure_lookup_table()
+        loops = edge_loops_from_bmedges(bme_mand, [ed.index for ed in bme_mand.edges])
+        vs0 = [mx_mand * bme_mand.verts[i].co for i in loops[0]]
+        vs_even_mand, eds0 = space_evenly_on_path(vs0, [(0,1),(1,2)], 100)
+        
+        
+        #check for tip to tail
+        if (vs_even_mand[0] - vs_even_max[0]).length > (vs_even_mand[0] - vs_even_max[-1]).length:
+            print('reversing the mandibular curve')
+            vs_even_mand.reverse()
+        
+        Z = Vector((0,0,1))
+        
+        
+        max_x = max(vs_even_max, key = lambda x: x[0])
+        min_x = min(vs_even_max, key = lambda x: x[0])
+        A_ap = max_x[0]
+        P_ap = min_x[0]
+        ap_spread = max_x[0] - min_x[0]
+        
+        
+        for i in range(1,len(vs_even_max)-1):
+            
+            #use maxilary curve for estimattino
+            
+            v0_0 = vs_even_max[i]
+            v0_p1 = vs_even_max[i+1]
+            v0_m1 = vs_even_max[i-1]
+
+            v0_mand = vs_even_mand[i]
+            center = .5 *  v0_0 + 0.5 * v0_mand
+            
+            size_z = max(1, abs(v0_0[2] - v0_mand[2] - 1))
+            size_y = ((v0_0[0] - v0_mand[0])**2 + (v0_0[1] - v0_mand[1])**2)**.5
+            size_y = max(3, size_y)
+            
+            
+            X = v0_p1 - v0_m1
+            X.normalize()
+            
+            Y = Z.cross(X)
+            X_c = Y.cross(Z) #X corrected
+            
+            T = Matrix.Identity(3)
+            T.col[0] = X_c
+            T.col[1] = Y
+            T.col[2] = Z
+            quat = T.to_quaternion()
+            
+            if v0_0[0] > P_ap + (1-self.anterior_segement) * ap_spread:
+                if self.ap_segment == 'POSTERIOR_ONLY': continue
+                mb = meta_data.elements.new(type = self.meta_type)
+                mb.size_x = 1.5
+                Qrot = Quaternion(X_c, math.pi/180 * self.flare)
+                Zprime = Qrot * Z
+            
+                Y_c = Zprime.cross(X_c)
+            
+            
+                T = Matrix.Identity(3)
+                T.col[0] = X_c
+                T.col[1] = Y_c
+                T.col[2] = Zprime
+                quat = T.to_quaternion()
+                
+                if v0_0[0] > A_ap - self.anterior_segement * ap_spread + .25 * self.anterior_segement * ap_spread:
+                    mb.size_y =  max(.5 * (size_y - 1.5 + self.width_offset) + self.anterior_projection, 1)
+                    mb.size_z = max(.35 * size_z + .5 * self.thickenss_offset, .75)
+                    mb.co = center + (.5 * self.width_offset + self.anterior_projection) * Y_c
+                    mb.rotation = quat
+                else:
+                    blend =  (v0_0[0] - (A_ap - self.anterior_segement * ap_spread))/(.25 * self.anterior_segement * ap_spread)
+                    mb.size_y =  max(.5 * (size_y - 1.5 + self.width_offset) + blend * self.anterior_projection, 1)
+                    mb.size_z = max(.35 * size_z + .5 * self.thickenss_offset, .75)
+                    mb.co = center + (.5 * self.width_offset + blend * self.anterior_projection) * Y_c
+                    mb.rotation = quat
+            else:          
+                if self.ap_segment == 'ANTERIOR_ONLY': continue
+                mb = meta_data.elements.new(type = self.meta_type)
+                mb.size_x = 1.5
+                mb.size_y = max(.5 * (size_y - 1.5) + self.width_offset, 1)
+                mb.size_z = max(.35 * size_z + .5 * self.thickenss_offset, .75)
+                mb.co = center
+                
+                mb.rotation = quat
+            mb.stiffness = 2
+            
+            
+        context.scene.update()
+        me = meta_obj.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+        
+        if 'Splint Shell' not in bpy.data.objects:
+            new_ob = bpy.data.objects.new('Splint Shell', me)
+            context.scene.objects.link(new_ob)
+            
+            mat = bpy.data.materials.get("Splint Material")
+            if mat is None:
+            # create material
+                mat = bpy.data.materials.new(name="Splint Material")
+                mat.diffuse_color = Color((0.5, .1, .6))
+        
+            new_ob.data.materials.append(mat)
+            
+        else:
+            new_ob = bpy.data.objects.get('Splint Shell')
+            new_ob.data = me
+            new_ob.hide = False
+
+        center = get_bbox_center(new_ob, world=True)
+        Tmx = Matrix.Translation(center)
+        iTmx = Tmx.inverted()
+        
+        new_ob.matrix_world *= iTmx
+        new_ob.data.transform(Tmx) 
+        
+        context.scene.objects.unlink(meta_obj)
+        bpy.data.objects.remove(meta_obj)
+        bpy.data.metaballs.remove(meta_data)
+        
+        bme_max.free()
+        bme_mand.free()
+        #todo remove/delete to_mesh mesh
+  
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        splint.ops_string += 'SplintShellSurgicalWafer:'
+        return {'FINISHED'}
+
+    
+    def invoke(self, context, event):
+
+        return context.window_manager.invoke_props_dialog(self)
+    
 class D3SPLINT_OT_anterior_deprogrammer_element(bpy.types.Operator):
     """Create an anterior deprogrammer ramp"""
     bl_idname = "d3splint.anterior_deprogrammer_element"
@@ -310,7 +522,7 @@ class D3SPLINT_OT_anterior_deprogrammer_element(bpy.types.Operator):
     posterior_width = FloatProperty(default = 10, description = 'Posterior Width of ramp')
     anterior_width = FloatProperty(default = 8, description = 'Anterior Width of ramp')
     thickness = FloatProperty(default = 2.75, description = 'Thickness of ramp')
-    support_height = FloatProperty(default = 6, description = 'Height of support strut')
+    support_height = FloatProperty(default = 3, description = 'Height of support strut')
     support_width =  FloatProperty(default = 6, description = 'Width of support strut')
     
     
@@ -1095,6 +1307,7 @@ class D3SPLINT_OT_blockout_trimmed_model2(bpy.types.Operator):
             v_pre_p = bme_pp.verts[v.index]
             co = v_pre_p.co
             
+            if not len(v.link_edges)>1: continue
             #This should guarantee good overlap of the disks, going past 1/2 way toward the furthest neighbor
             #by definition the neighbors disk has to go > 1/2 than it's furthest neighbor
             R = .8 * max([ed.calc_length() for ed in v_pre_p.link_edges])
@@ -1529,6 +1742,7 @@ def register():
     bpy.utils.register_class(D3SPLINT_OT_sculpt_concavities)
     bpy.utils.register_class(D3SPLINT_OT_blockout_trimmed_model)
     bpy.utils.register_class(D3SPLINT_OT_blockout_trimmed_model2)
+    bpy.utils.register_class(D3SPLINT_OT_surgical_bite_positioner)
     
 def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_draw_meta_curve)
@@ -1540,4 +1754,5 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_sculpt_concavities)
     bpy.utils.unregister_class(D3SPLINT_OT_blockout_trimmed_model)
     bpy.utils.unregister_class(D3SPLINT_OT_blockout_trimmed_model2)
+    bpy.utils.unregister_class(D3SPLINT_OT_surgical_bite_positioner)
     

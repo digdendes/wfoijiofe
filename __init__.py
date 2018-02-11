@@ -21,10 +21,14 @@
 #
 # ##### END GPL LICENSE BLOCK #####
 
+#CITATIONS
+#http://www.dentistrytoday.com/occlusion/1507--sp-720974386
+
+
 bl_info = {
     'name': "D3T Splint Module",
     'author': "Patrick R. Moore",
-    'version': (0,3,6),
+    'version': (0,3,7),
     'blender': (2, 7, 9),
     'api': "3c04373",
     'location': "3D View -> Tool Shelf",
@@ -160,6 +164,7 @@ class D3SplintAddonPreferences(AddonPreferences):
                                                        ('DEPROGRAMMER', 'Anterior Deprogrammer', 'An antomic shell with anterior deprogrammer element'),
                                                        ('FLAT_PLANE', 'Flat Plane', 'A flat plane splint with even contact'),
                                                        ('MICHIGAN', 'Michigan Style', 'A flat posterior plane with anterior ramp/guidance'),
+                                                       ('ANTERIOR_POSITIONER', 'Anterior Positioner', 'Farrar Style, anti-retrusion, pull forward'),
                                                        ('BITE_POSITIONER', 'Bite Positioner', 'A flat wafer, surgical occlusal stent or jaw positining jig')],
                                               default = "FLAT_PLANE",
                                               description = 'Use the simple workflow filter to expose recommende sequence')

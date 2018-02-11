@@ -684,7 +684,7 @@ class D3SPLINT_OT_splint_mark_margin(bpy.types.Operator):
         self.splint.margin = self.crv.crv_obj.name
         
         #TODO, tweak the modifier as needed
-        help_txt = "DRAW BUCCAL POINTS\n\nLeft Click on model to define splint boundary \nPoints will snap to objects under mouse \n Right click to delete a point n\ Click the first point to close the loop \n  Left click a point to select, then G to grab  \n ENTER to confirm \n ESC to cancel"
+        help_txt = "DRAW SPLINT MARGIN\n\nLeft Click on model to define splint boundary \nPoints will snap to objects under mouse \n Right click to delete a point n\ Click the first point to close the loop \n  Left click a point to select, then G to grab  \n ENTER to confirm \n ESC to cancel"
         self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
         self.help_box.snap_to_corner(context, corner = [1,1])
         self.mode = 'main'
@@ -1878,10 +1878,12 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
     
     
     meta_type = EnumProperty(name = 'Meta Type', items = [('CUBE','CUBE','CUBE'), ('ELLIPSOID', 'ELLIPSOID','ELLIPSOID')], default = 'CUBE')
+    
     width_offset = FloatProperty(name = 'Extra Wdith', default = 0.01, min = -3, max = 3)
+    
     thickenss_offset = FloatProperty(name = 'Extra Thickness', default = 0.01, min = -3, max = 3)
     
-    anterior_projection = FloatProperty(name = 'Extra Anterior Width', default = 0.01, min = 0.0, max = 3)
+    anterior_projection = FloatProperty(name = 'Extra Anterior Width', default = 0.01, min = -2, max = 3)
     
     
     flare = IntProperty(default = 0, min = -60, max = 60, description = 'Angle off of world Z')
@@ -2024,21 +2026,22 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
                 quat = T.to_quaternion()
                 
                 if v0_0[0] > A_ap - self.anterior_segement * ap_spread + .25 * self.anterior_segement * ap_spread:
-                    mb.size_y =  .5 * (size_y - 1.5 + self.width_offset) + self.anterior_projection
-                    mb.size_z = .35 * size_z + .5 * self.thickenss_offset
+                    mb.size_y =  max(.5 * (size_y - 1.5 + self.width_offset) + self.anterior_projection, 1)
+                    mb.size_z = max(.35 * size_z + .5 * self.thickenss_offset, .75)
                     mb.co = center + (.5 * self.width_offset + self.anterior_projection) * Y_c
                     mb.rotation = quat
                 else:
-                    
                     blend =  (v0_0[0] - (A_ap - self.anterior_segement * ap_spread))/(.25 * self.anterior_segement * ap_spread)
-                    mb.size_y =  .5 * (size_y - 1.5 + self.width_offset) + blend * self.anterior_projection
+                    mb.size_y =  max(.5 * (size_y - 1.5 + self.width_offset) + blend * self.anterior_projection, 1)
+                    mb.size_z = max(.35 * size_z + .5 * self.thickenss_offset, .75)
                     mb.co = center + (.5 * self.width_offset + blend * self.anterior_projection) * Y_c
                     mb.rotation = quat
             else:          
                 if self.ap_segment == 'ANTERIOR_ONLY': continue
                 mb = meta_data.elements.new(type = self.meta_type)
                 mb.size_x = 1.5
-                mb.size_y = .5 * (size_y - 1.5) + self.width_offset
+                mb.size_y = max(.5 * (size_y - 1.5) + self.width_offset, 1)
+                mb.size_z = max(.35 * size_z + .5 * self.thickenss_offset, .75)
                 mb.co = center
                 
                 mb.rotation = quat

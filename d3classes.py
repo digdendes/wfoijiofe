@@ -135,6 +135,7 @@ class D3SplintRestoration(bpy.types.PropertyGroup):
                                                        ('DEPROGRAMMER', 'Anterior Deprogrammer', 'An antomic shell with anterior deprogrammer element'),
                                                        ('FLAT_PLANE', 'Flat Plane', 'A flat plane splint with even contact'),
                                                        ('MICHIGAN', 'Michigan Style', 'A flat posterior plane with anterior ramp/guidance'),
+                                                       ('ANTERIOR_POSITIONER', 'Anterior Positioner', 'Farrar Style, anti-retrusion, pull forward'),
                                                        ('BITE_POSITIONER', 'Bite Positioner', 'A flat wafer, surgical occlusal stent or jaw positining jig')],
                                               
                                               default = "FLAT_PLANE",
