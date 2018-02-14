@@ -86,7 +86,14 @@ def flood_selection_faces(bme, selected_faces, seed_face, expansion_mode = 'VERT
             new_candidates.update(neighbor_fn(f))   
         new_faces = new_candidates - total_selection
         total_selection |= new_faces
-        
+    
+    elif isinstance(seed_face, set):
+        new_candidates = set()
+        for f in seed_face:
+            new_candidates.update(neighbor_fn(f))   
+        new_faces = new_candidates - total_selection
+        total_selection |= new_faces
+            
     iters = 0
     while iters < max_iters and new_faces:
         iters += 1
@@ -183,14 +190,28 @@ def grow_selection_to_find_face(bme, start_face, stop_face, max_iters = 1000):
     contemplating indexes vs faces themselves?  will try both ways for speed
     will grow selection iterartively with neighbors until stop face is
     reached.
+    
+    also a simple "select more" if oyu pass None for stop_face and
+    max_iters = number of times to select more
     '''
 
-    total_selection = set([start_face])
-    new_faces = set(face_neighbors(start_face))
+    if isinstance(start_face, bmesh.types.BMFace):
+        total_selection = set([start_face])
+        new_faces = set(face_neighbors(start_face))
     
+    elif isinstance(start_face, set):
+        total_selection = set()
+        total_selection.update(start_face)
+        
+        new_faces = set()
+        for f in start_face:
+            new_faces.update(face_neighbors(f))
+    
+        print('there are %i new_faces' % len(new_faces))
     if stop_face in new_faces:
         total_selection |= new_faces
         return total_selection
+        print('stop face found right away')
     
     iters = 0
     while iters < max_iters and stop_face not in new_faces:
@@ -207,7 +228,47 @@ def grow_selection_to_find_face(bme, start_face, stop_face, max_iters = 1000):
         print('max iterations reached')
             
     return total_selection
+
+def grow_selection(bme, start_faces, max_iters = 1000):
+    '''
+    a simple "select more" if oyu pass None for stop_face and
+    max_iters = number of times to select more
+    '''
+
+    print('there are %i start_faces' % len(start_faces))
+    if isinstance(start_faces, list):
+        total_selection = set(start_faces)
+        new_faces = set()
+        for f in start_faces:
+            new_faces.update(face_neighbors_by_vert(f))
     
+        print('there are %i new_faces' % len(new_faces))
+        
+    elif isinstance(start_faces, set):
+        total_selection = set()
+        total_selection.update(start_faces)
+        
+        new_faces = set()
+        for f in start_faces:
+            new_faces.update(face_neighbors_by_vert(f))
+    
+        print('there are %i new_faces' % len(new_faces))
+    
+    iters = 0
+    while iters < max_iters and len(new_faces):
+        iters += 1
+        candidates = set()
+        for f in new_faces:
+            candidates.update(face_neighbors(f))
+        
+        new_faces = candidates - total_selection   
+        if new_faces:
+            total_selection |= new_faces
+             
+    if iters == max_iters:
+        print('max iterations reached')
+            
+    return total_selection   
 def edge_loops_from_bmedges(bme, bm_edges):
     """
     Edge loops defined by edges

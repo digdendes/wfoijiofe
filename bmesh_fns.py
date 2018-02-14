@@ -451,7 +451,51 @@ def join_bmesh(source, target, src_mx = None, trg_mx = None):
     if new_L != L + len(source.verts):
         print('seems some verts were left out')
             
-           
+
+def new_bmesh_from_bmelements(geom):
+    
+    out_bme = bmesh.new()
+    out_bme.verts.ensure_lookup_table()
+    out_bme.faces.ensure_lookup_table()
+    
+    faces = [ele for ele in geom if isinstance(ele, bmesh.types.BMFace)]
+    verts = [ele for ele in geom if isinstance(ele, bmesh.types.BMVert)]
+    
+    vs = set(verts)
+    for f in faces:
+        vs.update(f.verts[:])
+        
+    src_trg_map = dict()
+    new_bmverts = []
+    for v in vs:
+    
+        new_ind = len(out_bme.verts)
+        new_bv = out_bme.verts.new(v.co)
+        new_bmverts.append(new_bv)
+        src_trg_map[v.index] = new_ind
+    
+    out_bme.verts.ensure_lookup_table()
+    out_bme.faces.ensure_lookup_table()
+        
+    new_bmfaces = []
+    for f in faces:
+        v_inds = []
+        for v in f.verts:
+            new_ind = src_trg_map[v.index]
+            v_inds.append(new_ind)
+            
+        new_bmfaces += [out_bme.faces.new(tuple(out_bme.verts[i] for i in v_inds))]
+        
+    out_bme.faces.ensure_lookup_table()
+    out_bme.verts.ensure_lookup_table()
+    out_bme.verts.index_update()
+    
+   
+    out_bme.verts.index_update()        
+    out_bme.verts.ensure_lookup_table()
+    out_bme.faces.ensure_lookup_table()
+    
+    return out_bme       
 def join_objects(obs, name = ''):
     '''
     uses BMesh to join objects.  Advantage is that it is context
@@ -499,3 +543,5 @@ def join_objects(obs, name = ''):
     target_bme.free()
     return new_ob
     
+
+

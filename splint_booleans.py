@@ -148,7 +148,7 @@ class D3SPLINT_OT_splint_cork_boolean(Operator):
 class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
     """Finish the Booleans"""
     bl_idname = "d3splint.splint_finish_booleans"
-    bl_label = "Finalize the Splint (outdate)"
+    bl_label = "Finalize the Splint (no blockout)"
     bl_options = {'REGISTER', 'UNDO'}
     
     method_order = EnumProperty(
@@ -183,19 +183,13 @@ class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
             
         Shell = bpy.data.objects.get('Splint Shell')
         Passive = bpy.data.objects.get('Passive Spacer')
-        Blockout = bpy.data.objects.get('Blockout Wax')
-        
-        
+
         if Shell == None:
             self.report({'ERROR'}, 'Need to calculate splint shell first')
             return {'CANCELLED'}
         
         if Passive == None:
             self.report({'ERROR'}, 'Need to make passive spacer first')    
-            return {'CANCELLED'}
-        
-        if Blockout == None and self.use_blockout == True:
-            self.report({'ERROR'}, 'Need to blockout trimmed model first')    
             return {'CANCELLED'}
         
         if context.mode != 'OBJECT':
@@ -268,19 +262,7 @@ class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
         ob.select = True
         ob.hide = False
         
-        if self.use_blockout:
-            
-            if 'Blockout' in ob.modifiers:
-                mod = ob.modifiers.get('Blockout')
-            else:
-                mod = ob.modifiers.new('Blockout', type = 'BOOLEAN')
-                mod.operation = 'DIFFERENCE'
-        
-            mod.solver = self.solver
-            #update in case they changed the spacer
-            mod.object = Blockout
-            
-            
+
         splint.finalize_splint = True
         return {'FINISHED'}
 

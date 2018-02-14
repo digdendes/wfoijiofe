@@ -9,7 +9,8 @@ from bpy.props import FloatProperty, BoolProperty, IntProperty, EnumProperty
 import bgl
 import blf
 import random
-from mesh_cut import edge_loops_from_bmedges, space_evenly_on_path, flood_selection_faces, flood_selection_faces_limit
+from mesh_cut import edge_loops_from_bmedges, space_evenly_on_path, flood_selection_faces, flood_selection_faces_limit, grow_selection_to_find_face, grow_selection
+from bmesh_fns import new_bmesh_from_bmelements
 from common_utilities import bversion, showErrorMessage
 #from . 
 import odcutils
@@ -27,6 +28,8 @@ from common_utilities import space_evenly_on_path
 from mathutils.bvhtree import BVHTree
 import splint_cache
 import tracking
+from cmath import exp
+from _hashlib import new
 
 '''
 https://occlusionconnections.com/gnm-optimized/which-occlusal-plane-do-you-undestand-dont-get-confused/
@@ -542,11 +545,13 @@ class D3SPLINT_OT_splint_add_guides(bpy.types.Operator):
         return {'FINISHED'}
 
 
-def arch_crv_draw_callback(self, context):  
+def arch_crv_draw_callback_px(self, context):  
     self.crv.draw(context)
     self.help_box.draw()      
     
-
+def arch_crv_draw_callback_pv(self, context):
+    self.crv.draw3d(context)
+    
 class D3SPLINT_OT_splint_mark_margin(bpy.types.Operator):
     """Draw a line along the limits of the splint"""
     bl_idname = "d3splint.draw_splint_margin"
@@ -645,6 +650,7 @@ class D3SPLINT_OT_splint_mark_margin(bpy.types.Operator):
             context.space_data.show_manipulator = False
             context.space_data.transform_manipulators = {'TRANSLATE'}
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+            bpy.types.SpaceView3D.draw_handler_remove(self._handle_pv, 'WINDOW')
             return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
         
         if nmode: self.mode = nmode
@@ -688,7 +694,8 @@ class D3SPLINT_OT_splint_mark_margin(bpy.types.Operator):
         self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
         self.help_box.snap_to_corner(context, corner = [1,1])
         self.mode = 'main'
-        self._handle = bpy.types.SpaceView3D.draw_handler_add(arch_crv_draw_callback, (self, context), 'WINDOW', 'POST_PIXEL')
+        self._handle = bpy.types.SpaceView3D.draw_handler_add(arch_crv_draw_callback_px, (self, context), 'WINDOW', 'POST_PIXEL')
+        self._handle_pv = bpy.types.SpaceView3D.draw_handler_add(arch_crv_draw_callback_pv, (self, context), 'WINDOW', 'POST_VIEW')
         context.window_manager.modal_handler_add(self) 
         
         tracking.trackUsage("D3Splint:MarkOutline", None)
@@ -1391,6 +1398,48 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         to_delete = list(set(trimmed_bme.verts[:]) - set(to_keep))
         new_bme.free()
         
+        
+        def vert_neighbors(v):
+            neigbors = set()
+            for ed in v.link_edges:
+                neigbors.update([ed.other_vert(v)])
+            return neigbors
+        
+        expand_verts = set()
+        exist_verts = set(to_keep)
+        for v in exist_verts:
+            expand_verts.update(vert_neighbors(v))
+        
+        expand_verts.difference_update(exist_verts)
+        new_verts = expand_verts.copy()
+        for i in range(0,3):
+            newest_verts = set()
+            for v in new_verts:
+                newest_verts.update(vert_neighbors(v))
+            
+            newest_verts.difference_update(exist_verts)
+            expand_verts.update(newest_verts)
+            new_verts = newest_verts
+        
+        perim_fs = set()
+        for v in expand_verts:
+            perim_fs.update(v.link_faces[:])
+            
+        perim_strim_bme = new_bmesh_from_bmelements(perim_fs)
+        
+        if 'Perim Model' in bpy.data.objects:
+            perim_ob  = bpy.data.objects.get('Perim Model')
+            perim_me  = perim_ob.data
+        else:
+            
+            perim_me = bpy.data.meshes.new('Perim Model')
+            perim_ob = bpy.data.objects.new('Perim Model', perim_me)
+            context.scene.objects.link(perim_ob)
+        
+            cons = perim_ob.constraints.new('COPY_TRANSFORMS')
+            cons.target = bpy.data.objects.get(splint.model)
+        perim_strim_bme.to_mesh(perim_me)
+        perim_ob.hide = True
         
         print('deleting %i verts out of %i verts' % (len(to_delete), len(trimmed_bme.verts)))
         bmesh.ops.delete(trimmed_bme, geom = to_delete, context = 1)
@@ -3524,13 +3573,22 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         interval_start = start
         
         self.bme = bmesh.new()
-        
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        ob0 = bpy.data.objects.get(splint.model)
         ob1 = bpy.data.objects.get('Trimmed_Model')
+        ob2 = bpy.data.objects.get('Perim Model')
+        
+        if not ob0:
+            self.report({'ERROR'}, 'Where is your master model!?')
+            return {'CANCELLED'}
         
         if not ob1:
             self.report({'ERROR'}, 'Must trim the upper model first')
             return {'CANCELLED'}
-        
+        if not ob2:
+            self.report({'ERROR'}, 'Must trim the upper model first')
+            return {'CANCELLED'}
         n = context.scene.odc_splint_index
         splint = context.scene.odc_splints[n]
         splint.passive_value = self.radius
@@ -3538,11 +3596,20 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         self.bme.from_object(ob1, context.scene)  #this object should have a displace modifier
         self.bme.verts.ensure_lookup_table()
         
+        bme2 = bmesh.new()
+        bme2.from_object(ob2, context.scene)
+        bme2.verts.ensure_lookup_table()
+        bme2.normal_update()
         
-        for v in self.bme.verts:
+        for v in self.bme.verts: 
             v.co -= .15 * v.normal
+        
+        for v in bme2.verts:
+            v.co -= .16 * v.normal
             
+                
         self.bme.normal_update()
+        
         
         mx = ob1.matrix_world
         
@@ -3554,7 +3621,7 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         
         n_elipse = 0
         n_ball = 0    
-        for v in self.bme.verts:
+        for v in self.bme.verts[:] + bme2.verts[:]:
             if not len(v.link_edges): continue
             co = v.co
             R = .5 * max([ed.calc_length() for ed in v.link_edges])
@@ -3653,10 +3720,10 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         bme.from_object(new_ob, context.scene)
         bme.verts.ensure_lookup_table()
         
-        mx_check = ob1.matrix_world
+        mx_check = ob0.matrix_world
         imx_check = mx_check.inverted()
         bme_check = bmesh.new()
-        bme_check.from_mesh(ob1.data)
+        bme_check.from_mesh(ob0.data)
         bme_check.verts.ensure_lookup_table()
         bme_check.edges.ensure_lookup_table()
         bme_check.faces.ensure_lookup_table()

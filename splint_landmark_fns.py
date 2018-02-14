@@ -1744,11 +1744,21 @@ class D3SPLINT_OT_start_splint_on_opposing(bpy.types.Operator):
             FinalSplint = bpy.data.objects.get('Final Splint')
             FinalSplint.name = 'Opposing Splint'
             
+            context.scene.objects.active = FinalSplint
+            FinalSplint.select = True
+            for mod in FinalSplint.modifiers:
+                try:
+                    bpy.ops.object.modifier_apply(modifier = mod.name)
+                except:
+                    continue
+            
             mx = FinalSplint.matrix_world
             FinalSplint.parent = OldModel
             FinalSplint.matrix_world = mx
             FinalSplint.data.materials.append(opp_mat)
             splint.opposing = 'Opposing Splint'
+            
+            
         else:
             splint.opposing = old_model
         
@@ -1779,7 +1789,13 @@ class D3SPLINT_OT_start_splint_on_opposing(bpy.types.Operator):
             bpy.data.objects.remove(TrimModel)
             bpy.data.meshes.remove(me)
         
-        
+        BlockoutModel = bpy.data.objects.get('Blockout Wax')
+        if BlockoutModel:
+            context.scene.objects.unlink(BlockoutModel)
+            me = BlockoutModel.data
+            bpy.data.objects.remove(BlockoutModel)
+            bpy.data.meshes.remove(me)
+            
         BaseModel = bpy.data.objects.get('Based_Model')
         if BaseModel:
             context.scene.objects.unlink(BaseModel)

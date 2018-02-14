@@ -11,6 +11,7 @@ from bpy_extras import view3d_utils
  
 import bgl_utils
 import common_drawing
+import common_drawing_view
 from mesh_cut import cross_section_2seeds_ver1, path_between_2_points, grow_selection_to_find_face, flood_selection_faces
 import math
 import random
@@ -962,8 +963,8 @@ class CurveDataManager(object):
         
     def draw(self,context):
         if len(self.b_pts) == 0: return
-        bgl_utils.draw_3d_points(context,self.b_pts, 3)
-        bgl_utils.draw_3d_points(context,[self.b_pts[0]], 8, color = (1,1,0,1))
+        #bgl_utils.draw_3d_points(context,self.b_pts, 3)
+        #bgl_utils.draw_3d_points(context,[self.b_pts[0]], 8, color = (1,1,0,1))
         
         if self.selected != -1:
             bgl_utils.draw_3d_points(context,[self.b_pts[self.selected]], 8, color = (0,1,1,1))
@@ -976,4 +977,56 @@ class CurveDataManager(object):
             a = loc3d_reg2D(context.region, context.space_data.region_3d, self.b_pts[self.hovered[1]])
             next = (self.hovered[1] + 1) % len(self.b_pts)
             b = loc3d_reg2D(context.region, context.space_data.region_3d, self.b_pts[next])
-            common_drawing.draw_polyline_from_points(context, [a,self.mouse, b], (0,.2,.2,.5), 2,"GL_LINE_STRIP")    
+            common_drawing.draw_polyline_from_points(context, [a,self.mouse, b], (0,.2,.2,.5), 2,"GL_LINE_STRIP")
+            
+    def draw3d(self,context):
+        #ADAPTED FROM POLYSTRIPS John Denning @CGCookie and Taylor University
+        if len(self.b_pts) == 0: return
+        
+        region,r3d = context.region,context.space_data.region_3d
+        view_dir = r3d.view_rotation * Vector((0,0,-1))
+        view_loc = r3d.view_location - view_dir * r3d.view_distance
+        if r3d.view_perspective == 'ORTHO': view_loc -= view_dir * 1000.0
+        
+        bgl.glEnable(bgl.GL_POINT_SMOOTH)
+        bgl.glDepthRange(0.0, 1.0)
+        bgl.glEnable(bgl.GL_DEPTH_TEST)
+        
+        
+        
+        def set_depthrange(near=0.0, far=1.0, points=None):
+            if points and len(points) and view_loc:
+                d2 = min((view_loc-p).length_squared for p in points)
+                d = math.sqrt(d2)
+                d2 /= 10.0
+                near = near / d2
+                far = 1.0 - ((1.0 - far) / d2)
+            if r3d.view_perspective == 'ORTHO':
+                far *= 0.9999
+            near = max(0.0, min(1.0, near))
+            far = max(near, min(1.0, far))
+            bgl.glDepthRange(near, far)
+            #bgl.glDepthRange(0.0, 0.5)
+            
+        def draw3d_points(context, points, color, size):
+            #if type(points) is types.GeneratorType:
+            #    points = list(points)
+            if len(points) == 0: return
+            bgl.glColor4f(*color)
+            bgl.glPointSize(size)
+            set_depthrange(0.0, 0.997, points)
+            bgl.glBegin(bgl.GL_POINTS)
+            for coord in points: bgl.glVertex3f(*coord)
+            bgl.glEnd()
+            bgl.glPointSize(1.0)
+            
+
+        bgl.glLineWidth(1)
+        bgl.glDepthRange(0.0, 1.0)
+        
+        draw3d_points(context, self.b_pts, (.8,.2, .2, 1), 8)
+        
+        bgl.glLineWidth(1)
+        bgl.glDepthRange(0.0, 1.0)
+        
+        
