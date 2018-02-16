@@ -546,7 +546,7 @@ class D3SPLINT_OT_splint_add_guides(bpy.types.Operator):
 
 
 def arch_crv_draw_callback_px(self, context):  
-    self.crv.draw(context)
+    self.crv.draw(context, three_d = False)
     self.help_box.draw()      
     
 def arch_crv_draw_callback_pv(self, context):

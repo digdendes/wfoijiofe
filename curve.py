@@ -961,10 +961,11 @@ class CurveDataManager(object):
                  
             self.hovered = [None, -1]
         
-    def draw(self,context):
+    def draw(self,context, three_d = True):
         if len(self.b_pts) == 0: return
-        #bgl_utils.draw_3d_points(context,self.b_pts, 3)
-        #bgl_utils.draw_3d_points(context,[self.b_pts[0]], 8, color = (1,1,0,1))
+        if three_d:
+            bgl_utils.draw_3d_points(context,self.b_pts, 3)
+            bgl_utils.draw_3d_points(context,[self.b_pts[0]], 8, color = (1,1,0,1))
         
         if self.selected != -1:
             bgl_utils.draw_3d_points(context,[self.b_pts[self.selected]], 8, color = (0,1,1,1))

@@ -28,7 +28,7 @@
 bl_info = {
     'name': "D3T Splint Module",
     'author': "Patrick R. Moore",
-    'version': (0,3,7),
+    'version': (0,3,8),
     'blender': (2, 7, 9),
     'api': "3c04373",
     'location': "3D View -> Tool Shelf",

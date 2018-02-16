@@ -506,6 +506,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         row = layout.row()
         row.label('Fit and Finalization')
         
+        row = layout.row()
         col = row.column()
         
         if splint and splint.passive_offset: 
