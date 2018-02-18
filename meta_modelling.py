@@ -10,7 +10,8 @@ from mathutils import Vector, Matrix, Color, Quaternion, kdtree
 from mathutils.geometry import intersect_point_line, intersect_line_plane
 from mathutils.bvhtree import BVHTree
 
-from mesh_cut import edge_loops_from_bmedges, space_evenly_on_path, flood_selection_faces
+from mesh_cut import edge_loops_from_bmedges, space_evenly_on_path, flood_selection_faces,\
+    bound_box
 from bpy_extras import view3d_utils
 from bpy.props import FloatProperty, BoolProperty, IntProperty, EnumProperty
 from textbox import TextBox
@@ -127,7 +128,7 @@ class D3SPLINT_OT_draw_meta_curve(bpy.types.Operator):
 
     def invoke(self,context, event):
         
-         
+        prefs = get_settings()
         self.crv = None
         
         if 'Meta Curve' in context.scene.objects:
@@ -139,7 +140,7 @@ class D3SPLINT_OT_draw_meta_curve(bpy.types.Operator):
             
             
         self.crv = CurveDataManager(context,snap_type ='SCENE', snap_object = None, shrink_mod = False, name = 'Meta Curve')
-            
+        self.crv.point_size, self.crv.point_color, self.crv.active_color = prefs.point_size, prefs.def_point_color, prefs.active_point_color
         
         #TODO, tweak the modifier as needed
         help_txt = "DRAW POINTS\n\nLeft Click on scene to define curve \nPoints will snap to objects under mouse \n Right click to delete a point n\ Click the first point to close the loop \n  Left click a point to select, then G to grab  \n ENTER to confirm \n ESC to cancel"
@@ -279,7 +280,7 @@ class D3SPLINT_OT_splint_virtual_wax_on_curve(bpy.types.Operator):
         if mat is None:
             # create material
             mat = bpy.data.materials.new(name="Splint Material")
-            mat.diffuse_color = Color((0.5, .1, .6))
+            mat.diffuse_color = get_settings().def_splint_color
         
         
         if mat.name not in meta_obj.data.materials:
@@ -475,7 +476,7 @@ class D3SPLINT_OT_surgical_bite_positioner(bpy.types.Operator):
             if mat is None:
             # create material
                 mat = bpy.data.materials.new(name="Splint Material")
-                mat.diffuse_color = Color((0.5, .1, .6))
+                mat.diffuse_color = get_settings().def_splint_color
         
             new_ob.data.materials.append(mat)
             
@@ -530,7 +531,20 @@ class D3SPLINT_OT_anterior_deprogrammer_element(bpy.types.Operator):
     def poll(cls, context):
         
         return True
-    
+    def invoke(self, context, event):
+        settings = get_settings()
+        
+        self.guidance_angle = settings.def_guidance_angle
+        self.anterior_length = settings.def_anterior_length 
+        self.posterior_length = settings.def_posterior_length 
+        self.posterior_width = settings.def_posterior_width
+        self.anterior_width = settings.def_anterior_width 
+        self.thickness = settings.def_thickness
+        self.support_height = settings.def_support_height
+        self.support_width = settings.def_support_width
+        
+        return context.window_manager.invoke_props_dialog(self)
+        
     def execute(self, context):
             
         loc = context.scene.cursor_location
@@ -624,9 +638,7 @@ class D3SPLINT_OT_anterior_deprogrammer_element(bpy.types.Operator):
         return {'FINISHED'}
 
     
-    def invoke(self, context, event):
 
-        return context.window_manager.invoke_props_dialog(self)
 
 
 class D3SPLINT_OT_splint_join_depro_to_shell(bpy.types.Operator):
@@ -1276,6 +1288,47 @@ class D3SPLINT_OT_blockout_trimmed_model2(bpy.types.Operator):
         base_plane_v = min(list(perimeter_verts), key = lambda x: (x.co - fit_plane_co).dot(fit_plane_no))
         base_plane_co = base_plane_v.co + .2 * fit_plane_no
         
+        base_plane_center_max_height = fit_plane_co + (base_plane_v.co - fit_plane_co).dot(fit_plane_no) * fit_plane_no
+        #Add the base plane to the scene with BBox larger than the model
+        bbox = Model.bound_box[:]
+        bbox_vs = []
+        for v in bbox:
+            a = Vector(v)
+            bbox_vs += [ob1.matrix_world.inverted() * Model.matrix_world * a]
+        
+        v_max_x= max(bbox_vs, key = lambda x: x[0])
+        v_min_x = min(bbox_vs, key = lambda x: x[0])
+        v_max_y= max(bbox_vs, key = lambda x: x[1])
+        v_min_y = min(bbox_vs, key = lambda x: x[1])
+        
+        diag_xy = (((v_max_x - v_min_x)[0])**2 + ((v_max_y - v_min_y)[1])**2)**.5
+        
+        T_cut = Matrix.Translation(base_plane_center_max_height)
+        Z_cut = fit_plane_no
+        X_cut = Vector((1,0,0)) - Vector((1,0,0)).dot(fit_plane_no) * fit_plane_no
+        X_cut.normalize()
+        Y_cut = Z_cut.cross(X_cut)
+        
+        R_cut = Matrix.Identity(3)
+        R_cut[0][0], R_cut[0][1], R_cut[0][2]  = X_cut[0] ,Y_cut[0],  Z_cut[0]
+        R_cut[1][0], R_cut[1][1], R_cut[1][2]  = X_cut[1], Y_cut[1],  Z_cut[1]
+        R_cut[2][0] ,R_cut[2][1], R_cut[2][2]  = X_cut[2], Y_cut[2],  Z_cut[2]
+        
+        R_cut = R_cut.to_4x4()
+        
+        base_cut = bmesh.new()
+        bmesh.ops.create_grid(base_cut, x_segments = 100, y_segments = 100, size = .5 * diag_xy, matrix = T_cut * R_cut)
+        if 'Auto Base' not in bpy.data.objects:
+            a_base_me = bpy.data.meshes.new('Auto Base')
+            a_base = bpy.data.objects.new('Auto Base', a_base_me)
+            a_base.matrix_world = ob1.matrix_world
+            base_cut.to_mesh(a_base_me)
+            context.scene.objects.link(a_base)
+        else:
+            a_base = bpy.data.objects.get('Auto Base')
+            base_cut.to_mesh(a_base.data)
+            a_base.matrix_world = ob1.matrix_world
+        base_cut.free()
         
         print('Identified undercuts and best fit base in %f' % (time.time() - interval_start))
         interval_start = time.time()

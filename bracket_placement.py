@@ -18,7 +18,8 @@ import common_drawing
 import bgl_utils
 from mesh_cut import cross_section_seed_ver1, bound_box
 from textbox import TextBox
-from odcutils import get_settings, obj_list_from_lib, obj_from_lib
+from odcutils import obj_list_from_lib, obj_from_lib
+from common_utilities import get_settings
 
 class BracketDataManager(object):
     '''

@@ -61,6 +61,8 @@ class PolyLineKnife(object):
         self.split = False
         self.face_seed = None
     
+        
+        
     def reset_vars(self):
         '''
         TODOD, parallel workflow will make this obsolete
@@ -610,7 +612,8 @@ class CurveDataManager(object):
             if len(self.b_pts):
                 self.started = True
             
-            self.cyclic = self.crv_data.splines[0].use_cyclic_u
+            self.cyclic = cyclic
+            #self.crv_data.splines[0].use_cyclic_u
             
             
                 
@@ -643,6 +646,10 @@ class CurveDataManager(object):
         self.grab_undo_loc = None
         self.mouse = (None, None)
     
+        self.point_size = 8
+        self.point_color = (.9, .1, .1)
+        self.active_color = (.8, .8, .2)
+        
     def grab_initiate(self):
         if self.selected != -1:
             self.grab_undo_loc = self.b_pts[self.selected]
@@ -802,6 +809,8 @@ class CurveDataManager(object):
             self.selected = self.hovered[1]
             if self.hovered[1] == 0:  #clicked on first bpt, close loop
                 
+                print('The first point was clicked')
+                print(self.cyclic)
                 if self.cyclic in {'MANDATORY','OPTIONAL'}:
                     self.crv_data.splines[0].use_cyclic_u = self.crv_data.splines[0].use_cyclic_u == False
             return
@@ -964,14 +973,15 @@ class CurveDataManager(object):
     def draw(self,context, three_d = True):
         if len(self.b_pts) == 0: return
         if three_d:
-            bgl_utils.draw_3d_points(context,self.b_pts, 3)
-            bgl_utils.draw_3d_points(context,[self.b_pts[0]], 8, color = (1,1,0,1))
+            bgl_utils.draw_3d_points(context,self.b_pts, self.point_size, (self.point_color[0],self.point_color[1],self.point_color[2],1))
+            
+        bgl_utils.draw_3d_points(context,[self.b_pts[0]], self.point_size, color = (self.point_color[0],self.point_color[1],self.point_color[2],1))
         
         if self.selected != -1:
-            bgl_utils.draw_3d_points(context,[self.b_pts[self.selected]], 8, color = (0,1,1,1))
+            bgl_utils.draw_3d_points(context,[self.b_pts[self.selected]], self.point_size, color = (self.active_color[0],self.active_color[1],self.active_color[2],1))
                 
         if self.hovered[0] == 'POINT':
-            bgl_utils.draw_3d_points(context,[self.b_pts[self.hovered[1]]], 8, color = (0,1,0,1))
+            bgl_utils.draw_3d_points(context,[self.b_pts[self.hovered[1]]], self.point_size, color = (self.active_color[0],self.active_color[1],self.active_color[2],1))
      
         elif self.hovered[0] == 'EDGE':
             loc3d_reg2D = view3d_utils.location_3d_to_region_2d
@@ -1025,7 +1035,7 @@ class CurveDataManager(object):
         bgl.glLineWidth(1)
         bgl.glDepthRange(0.0, 1.0)
         
-        draw3d_points(context, self.b_pts, (.8,.2, .2, 1), 8)
+        draw3d_points(context, self.b_pts, (self.point_color[0],self.point_color[1],self.point_color[2],1), self.point_size)
         
         bgl.glLineWidth(1)
         bgl.glDepthRange(0.0, 1.0)

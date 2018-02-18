@@ -12,7 +12,7 @@ import blf
 import math
 import time
 import os
-from odcutils import get_settings
+from common_utilities import get_settings
 from odcmenus import menu_utils
 from odcmenus import button_data
 from bpy_extras import view3d_utils 

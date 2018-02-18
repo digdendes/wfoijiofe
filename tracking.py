@@ -86,7 +86,7 @@ from datetime import datetime
 
 from hashlib import sha1
 from uuid import getnode as get_mac
-from odcutils import get_settings
+from common_utilities import get_settings
 #from . import conf
 
 

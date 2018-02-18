@@ -15,7 +15,7 @@ from common_utilities import bversion, showErrorMessage
 #from . 
 import odcutils
 import bmesh_fns
-from odcutils import get_settings, offset_bmesh_edge_loop
+from odcutils import offset_bmesh_edge_loop
 import bgl_utils
 import common_drawing
 import common_utilities
@@ -24,7 +24,7 @@ import survey_utils
 import full_arch_methods
 from textbox import TextBox
 from curve import CurveDataManager, PolyLineKnife
-from common_utilities import space_evenly_on_path
+from common_utilities import space_evenly_on_path, get_settings
 from mathutils.bvhtree import BVHTree
 import splint_cache
 import tracking
@@ -658,7 +658,7 @@ class D3SPLINT_OT_splint_mark_margin(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def invoke(self,context, event):
-        
+        prefs = get_settings()
         self.splint = context.scene.odc_splints[0]   
         self.crv = None
         margin = self.splint.name + '_margin'
@@ -681,6 +681,9 @@ class D3SPLINT_OT_splint_mark_margin(bpy.types.Operator):
             context.space_data.show_manipulator = False
             context.space_data.transform_manipulators = {'TRANSLATE'}
             self.crv = CurveDataManager(context,snap_type ='OBJECT', snap_object = Model, shrink_mod = False, name = margin)
+            self.crv.point_size, self.crv.point_color, self.crv.active_color = prefs.point_size, prefs.def_point_color, prefs.active_point_color
+            
+            
             self.crv.crv_obj.parent = Model
             
         else:
@@ -1950,7 +1953,7 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
         return True
     
     def execute(self, context):
-        
+        settings = get_settings()
         MaxCurve = bpy.data.objects.get('Occlusal Curve Max')
         if MaxCurve == None:
             self.report({'ERROR'}, "Need to mark maxillary buccal cusps")
@@ -2108,7 +2111,7 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
             if mat is None:
             # create material
                 mat = bpy.data.materials.new(name="Splint Material")
-                mat.diffuse_color = Color((0.5, .1, .6))
+                mat.diffuse_color = settings.def_splint_color
         
             new_ob.data.materials.append(mat)
             
@@ -2606,7 +2609,7 @@ class D3SPLINT_OT_convexify_model(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def invoke(self,context, event):
-        
+        prefs = get_settings()
         n = context.scene.odc_splint_index
         self.splint = context.scene.odc_splints[n]
         self.crv = None
@@ -2638,6 +2641,8 @@ class D3SPLINT_OT_convexify_model(bpy.types.Operator):
                                         cyclic = 'FALSE')
             self.crv.crv_obj.parent = Model
             self.crv.crv_obj.hide = True
+            self.crv.point_size, self.crv.point_color, self.crv.active_color = prefs.point_size, prefs.def_point_color, prefs.active_point_color
+            
             context.space_data.show_manipulator = False
             context.space_data.transform_manipulators = {'TRANSLATE'}
         else:
@@ -2900,7 +2905,7 @@ class D3SPLINT_OT_splint_add_rim_curve(bpy.types.Operator):
         if mat is None:
             # create material
             mat = bpy.data.materials.new(name="Splint Material")
-            mat.diffuse_color = Color((0.5, .1, .6))
+            mat.diffuse_color = get_settings().def_splint_color
         
         
         if mat.name not in meta_obj.data.materials:
@@ -3488,7 +3493,7 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
         if mat is None:
             # create material
             mat = bpy.data.materials.new(name="Splint Material")
-            mat.diffuse_color = Color((0.5, .1, .6))
+            mat.diffuse_color = get_settings().def_splint_color
             
         if 'Splint Shell' not in bpy.data.objects:
             new_ob = bpy.data.objects.new('Splint Shell', me)
@@ -3531,6 +3536,8 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
         return {'FINISHED'}
     
     def invoke(self, context, event):
+        settings = get_settings()
+        self.radius = settings.def_shell_thickness
         return context.window_manager.invoke_props_dialog(self)
     
     
@@ -3832,7 +3839,8 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         return {'FINISHED'}
     
     def invoke(self, context, event):
-        
+        settings = get_settings()
+        self.radius = settings.def_passive_radius
         return context.window_manager.invoke_props_dialog(self)
     
     def draw(self,context):

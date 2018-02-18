@@ -14,6 +14,7 @@ from bpy.props import FloatProperty, IntProperty, BoolProperty, EnumProperty
 
 import tracking
 import splint_cache
+from common_utilities import get_settings
 
 def saw_tooth(frame):
     #amplitude  to 0 to 1
@@ -191,14 +192,14 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
     bl_label = "Create Arcon Articulator"
     bl_options = {'REGISTER', 'UNDO'}
     
-    intra_condyle_width = IntProperty(default = 110, description = 'Width between condyles in mm')
-    condyle_angle = IntProperty(default = 20, description = 'Condyle inclination')
-    bennet_angle = FloatProperty(default = 7.5, description = 'Bennet Angle')
+    intra_condyle_width = IntProperty(name = "Intra-Condyle Width", default = 110, description = 'Width between condyles in mm')
+    condyle_angle = IntProperty(name = "Condyle Angle", default = 20, description = 'Condyle inclination in the sagital plane')
+    bennet_angle = FloatProperty(name = "Bennet Angle", default = 7.5, description = 'Bennet Angle: Condyle inclination in the axial plane')
     
-    incisal_guidance = FloatProperty(default = 10, description = 'Incisal Guidance Angle')
-    canine_guidance = FloatProperty(default = 10, description = 'Canine Lateral Guidance Angle')
-    guideance_delay_ant = FloatProperty(default = .1, description = 'Anterior movement before guidance starts')
-    guideance_delay_lat = FloatProperty(default = .1, description = 'Lateral movement before guidance starts')
+    incisal_guidance = FloatProperty(name = "Incisal Guidance", default = 10, description = 'Incisal Guidance Angle')
+    canine_guidance = FloatProperty(name = "Canine Guidance", default = 10, description = 'Canine Lateral Guidance Angle')
+    guidance_delay_ant = FloatProperty(name = "Anterior Guidance Delay", default = .1, description = 'Anterior movement before guidance starts')
+    guidance_delay_lat = FloatProperty(name = "Canine Guidance Delay", default = .1, description = 'Lateral movement before canine guidance starts')
     
     auto_mount = BoolProperty(default = True, description = 'Use if Upper and Lower casts are already in mounted position')
     
@@ -210,6 +211,41 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
     def poll(cls, context):
         
         return True
+    
+    def invoke(self, context, event):
+        
+        if 'Articulator' in bpy.data.objects:
+            art_arm = bpy.data.objects.get('Articulator')
+            
+            if art_arm.get('bennet_angle'):
+                self.bennet_angle  =  art_arm.get('bennet_angle')
+            if art_arm.get('intra_condyl_width'):
+                self.intra_condyle_width = art_arm['intra_condyly_width'] 
+            if art_arm.get('incisal_guidance'):
+                self.incisal_guidance = art_arm['incisal_guidance']   
+            if art_arm.get('canine_guidance'):
+                self.canine_guidance = art_arm['canine_guidance'] 
+            if art_arm.get('condyle_angle'):
+                self.condyle_angle = art_arm['condyle_angle']  
+            if art_arm.get('guidance_delay_ant'):
+                self.guidance_delay_ant = art_arm['guidance_delay_ant']
+            if art_arm.get('guidance_delay_lat'):
+                self.guidance_delay_lat = art_arm['guidance_delay_lat']
+            
+        else:
+            settings = get_settings()
+        
+            self.intra_condyle_width = settings.def_intra_condyle_width
+            self.condyle_angle = settings.def_condyle_angle
+            self.bennet_angle = settings.def_bennet_angle
+        
+            self.incisal_guidance = settings.def_incisal_guidance 
+            self.canine_guidance = settings.def_canine_guidance
+            self.guidance_delay_ant = settings.def_guidance_delay_ant
+            self.guidance_delay_lat = settings.def_guidance_delay_lat
+        
+        return context.window_manager.invoke_props_dialog(self)
+    
     
     def execute(self, context):
         tracking.trackUsage("D3Tool:GenArticulator",str((self.intra_condyle_width,
@@ -311,12 +347,12 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         
         bme = bmesh.new()
         
-        v0 = Vector((0,-.5 * self.guideance_delay_lat, 0))
-        v1 = v0 + Vector((self.guideance_delay_ant, 0, 0))
+        v0 = Vector((0,-.5 * self.guidance_delay_lat, 0))
+        v1 = v0 + Vector((self.guidance_delay_ant, 0, 0))
         v2 = v1 + 15 * ant_guidance
         
-        v3 = Vector((0,.5 * self.guideance_delay_lat, 0))
-        v4 = v3 + Vector((self.guideance_delay_ant, 0, 0))
+        v3 = Vector((0,.5 * self.guidance_delay_lat, 0))
+        v4 = v3 + Vector((self.guidance_delay_ant, 0, 0))
         v5 = v4 + 15 * ant_guidance
         
         v6 = v0 + 15 * lcan_guidance
@@ -550,17 +586,17 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         splint_cache.write_mesh_cache(OppModel, bme, bvh)
         
         art_arm['bennet_angle'] = self.bennet_angle
-        art_arm['intra_condyly_width'] = self.intra_condyle_width
+        art_arm['intra_condyle_width'] = self.intra_condyle_width
         art_arm['incisal_guidance'] = self.incisal_guidance 
         art_arm['canine_guidance'] =  self.canine_guidance
         art_arm['condyle_angle'] =  self.condyle_angle
+        art_arm['guidance_delay_ant'] = self.guidance_delay_ant
+        art_arm['guidance_delay_lat'] = self.guidance_delay_ant
             
         return {'FINISHED'}
 
     
-    def invoke(self, context, event):
-
-        return context.window_manager.invoke_props_dialog(self)
+    
 
 
 class D3Splint_OT_articulator_set_mode(bpy.types.Operator):
@@ -945,15 +981,28 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
     
     def invoke(self, context, event):
         
+        settings = get_settings()
+        
+        self.resolution = settings.def_condylar_resolution
+        self.range_of_motion = settings.def_range_of_motion
+        
         return context.window_manager.invoke_props_dialog(self)
         
     def execute(self, context):
         splint = context.scene.odc_splints[0]
         Model = bpy.data.objects.get(splint.opposing)
         Master = bpy.data.objects.get(splint.model)
+        
+        Art = bpy.data.objects.get('Articulator')
+        
         if Model == None:
             self.report({'ERROR'}, 'No Opposing Model')
             return {'CANCELLED'}
+        
+        if Art == None:
+            self.report({'ERROR'}, 'You need to Generate Articulator or set initial articulator values first')
+            return {'CANCELLED'}
+        
         
         if not splint_cache.is_object_valid(Model):
             splint_cache.clear_mesh_cache()

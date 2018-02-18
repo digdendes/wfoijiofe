@@ -28,12 +28,12 @@
 bl_info = {
     'name': "D3T Splint Module",
     'author': "Patrick R. Moore",
-    'version': (0,3,8),
+    'version': (0,3,9),
     'blender': (2, 7, 9),
     'api': "3c04373",
     'location': "3D View -> Tool Shelf",
-    'description': "Dental Design CAD Tool Package",
-    'warning': "",
+    'description': "A training and educational Dental Design CAD Tool not intended for clinical use",
+    'warning': "Not Intended for Clincal Use",
     'wiki_url': "",
     'tracker_url': "",
     'category': '3D View'}
@@ -48,7 +48,7 @@ print(os.path.join(os.path.dirname(__file__)))
 
 import bpy
 from bpy.types import Operator, AddonPreferences
-from bpy.props import StringProperty, IntProperty, BoolProperty, EnumProperty, FloatProperty
+from bpy.props import StringProperty, IntProperty, BoolProperty, EnumProperty, FloatProperty, FloatVectorProperty
 from bpy.app.handlers import persistent
 #from . 
 
@@ -102,6 +102,102 @@ class D3SplintAddonPreferences(AddonPreferences):
             max = 4,
             )
     
+    
+    
+    non_clinical_use = bpy.props.BoolProperty(default = False, name = 'Not For Clinical Use', description = 'By checking this box you certify that you are using this for non-clinical, training or educational purposes')
+    
+    ##########################################
+    ###### WorkFlow Defaults      ############
+    ##########################################
+    
+    default_jaw_type = bpy.props.EnumProperty(name = 'Jaw Type', 
+                                              items = [('MAXILLA', 'MAXILLA', 'MAXILLA'),('MANDIBLE', 'MANDIBLE', 'MANDIBLE')],
+                                              default = "MAXILLA",
+                                              description = 'Appliance is on upper or lower jaw')
+    
+    
+    
+    
+    default_workflow_type = bpy.props.EnumProperty(name = 'Workflow Type', 
+                                              items = [('FREEFORM', 'Freeform', 'Exposes all D3Splint tools with no recommended sequence'),
+                                                       ('SIMPLE_SHELL', 'Simple Shell', 'Basic anatomical offset shell, wear guard, thick retainer etc'),
+                                                       ('DEPROGRAMMER', 'Anterior Deprogrammer', 'An antomic shell with anterior deprogrammer element'),
+                                                       ('FLAT_PLANE', 'Flat Plane', 'A flat plane splint with even contact'),
+                                                       ('MICHIGAN', 'Michigan Style', 'A flat posterior plane with anterior ramp/guidance'),
+                                                       ('ANTERIOR_POSITIONER', 'Anterior Positioner', 'Farrar Style, anti-retrusion, pull forward'),
+                                                       ('BITE_POSITIONER', 'Bite Positioner', 'A flat wafer, surgical occlusal stent or jaw positining jig')],
+                                              default = "FLAT_PLANE",
+                                              description = 'Use the simple workflow filter to expose recommende sequence')
+    
+    
+    
+    ##########################################
+    ###### Colors and Draaing     ############
+    ##########################################
+    
+    def_model_color = FloatVectorProperty(name="Model Color", description="Choose Model Color", min=0, max=1, default=(.477, .397,.256), subtype="COLOR")
+    def_opposing_color = FloatVectorProperty(name="Opposing Color", description="Choose Model Color", min=0, max=1, default=(1, .83,.62), subtype="COLOR")
+    def_splint_color = FloatVectorProperty(name="Splint Color", description="Choose Splint Color", min=0, max=1, default=(.59, .83,.75), subtype="COLOR")
+    
+    point_size = IntProperty(
+            name="Point SIze",
+            description = "size of dots when drawing landmarks in scene",
+            default=8,
+            min = 3,
+            max = 13,
+            )
+    
+    def_point_color = FloatVectorProperty(name="Points Color", description="Color of reference points in interactive operators", min =0, max = 1, default=(.8, .1,.1), subtype="COLOR")
+    active_point_color = FloatVectorProperty(name="Active Point Color", description="Color of the selected point in interactive operators", min=0, max=1, default=(.8, .8,.2), subtype="COLOR")
+ 
+    ##########################################
+    ###### Operator Defaults      ############
+    ##########################################
+    
+    ##### Deprogrammer #####
+    def_guidance_angle = IntProperty(name = 'Guidance Angle', default = 15, min = -90, max = 90, description = 'Angle off of world Z')
+    def_anterior_length = FloatProperty(name = 'Anterior Length', default = 5, description = 'Length of anterior ramp')
+    def_posterior_length = FloatProperty(name ='Posterior Lenght', default = 10, description = 'Length of posterior ramp')
+    def_posterior_width = FloatProperty(name = 'Posterior Width', default = 10, description = 'Posterior Width of ramp')
+    def_anterior_width = FloatProperty(name = 'Anterior Width', default = 8, description = 'Anterior Width of ramp')
+    def_thickness = FloatProperty(name = 'Ramp Thickness', default = 2.75, description = 'Thickness of ramp')
+    def_support_height = FloatProperty(name = 'Support Height', default = 3, description = 'Height of support strut')
+    def_support_width =  FloatProperty(name = 'Support Width', default = 6, description = 'Width of support strut')
+    
+    ##### Shell, Fit and Retention ####
+    def_shell_thickness = FloatProperty(name = "Shell Thickness", default = 1.5, min = .8, max = 4)
+    def_passive_radius = FloatProperty(default = .1 , min = .01, max = .4, description = 'Thickness of Offset, larger numbers means less retention', name = 'Compensation Gap Thickness') 
+    def_blockout_radius = FloatProperty(default = .05 , min = .01, max = .12, description = 'Allowable Undercut, larger numbers means more retention', name = 'Undercut Strength')
+    
+    
+    ##########################################
+    ###### Articulator Defaults   ############
+    ##########################################
+    
+    
+    def_intra_condyle_width = IntProperty(name = 'Intra-Condyle Width', default = 110, description = 'Width between condyles in mm')
+    def_condyle_angle = IntProperty(name = 'Condyle Angle', default = 20, description = 'Condyle inclination in the sagital plane')
+    def_bennet_angle = FloatProperty(name = 'Bennet Angle', default = 7.5, description = 'Bennet Angle: Condyle inclination in the axial plane')
+    
+    def_incisal_guidance = FloatProperty(default = 10, description = 'Incisal Guidance Angle', name = "Incisal Guidance")
+    def_canine_guidance = FloatProperty(name = "Canine Guidance", default = 10, description = 'Canine Lateral Guidance Angle')
+    def_guidance_delay_ant = FloatProperty(name = "Anterior Guidance Delay", default = .1, description = 'Anterior movement before guidance starts')
+    def_guidance_delay_lat = FloatProperty(name = "Canine Guidance Delay", default = .1, description = 'Lateral movement before canine guidance starts')
+    
+    
+    def_occlusal_plane_angle = FloatProperty(name = "Occlusal Plane Angle", default = 7.5, min = -5.0, max = 20, description = "Angle between occlusal plane and Frankfurt Horizontal Plane")
+    
+    def_balkwill_angle = FloatProperty(name = "Balkwill Angle", default = 20, description = "Psueduo-Balkwill Angle from condyles to upper incisors")
+    def_arm_radius = FloatProperty(name = "Mand Arm Radius", default = 100, description = "Distance betweeen condyles and upper central incisor midpoint")
+
+    def_condylar_resolution = IntProperty(name = "Condyle Resolution", default = 20, min = 5, max = 40, description = "Number of steps to interpolate each condylar position, higher = longer simulation times")
+    def_range_of_motion = FloatProperty(name = "Condylar Range of Motion", default = 6, min = 3, max = 8, description = "Distance each condylar path is simulated")
+    
+    ##########################################
+    ###### Updater Properties     ############
+    ##########################################
+    
+    
     auto_check_update = bpy.props.BoolProperty(
         name = "Auto-check for Update",
         description = "If enabled, auto-check for updates using an interval",
@@ -146,54 +242,104 @@ class D3SplintAddonPreferences(AddonPreferences):
         default = False,
         )
     
-    ##########################################
-    ###### Operator Defaults      ############
-    ##########################################
     
-    default_jaw_type = bpy.props.EnumProperty(name = 'Jaw Type', 
-                                              items = [('MAXILLA', 'MAXILLA', 'MAXILLA'),('MANDIBLE', 'MANDIBLE', 'MANDIBLE')],
-                                              default = "MAXILLA",
-                                              description = 'Appliance is on upper or lower jaw')
-    
-    
-    
-    
-    default_workflow_type = bpy.props.EnumProperty(name = 'Workflow Type', 
-                                              items = [('FREEFORM', 'Freeform', 'Exposes all D3Splint tools with no recommended sequence'),
-                                                       ('SIMPLE_SHELL', 'Simple Shell', 'Basic anatomical offset shell, wear guard, thick retainer etc'),
-                                                       ('DEPROGRAMMER', 'Anterior Deprogrammer', 'An antomic shell with anterior deprogrammer element'),
-                                                       ('FLAT_PLANE', 'Flat Plane', 'A flat plane splint with even contact'),
-                                                       ('MICHIGAN', 'Michigan Style', 'A flat posterior plane with anterior ramp/guidance'),
-                                                       ('ANTERIOR_POSITIONER', 'Anterior Positioner', 'Farrar Style, anti-retrusion, pull forward'),
-                                                       ('BITE_POSITIONER', 'Bite Positioner', 'A flat wafer, surgical occlusal stent or jaw positining jig')],
-                                              default = "FLAT_PLANE",
-                                              description = 'Use the simple workflow filter to expose recommende sequence')
-    
-    ###### Articulator Defaults   ############
-    ##########################################
-    def_intra_condyle_width = IntProperty(default = 110, description = 'Width between condyles in mm')
-    def_condyle_angle = IntProperty(default = 20, description = 'Condyle inclination')
-    def_bennet_angle = FloatProperty(default = 7.5, description = 'Bennet Angle')
-    
-    def_incisal_guidance = FloatProperty(default = 10, description = 'Incisal Guidance Angle')
-    def_canine_guidance = FloatProperty(default = 10, description = 'Canine Lateral Guidance Angle')
-    def_guideance_delay_ant = FloatProperty(default = .1, description = 'Anterior movement before guidance starts')
-    def_guideance_delay_lat = FloatProperty(default = .1, description = 'Lateral movement before guidance starts')
-    
-    
-    def_occlusal_plane_angle = FloatProperty(default = 7.5, description = 'Bennet Angle')
-    #behavior_mode = EnumProperty(name="How Active Tooth is determined by operator", description="'LIST' is more predictable, 'ACTIVE' more like blender, 'ACTIVE_SELECTED' is for advanced users", items=behavior_enum, default='0')
-
     def draw(self, context):
         layout = self.layout
         layout.label(text="D3Splint Preferences and Settings")
         #layout.prop(self, "mat_lib")
         
+        
+        if not self.non_clinical_use:
+            
+            row = layout.row()
+            row.label('Please certify non-clinical use')
+            row = layout.row()
+            row.prop(self, "non_clinical_use")
+            
+            return
+            
+        row = layout.row()
+        row.prop(self, "non_clinical_use")
+            
+            
         row = layout.row()
         row.operator("opendental.d3t_critiacal_settings", text = 'Set Mandatory Settings')
+        
+
+        ## Visualization 
+        row = layout.row(align=True)
+        row.label("Visualization Settings")
+
+        row = layout.row(align=True)
+        row.prop(self, "def_model_color")
+        row.prop(self, "def_opposing_color")
+        row.prop(self, "def_splint_color")
+        row = layout.row()
+        row.prop(self, "point_size")
+        row.prop(self, "def_point_color")
+        row.prop(self, "active_point_color")
+
+    
+
+        ## Operator Defaults
+        #box = layout.box().column(align=False)
+        row = layout.row()
+        row.label(text="Operator Defaults")
+        
+        ##### Fit and Thickness ####
+        row = layout.row()
+        row.label('Thickness, Fit and Retention')
+        row = layout.row()
+        row.prop(self, "def_shell_thickness")
+        row.prop(self, "def_passive_radius")
+        row.prop(self, "def_blockout_radius")
+    
+        
+        ##### Deprogrammer #####
+        row = layout.row()
+        row.label('Deprogrammer Defaults')
+        row = layout.row()
+        
+        row.prop(self, "def_guidance_angle") 
+        row.prop(self, "def_anterior_length")
+        row.prop(self, "def_posterior_length")
+        
+        row = layout.row()
+        row.prop(self, "def_posterior_width")
+        row.prop(self, "def_anterior_width")
+        row.prop(self, "def_thickness")
+        
+        row = layout.row()
+        row.prop(self, "def_support_height")
+        row.prop(self, "def_support_width")
+        
+        
+        ####  Articulator Values #####
+        row = layout.row()
+        row.label('Articulator and Mounting')
+        
+        row = layout.row()
+        row.prop(self, "def_intra_condyle_width")
+        row.prop(self, "def_condyle_angle")
+        row.prop(self, "def_bennet_angle")
+        
+        row = layout.row()
+        row.prop(self,"def_occlusal_plane_angle")
+        row.prop(self,"def_balkwill_angle")
+        row.prop(self,"def_arm_radius")
+
+        row = layout.row()
+        row.prop(self, "def_incisal_guidance")
+        row.prop(self, "def_canine_guidance")
+        row.prop(self, "def_guidance_delay_lat")
+        row.prop(self, "def_guidance_delay_ant")
+        
+        row = layout.row()
+        row.prop(self, "def_condylar_resolution")
+        row.prop(self, "def_range_of_motion")
+       
         addon_updater_ops.update_settings_ui(self, context)
-
-
+        
 class D3Splint_OT_general_preferences(Operator):
     """Change several critical settings for optimal D3Tool use"""
     bl_idname = "opendental.d3t_critiacal_settings"

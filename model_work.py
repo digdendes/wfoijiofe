@@ -21,7 +21,7 @@ from mesh_cut import flood_selection_faces, edge_loops_from_bmedges,\
 from bmesh_fns import join_bmesh, bme_linked_flat_faces    
 from mathutils import Vector, Matrix
 import odcutils
-from common_utilities import bversion
+from common_utilities import bversion, get_settings
 from loops_tools import relax_loops_util
 import time
 import bmesh_fns
@@ -32,6 +32,7 @@ from bpy_extras import view3d_utils
 from mathutils.geometry import intersect_point_line, intersect_line_plane
 import random
 import blf
+from builtins import True
 #TODO, put this somewhere logical and useful
 def vector_angle_between(v0, v1, vcross):
     a = v0.angle(v1)
@@ -1484,6 +1485,69 @@ class D3PLINT_OT_ortho_model_base_former(bpy.types.Operator):
         
         base_ob.location = context.scene.cursor_location  
         return {'FINISHED'}   
+
+
+
+
+class D3Splint_OT_auto_check_model(bpy.types.Operator):
+    """Plane cut master model to create a minimal check model"""
+    bl_idname = "d3splint.auto_check_model"
+    bl_label = "Auto Check Model"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    solver = bpy.props.EnumProperty(
+        description="Boolean Method",
+        items=(("BMESH", "Bmesh", "Faster/More Errors"),
+               ("CARVE", "Carve", "Slower/Less Errors")),
+        default = "BMESH")
+    
+    @classmethod
+    def poll(cls, context):
+        return True
+    
+    def invoke(self, context, event):
+        
+        return context.window_manager.invoke_props_dialog(self)
+          
+    def execute(self, context):
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        
+        
+        if not splint.finalize_splint:
+            self.report({'WARNING'}, 'You have not finalized, I recommend finalizing the splint first and saving your .blend')
+            
+      
+        model = bpy.data.objects.get(splint.model)
+        if model == None:
+            self.report({'ERROR'}, 'You master model is not in the scene')
+            return {'CANCELLED'}
+          
+        a_base = bpy.data.objects.get('Auto Base')
+        if a_base == None:
+            self.report({'ERROR'}, 'You need an auto base object, caluculate undercuts to calculate it')
+            return {'CANCELLED'}
+           
+           
+        if 'Trim Base' in model.modifiers:
+            mod = model.modifiers.get('Trim Base')
+            mod.object = a_base
+            mod.operation = 'DIFFERENCE'
+            mod.solver = self.solver
+        else:
+            mod = model.modifiers.new('Trim Base', type = 'BOOLEAN')
+            mod.object = a_base
+            mod.operation = 'DIFFERENCE'
+            mod.solver = self.solver  
+        
+        for ob in context.scene.objects:
+            ob.hide = True
+            
+        model.hide = False
+        
+        return {'FINISHED'}
+    
+
 
 class D3Splint_OT_model_thicken(bpy.types.Operator):
     """Create Inner Thickness to save  3d printing resin"""
@@ -3479,6 +3543,7 @@ def register():
     bpy.utils.register_class(D3Splint_OT_model_thicken2)
     bpy.utils.register_class(D3SPLINT_OT_remove_ragged_edges)
     bpy.utils.register_class(D3Tool_OT_model_vertical_base)
+    bpy.utils.register_class(D3Splint_OT_auto_check_model)
     #bpy.utils.register_class(D3SPLINT_OT_sculpt_model_undo)
     
 def unregister():
@@ -3495,6 +3560,7 @@ def unregister():
     bpy.utils.unregister_class(D3Splint_OT_model_thicken2)
     bpy.utils.unregister_class(D3SPLINT_OT_remove_ragged_edges)
     bpy.utils.unregister_class(D3Tool_OT_model_vertical_base)
+    bpy.utils.unregister_class(D3Splint_OT_auto_check_model)
     #bpy.utils.unregister_class(D3SPLINT_OT_sculpt_model_undo)
     
 if __name__ == "__main__":

@@ -14,6 +14,8 @@ from cork.exceptions import *
 import time
 import tracking
 from bpy.props import FloatProperty, BoolProperty, IntProperty, EnumProperty
+import common_utilities
+from common_utilities import get_settings
   
 class D3SPLINT_OT_splint_cork_boolean(Operator):
     """Use external boolean engine when fast Blender solver has errors"""
@@ -178,6 +180,11 @@ class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
         n = context.scene.odc_splint_index
         splint = context.scene.odc_splints[n]
         
+        prefs = common_utilities.get_settings()
+        if not prefs.non_clinical_use:
+            self.report({'ERROR'}, 'You must certify non-clinical use in your addon preferences or in the panel')
+            return {'CANCELLED'}
+        
         if splint.finalize_splint:
             self.report({'WARNING'}, 'You have already finalized, this will remove or alter existing modifiers and try again')
             
@@ -262,6 +269,10 @@ class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
         ob.select = True
         ob.hide = False
         
+        tmodel = bpy.data.objects.get('Trimmed_Model')
+        #make sure user can verify no intersections
+        if tmodel:
+            tmodel.hide = False
 
         splint.finalize_splint = True
         return {'FINISHED'}
@@ -294,10 +305,18 @@ class D3SPLINT_OT_splint_finish_booleans2(bpy.types.Operator):
         #    return False
         return True
     
+    def invoke(self,context,event):
+        
+        return context.window_manager.invoke_props_dialog(self)
+    
     def execute(self, context):
         
         n = context.scene.odc_splint_index
         splint = context.scene.odc_splints[n]
+        prefs = get_settings()
+        if not prefs.non_clinical_use:
+            self.report({'ERROR'}, 'You must certify non-clinical use in your addon preferences or in the panel')
+            return {'CANCELLED'}
         
         if splint.finalize_splint:
             self.report({'WARNING'}, 'You have already finalized, this will remove or alter existing modifiers and try again')
@@ -325,6 +344,8 @@ class D3SPLINT_OT_splint_finish_booleans2(bpy.types.Operator):
         start = time.time()
         #don't add multiple boolean modifiers
         
+        
+        
         if 'Final Splint' not in bpy.data.objects:
             me = Shell.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
             ob = bpy.data.objects.new('Final Splint', me)
@@ -334,7 +355,18 @@ class D3SPLINT_OT_splint_finish_booleans2(bpy.types.Operator):
             ob = bpy.data.objects.get('Final Splint')
             me = ob.data
             
-
+        a_base = bpy.data.objects.get('Auto Base')
+        if 'Trim Base' in ob.modifiers and a_base != None:
+            mod = ob.modifiers.get('Trim Base')
+            mod.object = a_base
+            mod.operation = 'DIFFERENCE'
+            mod.solver = self.solver
+        else:
+            mod = ob.modifiers.new('Trim Base', type = 'BOOLEAN')
+            mod.object = a_base
+            mod.operation = 'DIFFERENCE'
+            mod.solver = self.solver  
+            
         if self.method_order == 'JOIN':
             #Structure is   Shell - (Blockout + Passive)
             
@@ -371,12 +403,10 @@ class D3SPLINT_OT_splint_finish_booleans2(bpy.types.Operator):
             
             #Strucure is
             #Shell - Blockout - Passive
-            
-            
             #Blockout Wax MUST NOT have modifier
             if 'Join Passive' in Blockout.modifiers:
                 mod = Blockout.modifiers.get('Passive Spacer')
-                Blockout.modifiers.remov(mod)
+                Blockout.modifiers.remove(mod)
                 Blockout.update_tag()
                 
             if 'Subtract Blockout' in ob.modifiers:
@@ -415,6 +445,13 @@ class D3SPLINT_OT_splint_finish_booleans2(bpy.types.Operator):
         print('competed the boolean subtraction in %f seconds' % completion_time)   
         splint.finalize_splint = True
         tracking.trackUsage("D3Splint:FinishBoolean",(self.solver, self.method_order, str(completion_time)[0:4]))
+        
+        tmodel = bpy.data.objects.get('Trimmed_Model')
+        #make sure user can verify no intersections
+        if tmodel:
+            tmodel.hide = False
+    
+        
         return {'FINISHED'}
 
 
@@ -444,6 +481,11 @@ class D3SPLINT_OT_splint_finish_booleans_bite(bpy.types.Operator):
         
         n = context.scene.odc_splint_index
         splint = context.scene.odc_splints[n]
+        
+        prefs = get_settings()
+        if not prefs.non_clinical_use:
+            self.report({'ERROR'}, 'You must certify non-clinical use in your addon preferences or in the panel')
+            return {'CANCELLED'}
         
         if splint.finalize_splint:
             self.report({'WARNING'}, 'You have already finalized, this will remove or alter existing modifiers and try again')

@@ -16,8 +16,10 @@ from bpy_extras.view3d_utils import region_2d_to_location_3d, region_2d_to_origi
 import math
 from mesh_cut import flood_selection_faces, edge_loops_from_bmedges, flood_selection_faces_limit, space_evenly_on_path
 from curve import CurveDataManager, PolyLineKnife
-from common_utilities import bversion
+from common_utilities import bversion, get_settings
 import tracking
+from odcutils import get_bbox_center
+from multiprocessing import get_start_method
 
 def arch_crv_draw_callback(self, context):  
     self.crv.draw(context)
@@ -202,7 +204,7 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
         if len(context.scene.odc_splints) == 0:
             self.report({'ERROR'},'need to start splint')
             return {'CANCELLED'}
-        
+        prefs = get_settings()
         n = context.scene.odc_splint_index
         self.splint = context.scene.odc_splints[n]
         self.crv = None
@@ -225,6 +227,8 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
                                         name = margin,
                                         cyclic = 'FALSE')
             self.crv.crv_obj.parent = Model
+            self.crv.point_size, self.crv.point_color, self.crv.active_color = prefs.point_size, prefs.def_point_color, prefs.active_point_color
+            
             context.space_data.show_manipulator = False
             context.space_data.transform_manipulators = {'TRANSLATE'}
         else:
@@ -441,7 +445,7 @@ class D3SPLINT_OT_splint_occlusal_curve_mand(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def invoke(self,context, event):
-        
+        prefs = get_settings()
         self.splint = context.scene.odc_splints[0]    
         self.crv = None
         margin = 'Occlusal Curve Mand'
@@ -461,6 +465,7 @@ class D3SPLINT_OT_splint_occlusal_curve_mand(bpy.types.Operator):
             context.space_data.transform_manipulators = {'TRANSLATE'}
             self.crv = CurveDataManager(context,snap_type ='OBJECT', snap_object = Model, shrink_mod = False, name = margin, cyclic = 'FALSE')
             self.crv.crv_obj.parent = Model
+            self.crv.point_size, self.crv.point_color, self.crv.active_color = prefs.point_size, prefs.def_point_color, prefs.active_point_color
             
         else:
             self.report({'ERROR'}, "Need to mark the Opposing model first!")
@@ -647,12 +652,16 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def finish(self, context):
+        settings = get_settings()
         Model =  bpy.data.objects[self.splint.get_maxilla()]
         mx = Model.matrix_world
         imx = mx.inverted()
         
         
         Mand_Model = bpy.data.objects.get(self.splint.get_mandible())
+        
+        mx_mand = Mand_Model.matrix_world
+        imx_mand = mx_mand.inverted()
         
         #get the local points
         
@@ -663,9 +672,8 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         
         
         center = 1/3 * (v_R + v_L + v_I)
-        
-        
-        
+        mx_center = Matrix.Translation(center)
+        imx_center = mx_center.inverted()
         
         #vector pointing from left to right
         vec_R =  v_R - v_L
@@ -703,6 +711,10 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         Model.data.transform(iR)
         #Model.matrix_world = Identity is implied, we will reset the matrix later
         if Mand_Model:
+            Mand_Model.data.transform(mx_mand)
+            Mand_Model.matrix_world = Model.matrix_world
+            Mand_Model.data.transform(Model.matrix_world.inverted())
+            
             Mand_Model.data.transform(iR)
               
         #Lets Calculate the matrix transform for an
@@ -710,7 +722,9 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         Z_w = Vector((0,0,1))
         X_w = Vector((1,0,0))
         Y_w = Vector((0,1,0))
-        Fox_R = Matrix.Rotation(8 * math.pi /180, 3, 'Y')
+        
+        op_angle = settings.def_occlusal_plane_angle
+        Fox_R = Matrix.Rotation(op_angle * math.pi /180, 3, 'Y')
         Z_fox = Fox_R * Z_w
         X_fox = Fox_R * X_w
         
@@ -726,7 +740,30 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         
         center = R_fox * iR * center
         v_ant = R_fox * iR * v_M_corrected
-        incisal_final = Vector((90, 0, -30))
+        
+        if 'Articulator' not in bpy.data.objects:
+            x_radius = (settings.def_arm_radius **2 -  (.5 * settings.def_intra_condyle_width)**2)**.5
+            
+            balk_radians = settings.def_balkwill_angle * math.pi/180
+            
+            balk_mx = Matrix.Rotation(balk_radians, 3, 'Y')
+            incisal_final = Vector((x_radius, 0, 0))
+            incisal_final.rotate(balk_mx)
+            
+            print(balk_radians)
+            print(incisal_final)
+            
+        else:
+            art = bpy.data.objects.get('Articulator')
+            x_radius = (settings.def_arm_radius **2 -  (.5 * art.get('intra_condyle_width'))**2)**.5
+            
+            balk_radians = settings.def_balkwill_angle * math.pi/180
+            
+            balk_mx = Matrix.Rotation(balk_radians, 3, 'Y')
+            incisal_final = Vector((x_radius, 0, 0))
+            incisal_final.rotate(balk_mx)    
+        
+        
         T_incisal = Matrix.Translation(iR * v_M_corrected)
         
         
@@ -741,7 +778,9 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
             #now it stays with Model forever
             empty.parent = Model
             empty.matrix_world = Matrix.Translation(incisal_final)
-            
+        else:
+            empty = bpy.data.objects.get('Incisal')
+            empty.matrix_world = Matrix.Translation(incisal_final)    
             
         if Mand_Model:
             #todo..check to move lower jaw after landmarks?    
@@ -801,6 +840,19 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         self.splint.landmarks_set = True
         
         if 'Articulator' not in context.scene.objects and self.splint.workflow_type != 'SIMPLE_SHELL':
+            
+            
+        
+            bpy.ops.d3splint.generate_articulator(
+                intra_condyle_width = settings.def_intra_condyle_width,
+                condyle_angle = settings.def_condyle_angle,
+                bennet_angle = settings.def_bennet_angle,
+                incisal_guidance = settings.def_incisal_guidance,
+                canine_guidance = settings.def_canine_guidance,
+                guidance_delay_ant = settings.def_guidance_delay_ant,
+                guidance_delay_lat = settings.def_guidance_delay_lat)
+            
+            
             bpy.ops.d3splint.generate_articulator('EXEC_DEFAULT')
         tracking.trackUsage("D3Splint:SplintLandmarks",None)
 
@@ -821,7 +873,7 @@ class D3SPLINT_OT_splint_paint_margin(bpy.types.Operator):
     def execute(self, context):
         
             
-        settings = odcutils.get_settings()
+        settings = get_settings()
    
         
         j = context.scene.odc_splint_index
@@ -1148,7 +1200,7 @@ class D3SPLINT_OT_pick_model(bpy.types.Operator):
     
     def pick_model(self, context):
         
-        prefs = odcutils.get_settings()
+        prefs = get_settings()
         if self.ob == None:
             return 'main'
         
@@ -1170,7 +1222,9 @@ class D3SPLINT_OT_pick_model(bpy.types.Operator):
             
         if "Model Mat" not in bpy.data.materials:
             mat = bpy.data.materials.new('Model Mat')
-            mat.diffuse_color = Color((0.5, .8, .4))
+            mat.diffuse_color = prefs.def_model_color
+            mat.diffuse_intensity = 1
+            mat.emit = .8
         else:
             mat = bpy.data.materials.get('Model Mat')
         
@@ -1182,10 +1236,20 @@ class D3SPLINT_OT_pick_model(bpy.types.Operator):
             # no slots
             self.ob.data.materials.append(mat)
         
+        
+        bb_center = get_bbox_center(self.ob)
+        T = Matrix.Translation(bb_center)
+        iT = T.inverted()
+        
+        self.ob.data.transform(iT)
+        self.ob.matrix_world *= T
+        
         tracking.trackUsage("D3Splint:PickModel")
         return 'finish'
             
     def invoke(self,context, event):
+        
+        self.report({'WARNING'}, 'By Continuuing, you certify this is for non-clinial, educational or training purposes')
         
         self.outline_width = context.user_preferences.themes[0].view_3d.outline_width
         context.user_preferences.themes[0].view_3d.outline_width = 4
@@ -1314,7 +1378,7 @@ class D3SPLINT_OT_pick_opposing(bpy.types.Operator):
                 context.scene.objects.active = None
     
     def pick_model(self, context):
-        
+        prefs = get_settings()
         if self.ob == None:
             return 'main'
             
@@ -1325,7 +1389,10 @@ class D3SPLINT_OT_pick_opposing(bpy.types.Operator):
          
         if "Opposing Mat" not in bpy.data.materials:
             mat = bpy.data.materials.new('Opposing Mat')
-            mat.diffuse_color = Color((0.4, .5, .6))
+            mat.diffuse_color = prefs.def_opposing_color
+            mat.diffuse_intensity = 1
+            mat.emit = 0.0
+            mat.specular_intensity = 0.0
         else:
             mat = bpy.data.materials.get('Opposing Mat')
         
@@ -1336,6 +1403,13 @@ class D3SPLINT_OT_pick_opposing(bpy.types.Operator):
         else:
             # no slots
             self.ob.data.materials.append(mat) 
+        
+        bb_center = get_bbox_center(self.ob)
+        T = Matrix.Translation(bb_center)
+        iT = T.inverted()
+        
+        self.ob.data.transform(iT)
+        self.ob.matrix_world *= T
             
         tracking.trackUsage("D3Splint:SetOpposing")
         return 'finish'
@@ -1492,9 +1566,9 @@ class D3SPLINT_OT_pick_external_shell(bpy.types.Operator):
         cons = self.ob.constraints.new('COPY_TRANSFORMS')
         cons.target = bpy.data.objects.get(odc_splint.model)
         
-        if "Opposing Mat" not in bpy.data.materials:
-            mat = bpy.data.materials.new('Splint Material')
-            mat.diffuse_color = Color((0.5, .1, .6))
+        if "Splint Material" not in bpy.data.materials:
+            mat = bpy.data.materials.new(name = 'Splint Material')
+            mat.diffuse_color = get_settings().def_splint_color
         else:
             mat = bpy.data.materials.get('Splint Material')
         

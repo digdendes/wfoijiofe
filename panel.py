@@ -1,6 +1,6 @@
 import bpy
 import os
-from odcutils import get_settings
+from common_utilities import get_settings
 
 class SCENE_UL_odc_teeth(bpy.types.UIList):
     # The draw_item function is called for each item of the collection that is visible in the list.
@@ -129,6 +129,19 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         #row = layout.row()
         #row.template_list("SCENE_UL_odc_splints","", sce, "odc_splints", sce, "odc_splint_index")
         
+        
+        
+        if not prefs.non_clinical_use:
+            
+            row = layout.row()
+            row.label('Please certify non-clinical use')
+            row = layout.row()
+            row.prop(prefs, "non_clinical_use")
+            
+            return
+        
+        row = layout.row()
+        row.prop(prefs, "non_clinical_use")
         
         box = layout.box()
         box.label('Splint Properties')
@@ -344,13 +357,15 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
             col = row.column()
             col.operator("d3splint.anterior_deprogrammer_element", text = 'Anterior Deprogrammer Ramp')
             col.operator("d3splint.splint_join_deprogrammer", text = 'Fuse Deprogrammer')
-        
+            
+            
         if splint.workflow_type == 'DEPROGRAMMER':
             row = layout.row()
             col = row.column()
             col.operator("d3splint.anterior_deprogrammer_element", text = 'Anterior Deprogrammer Ramp')
             col.operator("d3splint.splint_join_deprogrammer", text = 'Fuse Deprogrammer')
-            
+            col.operator("d3splint.meta_blockout_shell", text = 'Blockout Large Concavities')
+            col.operator("d3splint.remesh_smooth_inflate", text = 'Remesh/Smooth')
             
         if splint.workflow_type in {'FLAT_PLANE', 'MICHIGAN', 'ANTERIOR_POSITIONER', 'BITE_POSITIONER'}:
             
@@ -530,6 +545,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         col.operator("d3splint.splint_finish_booleans2", text = "Finalize The Splint", icon = ico)
         #col.operator("d3guard.splint_cork_boolean", text = "Finalize Splint (CORK EGINE)")
         col.operator("d3splint.export_splint_stl", text = "Export Splint STL")
+        col.operator("d3splint.auto_check_model", text = "Auto Plane Cut Model")
         
         row = layout.row()
         row.label('Start Again on Opposing?')
