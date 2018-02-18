@@ -32,7 +32,7 @@ from bpy_extras import view3d_utils
 from mathutils.geometry import intersect_point_line, intersect_line_plane
 import random
 import blf
-from builtins import True
+
 #TODO, put this somewhere logical and useful
 def vector_angle_between(v0, v1, vcross):
     a = v0.angle(v1)
