@@ -3800,9 +3800,9 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         for mod in new_ob.modifiers:
             new_ob.modifiers.remove(mod)
         
-        
+        Master = bpy.data.objects.get(splint.model)
         if 'Child Of' not in new_ob.constraints:
-            Master = bpy.data.objects.get(splint.model)
+            
             cons = new_ob.constraints.new('CHILD_OF')
             cons.target = Master
             cons.inverse_matrix = Master.matrix_world.inverted()
