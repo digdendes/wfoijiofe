@@ -408,9 +408,10 @@ class D3SPLINT_OT_splint_finish_booleans2(bpy.types.Operator):
             
             #Strucure is
             #Shell - Blockout - Passive
+            
             #Blockout Wax MUST NOT have modifier
             if 'Join Passive' in Blockout.modifiers:
-                mod = Blockout.modifiers.get('Passive Spacer')
+                mod = Blockout.modifiers.get('Join Passive')
                 Blockout.modifiers.remove(mod)
                 Blockout.update_tag()
                 
