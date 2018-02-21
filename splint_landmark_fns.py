@@ -659,9 +659,9 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         
         
         Mand_Model = bpy.data.objects.get(self.splint.get_mandible())
-        
-        mx_mand = Mand_Model.matrix_world
-        imx_mand = mx_mand.inverted()
+        if Mand_Model:
+            mx_mand = Mand_Model.matrix_world
+            imx_mand = mx_mand.inverted()
         
         #get the local points
         

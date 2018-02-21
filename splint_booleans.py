@@ -290,13 +290,18 @@ class D3SPLINT_OT_splint_finish_booleans2(bpy.types.Operator):
                ("JOIN", "Join", "Joins the Blockout and Passive, then subtracts from Splint")),
         default = "JOIN")
     
-    solver = EnumProperty(
+    solver1 = EnumProperty(
         description="Boolean Method",
         items=(("BMESH", "Bmesh", "Faster/More Errors"),
                ("CARVE", "Carve", "Slower/Less Errors")),
         default = "BMESH")
     
-     
+    solver2 = EnumProperty(
+        description="Boolean Method",
+        items=(("BMESH", "Bmesh", "Faster/More Errors"),
+               ("CARVE", "Carve", "Slower/Less Errors")),
+        default = "BMESH")
+    
     @classmethod
     def poll(cls, context):
         #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
@@ -360,12 +365,12 @@ class D3SPLINT_OT_splint_finish_booleans2(bpy.types.Operator):
             mod = ob.modifiers.get('Trim Base')
             mod.object = a_base
             mod.operation = 'DIFFERENCE'
-            mod.solver = self.solver
+            mod.solver = self.solver1
         else:
             mod = ob.modifiers.new('Trim Base', type = 'BOOLEAN')
             mod.object = a_base
             mod.operation = 'DIFFERENCE'
-            mod.solver = self.solver  
+            mod.solver = self.solver1  
             
         if self.method_order == 'JOIN':
             #Structure is   Shell - (Blockout + Passive)
@@ -375,29 +380,29 @@ class D3SPLINT_OT_splint_finish_booleans2(bpy.types.Operator):
                 mod = Blockout.modifiers.get('Join Passive')
                 mod.object = Passive
                 mod.operation = 'UNION'
-                mod.solver = self.solver
+                mod.solver = self.solver1
             else:
                 mod = Blockout.modifiers.new('Join Passive', type = 'BOOLEAN')
                 mod.object = Passive
                 mod.operation = 'UNION'
-                mod.solver = self.solver
+                mod.solver = self.solver1
             
             
             #Final Spint need only 1 boolean operation
             if 'Passive Spacer' in ob.modifiers:
                 mod = ob.modifiers.get('Passive Spacer')
-                ob.modifiers.remov(mod)
+                ob.modifiers.remove(mod)
                 
             if 'Subtract Blockout' in ob.modifiers:
                 mod = ob.modifiers.get('Subtract Blockout')
                 mod.object = Blockout
                 mod.operation = 'DIFFERENCE'
-                mod.solver = self.solver
+                mod.solver = self.solver2
             else:
                 mod = ob.modifiers.new('Subtract Blockout', type = 'BOOLEAN')
                 mod.object = Blockout
                 mod.operation = 'DIFFERENCE'
-                mod.solver = self.solver
+                mod.solver = self.solver2
             
         elif self.method_order == 'SUBTRACT':
             
@@ -410,26 +415,26 @@ class D3SPLINT_OT_splint_finish_booleans2(bpy.types.Operator):
                 Blockout.update_tag()
                 
             if 'Subtract Blockout' in ob.modifiers:
-                mod = ob.modifiers.get('Join Passive')
+                mod = ob.modifiers.get('Subtract Blockout')
                 mod.object = Blockout
                 mod.operation = 'DIFFERENCE'
-                mod.solver = self.solver
+                mod.solver = self.solver1
             else:
                 mod = ob.modifiers.new('Subtract Blockout', type = 'BOOLEAN')
                 mod.object = Blockout
                 mod.operation = 'DIFFERENCE'
-                mod.solver = self.solver
+                mod.solver = self.solver1
                 
             if 'Passive Spacer' not in ob.modifiers:
                 bool_mod = ob.modifiers.new('Passive Spacer', type = 'BOOLEAN')
                 bool_mod.operation = 'DIFFERENCE'
                 bool_mod.object = Passive
-                bool_mod.solver = 'CARVE'  #Bmesh is too likely to create bad cuts
+                bool_mod.solver = self.solver2  #Bmesh is too likely to create bad cuts
             else:
                 bool_mod = ob.modifiers.get('Passive Spacer')
                 bool_mod.operation = 'DIFFERENCE'
                 bool_mod.object = Passive
-                bool_mod.solver = 'CARVE'  ##Bmesh is too likely to create bad cuts
+                bool_mod.solver = self.solver2  ##Bmesh is too likely to create bad cuts
             
         
         for obj in context.scene.objects:
@@ -444,7 +449,7 @@ class D3SPLINT_OT_splint_finish_booleans2(bpy.types.Operator):
         completion_time = time.time() - start
         print('competed the boolean subtraction in %f seconds' % completion_time)   
         splint.finalize_splint = True
-        tracking.trackUsage("D3Splint:FinishBoolean",(self.solver, self.method_order, str(completion_time)[0:4]))
+        tracking.trackUsage("D3Splint:FinishBoolean",(self.solver1,self.solver2, self.method_order, str(completion_time)[0:4]))
         
         tmodel = bpy.data.objects.get('Trimmed_Model')
         #make sure user can verify no intersections
