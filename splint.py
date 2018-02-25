@@ -1929,17 +1929,15 @@ class D3SPLINT_OT_splint_add_rim(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     
-    meta_type = EnumProperty(name = 'Meta Type', items = [('CUBE','CUBE','CUBE'), ('ELLIPSOID', 'ELLIPSOID','ELLIPSOID')], default = 'CUBE')
+    meta_type = EnumProperty(name = 'Meta Type', items = [('CUBE','CUBE','CUBE'), ('ELLIPSOID', 'ELLIPSOID','ELLIPSOID')], default = 'CUBE', description = 'What shape gets extruded along the rim, ellipsoid will be a much rounder rim')
     
-    width_offset = FloatProperty(name = 'Extra Wdith', default = 0.01, min = -3, max = 3)
+    width_offset = FloatProperty(name = 'Extra Wdith', default = 0.01, min = -3, max = 3, description = 'Can be used to add extra or remove extra Bucco/Lingnual width from the rim')
     
-    thickenss_offset = FloatProperty(name = 'Extra Thickness', default = 0.01, min = -3, max = 3)
+    thickenss_offset = FloatProperty(name = 'Extra Thickness', default = 0.01, min = -3, max = 3, description = 'Will add extra (or reduce for negative values) thicknesss to the rim')
+    anterior_projection = FloatProperty(name = 'Extra Anterior Width', default = 0.01, min = -2, max = 3, description = 'Will add more BuccoLingual width to the anterior rim/ramp')
     
-    anterior_projection = FloatProperty(name = 'Extra Anterior Width', default = 0.01, min = -2, max = 3)
-    
-    
-    flare = IntProperty(default = 0, min = -60, max = 60, description = 'Angle off of world Z')
-    anterior_segement = FloatProperty(name = 'AP Spread', default = 0.3, min = .15, max = .5)
+    flare = IntProperty(default = 0, min = -60, max = 60, description = 'Angle of anterior ramp from world, can be negative (maxillary prosthesis) or positive (mandibular), try -30')
+    anterior_segement = FloatProperty(name = 'AP Spread', default = 0.3, min = .15, max = .5, description = 'Percentage of AP spread which is considered the anterior rim')
     ap_segment = EnumProperty(name = 'Rim Area', items = [('ANTERIOR_ONLY','Anterior Ramp','Only builds rim anterior to AP spread'),
                                                           ('POSTERIOR_ONLY', 'Posterior Pad','ONly builds rim posterior to AP spread'),
                                                           ('FULL_RIM', 'Full Rim', 'Buillds a posterior pad and anteiror ramp')], default = 'FULL_RIM')

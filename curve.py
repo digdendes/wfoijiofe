@@ -627,7 +627,7 @@ class CurveDataManager(object):
             context.scene.objects.link(self.crv_obj)
             
             self.cyclic = cyclic
-            self.started = False
+            self.started = False  #the initial curve data has 1 bezier pt, however the users hasn't clicked anything yet, use this to reconcile until self.b_pts = crv.spline.bezier_points
             self.b_pts = []  #vectors representing locations of be
         
         self.snap_type = snap_type  #'SCENE' 'OBJECT'
@@ -797,8 +797,9 @@ class CurveDataManager(object):
                 self.b_pts.append(mx * loc)
                 
             else:
+                print('adding a new point!')
                 self.started = True
-                delta = i_crv_mx *mx * loc - self.crv_data.splines[0].bezier_points[-1].co
+                delta = i_crv_mx *mx * loc - self.crv_data.splines[0].bezier_points[0].co
                 bp = self.crv_data.splines[0].bezier_points[0]
                 bp.co += delta
                 bp.handle_left += delta
@@ -824,19 +825,57 @@ class CurveDataManager(object):
     def click_delete_point(self, mode = 'mouse'):
         if mode == 'mouse':
             if not self.hovered[0] == 'POINT': return
-            self.b_pts.pop(self.hovered[1])
+            if self.started == False: return
+            
             if len(self.b_pts) == 0:
-                self.started = False
+                print('We have a big problem!?')
                 return
-            self.update_blender_curve_data()
+            elif len(self.b_pts) == 1:
+                print('removing the only point!')
+                self.started = False
+                
+                self.b_pts.pop()  #len(self.b_pts) now = 0 and len(crv_data.splines[0].bezier_points) = 1
+                
+                
+                bp = self.crv_data.splines[0].bezier_points[0]
+                bp.co = Vector((0,0,0))
+                bp.handle_left = Vector((1,0,0))
+                bp.handle_right = Vector((-1,0,0))
+                self.hovered = self.hovered = [None, -1]
+                self.selected = -1
+                return
+            
+            else:
+                self.b_pts.pop(self.hovered[1])
+                self.update_blender_curve_data()
+                self.hovered = self.hovered = [None, -1]
+                self.selected = -1
         
         else:
             if self.selected == -1: return
-            self.b_pts.pop(self.selected)
+            if self.started == False: return
+            
             if len(self.b_pts) == 0:
-                self.started = False
+                print('We have a big problem!?')
                 return
-            self.update_blender_curve_data()
+            
+            elif len(self.b_pts) == 1:
+                self.started = False
+                
+                self.b_pts.pop()  #len(self.b_pts) now = 0 and len(crv_data.splines[0].bezier_points) = 1
+                
+                
+                bp = self.crv_data.splines[0].bezier_points[0]
+                bp.co = Vector((0,0,0))
+                bp.handle_left = Vector((1,0,0))
+                bp.handle_right = Vector((-1,0,0))
+                
+                return
+            
+            else:
+                self.b_pts.pop(self.selected)
+                self.selected = -1
+                self.update_blender_curve_data()
                           
     def update_blender_curve_data(self):
         #this may crash blender
@@ -981,7 +1020,12 @@ class CurveDataManager(object):
             bgl_utils.draw_3d_points(context,[self.b_pts[self.selected]], self.point_size, color = (self.active_color[0],self.active_color[1],self.active_color[2],1))
                 
         if self.hovered[0] == 'POINT':
-            bgl_utils.draw_3d_points(context,[self.b_pts[self.hovered[1]]], self.point_size, color = (self.active_color[0],self.active_color[1],self.active_color[2],1))
+            
+            if self.hovered[1] > len(self.b_pts) - 1:
+                print('hovered is out of date')
+                
+            else:
+                bgl_utils.draw_3d_points(context,[self.b_pts[self.hovered[1]]], self.point_size, color = (self.active_color[0],self.active_color[1],self.active_color[2],1))
      
         elif self.hovered[0] == 'EDGE':
             loc3d_reg2D = view3d_utils.location_3d_to_region_2d

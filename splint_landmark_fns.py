@@ -90,30 +90,34 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
         bme.faces.ensure_lookup_table()
         bmesh.ops.create_grid(bme, x_segments = 200, y_segments = 200, size = 39.9)
         
-        bme.to_mesh(me)
-        plane_obj = bpy.data.objects.new('Dynamic Occlusal Surface', me)
-        plane_obj.matrix_world = T * R
+        if 'Dynamic Occlusal Surface' not in bpy.data.objects:
+            bme.to_mesh(me)
+            plane_obj = bpy.data.objects.new('Dynamic Occlusal Surface', me)
+            plane_obj.matrix_world = T * R
         
-        mat = bpy.data.materials.get("Plane Material")
-        if mat is None:
-            # create material
-            mat = bpy.data.materials.new(name="Plane Material")
-            mat.diffuse_color = Color((0.8, 1, .9))
-        
-        plane_obj.data.materials.append(mat)
-        
+            mat = bpy.data.materials.get("Plane Material")
+            if mat is None:
+                # create material
+                mat = bpy.data.materials.new(name="Plane Material")
+                mat.diffuse_color = Color((0.8, 1, .9))
+            
+            plane_obj.data.materials.append(mat)
+            context.scene.objects.link(plane_obj)
+            plane_obj.hide = True
+        else:
+            plane_obj = bpy.data.objects.get('Dynamic Occlusal Surface')
+            plane_obj.matrix_world = T * R
+            
+        bme.free()   
         Opposing = bpy.data.objects.get(self.splint.get_mandible())
-        cons = plane_obj.constraints.new('CHILD_OF')
-        cons.target = Opposing
-        cons.inverse_matrix = Opposing.matrix_world.inverted()
-        
-        context.scene.objects.link(plane_obj)
-        plane_obj.hide = True
-        bme.free()
-        
-        
-        
-        
+        if Opposing != None:
+            for cons in plane_obj.constraints:
+                    if cons.type == 'CHILD_OF':
+                        plane_obj.constraints.remove(cons)
+            
+            cons = plane_obj.constraints.new('CHILD_OF')
+            cons.target = Opposing
+            cons.inverse_matrix = Opposing.matrix_world.inverted()
         
             
     def modal_main(self,context,event):
@@ -239,7 +243,9 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
         #self.splint.occl = self.crv.crv_obj.name
         
         #TODO, tweak the modifier as needed
-        help_txt = "DRAW MAXIILARY OCCLUSAL POINTS\n\nLeft Click on BUCCAL CUSPS and incisal edges \n Points will snap to objects under mouse \n Right click to delete a point n\ G to grab  \n ENTER to confirm \n ESC to cancel"
+        help_txt = "DRAW MAXILLARY OCCLUSAL POINTS\n\n-  Start on one side of arch and sequentially work around to the other \n-  This curve will establish the facial boundary of the Wax Rim\n-  It is not necessary to click every cusp tip\n-  Points will snap to maxilla under mouse \n\n-Right click to delete a point \n-G to grab the point and then LeftClick to place it \n-ENTER to confirm \n-ESC to cancel \n\n\n One strategy for a smooth rim on a reasonably normal dentition is MB cusp 2nd Molar, B cusp 2nd Premolar, Canine Cusp, Mid-Incisal of Central Incisor.  A smooth curve is more important than identifying every cusp tip. Understanding that this defines one edge of the wax rim will also help you decide when to include an extra cusp to ensure the rim extends to it.  Mid-fossa or Marginal ridges can be marked for cases like posterior cross bite"
+        
+        
         self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
         self.help_box.snap_to_corner(context, corner = [1,1])
         self.mode = 'main'
@@ -308,25 +314,37 @@ class D3SPLINT_OT_splint_occlusal_curve_mand(bpy.types.Operator):
         bme.faces.ensure_lookup_table()
         bmesh.ops.create_grid(bme, x_segments = 200, y_segments = 200, size = 39.9)
         
-        bme.to_mesh(me)
-        plane_obj = bpy.data.objects.new('Dynamic Occlusal Surface', me)
-        plane_obj.matrix_world = T * R
         
-        mat = bpy.data.materials.get("Plane Material")
-        if mat is None:
-            # create material
-            mat = bpy.data.materials.new(name="Plane Material")
-            mat.diffuse_color = Color((0.8, 1, .9))
+        if 'Dynamic Occlusal Surface' not in bpy.data.objects:
+            bme.to_mesh(me)
+            plane_obj = bpy.data.objects.new('Dynamic Occlusal Surface', me)
+            plane_obj.matrix_world = T * R
         
-        plane_obj.data.materials.append(mat)
-        Master = bpy.data.objects.get(self.splint.get_maxilla())
-        Opposing = bpy.data.objects.get(self.splint.get_mandible())
-        cons = plane_obj.constraints.new('CHILD_OF')
-        cons.target = Master
-        cons.inverse_matrix = Master.matrix_world.inverted()
-        
-        context.scene.objects.link(plane_obj)
-        plane_obj.hide = True
+            mat = bpy.data.materials.get("Plane Material")
+            if mat is None:
+                # create material
+                mat = bpy.data.materials.new(name="Plane Material")
+                mat.diffuse_color = Color((0.8, 1, .9))
+            
+            plane_obj.data.materials.append(mat)
+            context.scene.objects.link(plane_obj)
+            plane_obj.hide = True
+        else:
+            plane_obj = bpy.data.objects.get('Dynamic Occlusal Surface')
+            plane_obj.matrix_world = T * R
+            
+        bme.free()   
+        Opposing = bpy.data.objects.get(self.splint.get_maxilla())
+        if Opposing != None:
+            for cons in plane_obj.constraints:
+                    if cons.type == 'CHILD_OF':
+                        plane_obj.constraints.remove(cons)
+            
+            cons = plane_obj.constraints.new('CHILD_OF')
+            cons.target = Opposing
+            cons.inverse_matrix = Opposing.matrix_world.inverted()
+            
+
         bme.free()
         
         
@@ -475,7 +493,7 @@ class D3SPLINT_OT_splint_occlusal_curve_mand(bpy.types.Operator):
         #self.splint.occl = self.crv.crv_obj.name
         
         #TODO, tweak the modifier as needed
-        help_txt = "DRAW LINGUAL OCCLUSAL POINTS\n\n-Left Click on lingual cusps and incisal edges to define Dynamic Occlusal Surface\n-Points will snap to objects under mouse \n-Right click to delete a point n\ G to grab  \n ENTER to confirm \n ESC to cancel"
+        help_txt = "DRAW MANDIBULAR OCCLUSAL POINTS\n\n-  Start on one side of arch and sequentially work around to the other \n-  This curve will establish the lingual boundary of the Wax Rim \n-  It will also estimate the lower occlusal pane \n-  It is not necessary to click every cusp tip  \n-  Points will snap to mandible under mouse \n\n-  Right click to delete a point \n-  G to grab the point and then LeftClick to place it back on model \n-  ENTER to confirm \n-  ESC to cancel \n\n\n  One strategy for a smooth rim in a reasonably normal dentition is to pace a point on the ML cusp of 2nd Molar, L cusp 2nd Premolar, Canine Cusp Tip, Mid-Incisal of Central Incisor. A smooth curve is more important than identifying every cusp tip. Understanding that this defines one edge of the wax rim will also help you decide when to include an extra cusp to ensure the rim extends sufficiently to it.  Mid-fossa or even Buccal Cusps can be marked for cases like posterior cross bite" 
         self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
         self.help_box.snap_to_corner(context, corner = [1,1])
         self.mode = 'main'

@@ -597,7 +597,7 @@ class D3SPLINT_OT_splint_manual_auto_surface(bpy.types.Operator):
         
         
         #TODO, tweak the modifier as needed
-        help_txt = "DRAW LANDMARK POINTS\n Click on the cusps you want"
+        help_txt = "Designate Posterior Contacts\n LeftClick on posterior cusp tips that will have light contact in CR/MIP bite \n A smooth surface will be generated between all ponts \n This surface will then be used to slice off the posterior rim"
         self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
         self.help_box.snap_to_corner(context, corner = [1,1])
         self.mode = 'main'
