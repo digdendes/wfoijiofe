@@ -82,8 +82,8 @@ class VIEW3D_PT_D3SplintAssitant(bpy.types.Panel):
         #split = layout.split()
         row = layout.row()
 
-        row.operator("wm.url_open", text = "Wiki", icon="INFO").url = "https://d3tool.com/d3splint-membership-videos/"
-        row.operator("wm.url_open", text = "Errors", icon="ERROR").url = "https://github.com/patmo141/"
+        row.operator("wm.url_open", text = "Wiki", icon="INFO").url = "https://d3tool.com/knowledge-base/"
+        row.operator("wm.url_open", text = "Tutorials", icon="ERROR").url = "https://d3tool.com/d3splint-membership-videos/"
         row.operator("wm.url_open", text = "Forum", icon="QUESTION").url = "https://www.facebook.com/groups/939777786197766"
         
 
@@ -568,7 +568,7 @@ class VIEW3D_PT_D3SplintModels(bpy.types.Panel):
         
         row = layout.row()
         row.label(text = "Model Operators")
-        row.operator("wm.url_open", text = "", icon="INFO").url = "https://github.com/patmo141/odc_public/wiki"
+        row.operator("wm.url_open", text = "", icon="INFO").url = "https://d3tool.com/knowledge-base/"
           
         if context.object != None:
             row = layout.row()
