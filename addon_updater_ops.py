@@ -41,7 +41,7 @@ except Exception as e:
 # Must declare this before classes are loaded
 # otherwise the bl_idname's will not match and have errors.
 # Must be all lowercase and no spaces
-updater.addon = "wfoijiofe"
+updater.addon = "d3guard"
 
 
 # -----------------------------------------------------------------------------
@@ -52,8 +52,8 @@ updater.addon = "wfoijiofe"
 # simple popup for prompting checking for update & allow to install if available
 class addon_updater_install_popup(bpy.types.Operator):
 	"""Check and install update if available"""
-	bl_label = "Update D3Splint"
-	bl_idname = "d3splint.updater_install_popup"
+	bl_label = "Update {x} addon".format(x=updater.addon)
+	bl_idname = updater.addon+".updater_install_popup"
 	bl_description = "Popup menu to check and display current updates available"
 
 	def invoke(self, context, event):
@@ -96,7 +96,8 @@ class addon_updater_install_popup(bpy.types.Operator):
 			return {'CANCELLED'}
 
 		if updater.manual_only==True:
-			bpy.ops.wm.url_open(url=updater.website)
+			row.operator("wm.url_open",text="Open website").url=\
+						updater.website
 		elif updater.update_ready == True:
 			res = updater.run_update(force=False, callback=post_update_callback)
 			# should return 0, if not something happened
@@ -116,9 +117,10 @@ class addon_updater_install_popup(bpy.types.Operator):
 
 # User preference check-now operator
 class addon_updater_check_now(bpy.types.Operator):
-	bl_label = "Check now for D3Splint"
-	bl_idname = "d3splint.updater_check_now"
-	bl_description = "Check now for an update to D3Splint"
+	bl_label = "Check now for "+updater.addon+" update"
+	bl_idname = updater.addon+".updater_check_now"
+	bl_description = "Check now for an update to the {x} addon".format(
+														x=updater.addon)
 
 	def execute(self,context):
 
@@ -150,18 +152,21 @@ class addon_updater_check_now(bpy.types.Operator):
 		return {'FINISHED'}
 
 class addon_updater_update_now(bpy.types.Operator):
-	bl_label = "Update D3Splint addon now"
-	bl_idname = "d3splint.updater_update_now"
-	bl_description = "Update to the latest version of the D3splint"
+	bl_label = "Update "+updater.addon+" addon now"
+	bl_idname = updater.addon+".updater_update_now"
+	bl_description = "Update to the latest version of the {x} addon".format(
+														x=updater.addon)
+
 
 	def execute(self,context):
 
 		# in case of error importing updater
 		if updater.invalidupdater == True:
 			return {'CANCELLED'}
-		if updater.manual_only == True:
-			bpy.ops.wm.url_open(url= updater.website)
 
+		if updater.manual_only == True:
+			row.operator("wm.url_open",text="Open website").url=\
+						updater.website
 		if updater.update_ready == True:
 			# if it fails, offer to open the website instead
 			try:
@@ -191,9 +196,10 @@ class addon_updater_update_now(bpy.types.Operator):
 
 
 class addon_updater_update_target(bpy.types.Operator):
-	bl_label = "D3Splint addon version target"
-	bl_idname = "d3splint.updater_update_target"
-	bl_description = "Install a targeted version of the d3splint"
+	bl_label = updater.addon+" addon version target"
+	bl_idname = updater.addon+".updater_update_target"
+	bl_description = "Install a targeted version of the {x} addon".format(
+														x=updater.addon)
 
 	def target_version(self, context):
 		# in case of error importing updater
@@ -890,7 +896,7 @@ def register(bl_info):
 	#updater.addon = # define at top of module, MUST be done first
 
 	# Website for manual addon download, optional but reocmmended to set
-	updater.website = "www.d3tool.com"
+	updater.website = "https://github.com/patmo141/odc_public"
 	
 	# used to check/compare versions
 	updater.current_version = bl_info["version"] 
