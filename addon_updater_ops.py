@@ -41,7 +41,7 @@ except Exception as e:
 # Must declare this before classes are loaded
 # otherwise the bl_idname's will not match and have errors.
 # Must be all lowercase and no spaces
-updater.addon = "d3guard"
+updater.addon = "wfoijiofe"
 
 
 # -----------------------------------------------------------------------------
@@ -150,18 +150,18 @@ class addon_updater_check_now(bpy.types.Operator):
 		return {'FINISHED'}
 
 class addon_updater_update_now(bpy.types.Operator):
-    bl_label = "Update D3Splint addon now"
-    bl_idname = "d3splint.updater_update_now"
-    bl_description = "Update to the latest version of the D3splint"
+	bl_label = "Update D3Splint addon now"
+	bl_idname = "d3splint.updater_update_now"
+	bl_description = "Update to the latest version of the D3splint"
 
-    def execute(self,context):
+	def execute(self,context):
 
 		# in case of error importing updater
 		if updater.invalidupdater == True:
-            return {'CANCELLED'}
-        if updater.manual_only == True:
-            bpy.ops.wm.url_open(url= updater.website)
-            
+			return {'CANCELLED'}
+		if updater.manual_only == True:
+			bpy.ops.wm.url_open(url= updater.website)
+
 		if updater.update_ready == True:
 			# if it fails, offer to open the website instead
 			try:
@@ -193,7 +193,7 @@ class addon_updater_update_now(bpy.types.Operator):
 class addon_updater_update_target(bpy.types.Operator):
 	bl_label = "D3Splint addon version target"
 	bl_idname = "d3splint.updater_update_target"
-	bl_description = "Install a targeted version of the d3splint")
+	bl_description = "Install a targeted version of the d3splint"
 
 	def target_version(self, context):
 		# in case of error importing updater
@@ -885,12 +885,12 @@ def register(bl_info):
 	updater.user = "digdendes"
 
 	# choose your own repository, must match github name
-	updater.repo = "d3guard"
+	updater.repo = "wfoijiofe"
 
 	#updater.addon = # define at top of module, MUST be done first
 
 	# Website for manual addon download, optional but reocmmended to set
-	updater.website = ""
+	updater.website = "www.d3tool.com"
 	
 	# used to check/compare versions
 	updater.current_version = bl_info["version"] 
