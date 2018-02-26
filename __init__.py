@@ -33,7 +33,7 @@ bl_info = {
     'api': "3c04373",
     'location': "3D View -> Tool Shelf",
     'description': "A training and educational Dental Design CAD Tool not intended for clinical use",
-    'warning': "Not Intended for Clincal Use",
+    'warning': "Not Intended for Clincal Use!",
     'wiki_url': "",
     'tracker_url': "",
     'category': '3D View'}
