@@ -182,6 +182,9 @@ class D3SplintRestoration(bpy.types.PropertyGroup):
         cls.remove_undercuts = bpy.props.BoolProperty(name = 'remove_undercuts', default = False)
         
         #done
+        cls.refractory_model = bpy.props.BoolProperty(name = 'refractory_model', default = False)
+        
+        #done
         cls.finalize_splint = bpy.props.BoolProperty(name = 'finalize_splint', default = False)
         
         cls.passive_value = bpy.props.FloatProperty(name = 'Offset Value', default = 0.12)

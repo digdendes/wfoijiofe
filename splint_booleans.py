@@ -281,7 +281,7 @@ class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
 class D3SPLINT_OT_splint_finish_booleans2(bpy.types.Operator):
     """Finish the Booleans"""
     bl_idname = "d3splint.splint_finish_booleans2"
-    bl_label = "Finalize the Splint"
+    bl_label = "Finalize the Splint (2 Object Method)"
     bl_options = {'REGISTER', 'UNDO'}
     
     method_order = EnumProperty(
@@ -460,7 +460,125 @@ class D3SPLINT_OT_splint_finish_booleans2(bpy.types.Operator):
         
         return {'FINISHED'}
 
+class D3SPLINT_OT_splint_finish_booleans3(bpy.types.Operator):
+    """Finish the Booleans"""
+    bl_idname = "d3splint.splint_finish_booleans3"
+    bl_label = "Finalize the Splint"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    solver = EnumProperty(
+        description="Boolean Method",
+        items=(("BMESH", "Bmesh", "Faster/More Errors"),
+               ("CARVE", "Carve", "Slower/Less Errors"),
+               ("CORK", "Cork", "Slowest/Least Errors, Not re-implemented yet")),
+        default = "BMESH")
+  
+    
+    @classmethod
+    def poll(cls, context):
+        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
+        #    return True
+        #else:
+        #    return False
+        return True
+    
+    
 
+    def invoke(self,context,event):
+        
+        return context.window_manager.invoke_props_dialog(self)
+    
+    def execute(self, context):
+        
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        prefs = get_settings()
+        if not prefs.non_clinical_use:
+            self.report({'ERROR'}, 'You must certify non-clinical use in your addon preferences or in the panel')
+            return {'CANCELLED'}
+        
+        if splint.finalize_splint:
+            self.report({'WARNING'}, 'You have already finalized, this will remove or alter existing modifiers and try again')
+        
+        if self.solver == 'CORK':
+            self.report({'ERROR'}, 'The Cork engine has not been set up with this new method')
+            return {'CANCELLED'}
+         
+        Shell = bpy.data.objects.get('Splint Shell')
+        Refractory = bpy.data.objects.get('Refractory Model')
+        
+        if Shell == None:
+            self.report({'ERROR'}, 'Need to calculate splint shell first')
+            return {'CANCELLED'}
+        
+        if Refractory == None:
+            self.report({'ERROR'}, 'Need to make refractory model first')    
+            return {'CANCELLED'}
+        
+        
+        if context.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode = 'OBJECT')
+        
+        start = time.time()
+        #don't add multiple boolean modifiers
+        
+        
+        
+        if 'Final Splint' not in bpy.data.objects:
+            me = Shell.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+            ob = bpy.data.objects.new('Final Splint', me)
+            context.scene.objects.link(ob)
+            ob.matrix_world = Shell.matrix_world
+        else:
+            ob = bpy.data.objects.get('Final Splint')
+            me = ob.data
+            
+        a_base = bpy.data.objects.get('Auto Base')
+        if 'Trim Base' in ob.modifiers and a_base != None:
+            mod = ob.modifiers.get('Trim Base')
+            mod.object = a_base
+            mod.operation = 'DIFFERENCE'
+            mod.solver = self.solver
+        else:
+            mod = ob.modifiers.new('Trim Base', type = 'BOOLEAN')
+            mod.object = a_base
+            mod.operation = 'DIFFERENCE'
+            mod.solver = self.solver 
+            
+    
+        #Final Spint need only 1 boolean operation
+        if 'Refractory Model' in ob.modifiers:
+            mod = ob.modifiers.get('Passive Spacer')
+            
+        else:
+            mod = ob.modifiers.new('Refractory Model', type = 'BOOLEAN')
+        mod.object = Refractory
+        mod.operation = 'DIFFERENCE'
+        mod.solver = self.solver
+        
+        for obj in context.scene.objects:
+            obj.hide = True
+            
+        context.scene.objects.active = ob
+        ob.select = True
+        ob.hide = False
+        ob.update_tag()
+        context.scene.update()
+            
+        completion_time = time.time() - start
+        print('competed the boolean subtraction in %f seconds' % completion_time)   
+        splint.finalize_splint = True
+        tracking.trackUsage("D3Splint:FinishBoolean3",(self.solver, str(completion_time)[0:4]))
+        
+        tmodel = bpy.data.objects.get('Trimmed_Model')
+        #make sure user can verify no intersections
+        if tmodel:
+            tmodel.hide = False
+    
+        
+        return {'FINISHED'}
+    
+    
 class D3SPLINT_OT_splint_finish_booleans_bite(bpy.types.Operator):
     """Finish the Booleans"""
     bl_idname = "d3splint.splint_finish_bite_boolean"
@@ -497,7 +615,7 @@ class D3SPLINT_OT_splint_finish_booleans_bite(bpy.types.Operator):
             self.report({'WARNING'}, 'You have already finalized, this will remove or alter existing modifiers and try again')
          
         if splint.workflow_type != 'BITE_POSITIONER':
-            self.report({'ERRROR'}, 'This splint is not a bite positioner workflow, change it to use this function')
+            self.report({'ERROR'}, 'This splint is not a bite positioner workflow, change it to use this function')
             return {'CANCELLED'}
         
         Shell = bpy.data.objects.get('Splint Shell')
@@ -580,6 +698,7 @@ def register():
     bpy.utils.register_class(D3SPLINT_OT_splint_cork_boolean)
     bpy.utils.register_class(D3SPLINT_OT_splint_finish_booleans)
     bpy.utils.register_class(D3SPLINT_OT_splint_finish_booleans2)
+    bpy.utils.register_class(D3SPLINT_OT_splint_finish_booleans3)
     bpy.utils.register_class(D3SPLINT_OT_splint_finish_booleans_bite)
 
 
@@ -587,4 +706,5 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_splint_cork_boolean)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_finish_booleans)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_finish_booleans2)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_finish_booleans3)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_finish_booleans_bite)

@@ -523,26 +523,19 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         
         row = layout.row()
         col = row.column()
-        
-        if splint and splint.passive_offset: 
+        if splint and splint.refractory_model: 
             ico = 'CHECKBOX_HLT'
         else:
             ico = 'CHECKBOX_DEHLT'
-        col.operator("d3splint.splint_passive_spacer", text = "Passivity Offset", icon = ico)
         
-        if splint and splint.remove_undercuts: 
-            ico = 'CHECKBOX_HLT'
-        else:
-            ico = 'CHECKBOX_DEHLT'
-        col.operator("d3splint.meta_blockout_trimmed_model2", text = "Undercut Blockout", icon = ico)
-        
-        row = layout.row()
+        col.operator("d3splint.refractory_model", text = "Refractory Model", icon = ico)
+
         if splint and splint.finalize_splint: 
             ico = 'CHECKBOX_HLT'
         else:
             ico = 'CHECKBOX_DEHLT'
-        col = row.column()
-        col.operator("d3splint.splint_finish_booleans2", text = "Finalize The Splint", icon = ico)
+        
+        col.operator("d3splint.splint_finish_booleans3", text = "Finalize The Splint", icon = ico)
         #col.operator("d3guard.splint_cork_boolean", text = "Finalize Splint (CORK EGINE)")
         col.operator("d3splint.export_splint_stl", text = "Export Splint STL")
         col.operator("d3splint.auto_check_model", text = "Auto Plane Cut Model")

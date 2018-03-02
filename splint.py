@@ -3597,6 +3597,7 @@ class D3SPLINT_OT_meta_splint_passive_spacer(bpy.types.Operator):
         n = context.scene.odc_splint_index
         splint = context.scene.odc_splints[n]
         splint.passive_value = self.radius
+        
         self.bme = bmesh.new()
         self.bme.from_object(ob1, context.scene)  #this object should have a displace modifier
         self.bme.verts.ensure_lookup_table()
