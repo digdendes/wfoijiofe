@@ -693,7 +693,7 @@ class D3SPLINT_OT_splint_mark_margin(bpy.types.Operator):
         self.splint.margin = self.crv.crv_obj.name
         
         #TODO, tweak the modifier as needed
-        help_txt = "DRAW SPLINT MARGIN\n\nLeft Click on model to define splint boundary \nPoints will snap to objects under mouse \n Right click to delete a point n\ Click the first point to close the loop \n  Left click a point to select, then G to grab  \n ENTER to confirm \n ESC to cancel"
+        help_txt = "DRAW SPLINT MARGIN\n\n-  Start on one side of arch and sequentially work around to the other until you reach the first point you started with \n-  This curve will establish the boundary of the Splint\n-  Points will snap to model under mouse \n\n-Right click to delete a point \n-LeftClick to select (turns yellow) \n-G to grab the point and then LeftClick to place it \n- The first point will always be blue and needs to be clicked last to close the loop.\n-ENTER to confirm \n-ESC to cancel"
         self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
         self.help_box.snap_to_corner(context, corner = [1,1])
         self.mode = 'main'
@@ -703,18 +703,11 @@ class D3SPLINT_OT_splint_mark_margin(bpy.types.Operator):
         
         tracking.trackUsage("D3Splint:MarkOutline", None)
         return {'RUNNING_MODAL'}
-
-
-
      
 def ispltmgn_draw_callback(self, context):  
     self.crv.draw(context)
     self.help_box.draw()      
-    
-
-
-    
-    
+       
 def plyknife_draw_callback(self, context):
     self.knife.draw(context)
     self.help_box.draw()
@@ -1333,8 +1326,30 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         trimmed_bme.from_mesh(Model.data)
         trimmed_bme.verts.ensure_lookup_table()
         
+        long_eds = [ed for ed in trimmed_bme.edges if ed.calc_length() > 1]
+
+
+
+
+        n_long = len(long_eds)
+        iters = 0
         
+        while n_long > 5 and iters < 4:
+            
+            gdict = bmesh.ops.subdivide_edges(trimmed_bme, edges = long_eds, cuts = 1)
+            
+            non_tris = [f for f in trimmed_bme.faces if len(f.verts) > 4]
+            bmesh.ops.triangulate(trimmed_bme, faces = non_tris)
+            
+            trimmed_bme.verts.ensure_lookup_table()
+            trimmed_bme.edges.ensure_lookup_table()
+            trimmed_bme.faces.ensure_lookup_table()
+        
+            long_eds = [ed for ed in trimmed_bme.edges if ed.calc_length() > 1]
+            n_long = len(long_eds)
+            iters += 1
         to_keep = set()
+        
         mx2 = Model.matrix_world
         #Z = mx.inverted().to_3x3() * Vector((0,0,1))
         if splint.jaw_type == 'MAXILLA':
@@ -1429,6 +1444,8 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
             perim_fs.update(v.link_faces[:])
             
         perim_strim_bme = new_bmesh_from_bmelements(perim_fs)
+        
+        
         
         if 'Perim Model' in bpy.data.objects:
             perim_ob  = bpy.data.objects.get('Perim Model')

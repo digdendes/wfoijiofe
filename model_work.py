@@ -378,7 +378,7 @@ class D3SPLINT_OT_close_painted_hole(bpy.types.Operator):
         loops = edge_loops_from_bmedges(bme, [ed.index for ed in eds_non_man])    
         
         if len(loops) > 1:
-            self.repoort({'ERROR'}, 'This tool only closes one hole at a time! Clear Paint or make sure boundary is completley selected')
+            self.report({'ERROR'}, 'This tool only closes one hole at a time! Clear Paint or make sure boundary is completley selected')
             bme.free()
             return {'CANCELLED'}
         

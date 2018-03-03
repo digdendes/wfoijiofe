@@ -1014,10 +1014,14 @@ class CurveDataManager(object):
         if three_d:
             bgl_utils.draw_3d_points(context,self.b_pts, self.point_size, (self.point_color[0],self.point_color[1],self.point_color[2],1))
             
-        bgl_utils.draw_3d_points(context,[self.b_pts[0]], self.point_size, color = (self.point_color[0],self.point_color[1],self.point_color[2],1))
+        #bgl_utils.draw_3d_points(context,[self.b_pts[0]], self.point_size, color = (self.point_color[0],self.point_color[1],self.point_color[2],1))
         
         if self.selected != -1:
-            bgl_utils.draw_3d_points(context,[self.b_pts[self.selected]], self.point_size, color = (self.active_color[0],self.active_color[1],self.active_color[2],1))
+            if self.selected == 0:
+                col = (.2, .2, .8, 1)
+            else:
+                col = (self.active_color[0],self.active_color[1],self.active_color[2],1)
+            bgl_utils.draw_3d_points(context,[self.b_pts[self.selected]], self.point_size, color = col)
                 
         if self.hovered[0] == 'POINT':
             
@@ -1025,7 +1029,12 @@ class CurveDataManager(object):
                 print('hovered is out of date')
                 
             else:
-                bgl_utils.draw_3d_points(context,[self.b_pts[self.hovered[1]]], self.point_size, color = (self.active_color[0],self.active_color[1],self.active_color[2],1))
+                if self.hovered[1] == 0:
+                    col = (.2, .2, .8, 1)
+                else:
+                    col = (self.active_color[0],self.active_color[1],self.active_color[2],1)
+                
+                bgl_utils.draw_3d_points(context,[self.b_pts[self.hovered[1]]], self.point_size, color = col)
      
         elif self.hovered[0] == 'EDGE':
             loc3d_reg2D = view3d_utils.location_3d_to_region_2d
@@ -1079,7 +1088,9 @@ class CurveDataManager(object):
         bgl.glLineWidth(1)
         bgl.glDepthRange(0.0, 1.0)
         
-        draw3d_points(context, self.b_pts, (self.point_color[0],self.point_color[1],self.point_color[2],1), self.point_size)
+        draw3d_points(context, [self.b_pts[0]], (.2,.2,.8,1), self.point_size)
+        if len(self.b_pts) > 1:
+            draw3d_points(context, self.b_pts[1:], (self.point_color[0],self.point_color[1],self.point_color[2],1), self.point_size)
         
         bgl.glLineWidth(1)
         bgl.glDepthRange(0.0, 1.0)
