@@ -410,6 +410,13 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
             col = row.column()
             
             col.operator("d3splint.generate_articulator", text = "Set Articulator Values")
+            op_props = col.operator("d3splint.splint_animate_articulator", text = "Generate Functional Surface")
+            op_props.mode = 'FULL_ENVELOPE'
+            op_props.relax_ramp_length = .8 
+            op_props.range_of_motion  =  7
+            op_props.use_relax = True
+            op_props.resolution = 20
+            
             
             col.operator("d3splint.splint_rim_from_dual_curves", text = "Add Anterior Ramp").ap_segment = 'ANTERIOR_ONLY'
             col.operator("d3splint.splint_join_rim", text = "Fuse Anterior Rim")
@@ -418,15 +425,10 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
                 col.operator("d3splint.anterior_deprogrammer_element", text = 'Anterior Deprogrammer Ramp')
                 col.operator("d3splint.splint_join_deprogrammer", text = 'Fuse Deprogrammer')
             
-            op_props = col.operator("d3splint.splint_animate_articulator", text = "Generate Functional Surface")
-            op_props.mode = 'FULL_ENVELOPE'
-            op_props.relax_ramp_length = .8 
-            op_props.range_of_motion  =  7
-            op_props.use_relax = True
-            op_props.resolution = 20
+            
             
             row = layout.row()
-            row.label('Finalize Occlusion')
+            row.label('Finalize Shape and Occlusion')
             row = layout.row()
             col = row.column()
             col.operator("d3splint.splint_subtract_surface", text = "Subtract Functional Surface")
