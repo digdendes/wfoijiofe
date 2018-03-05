@@ -857,21 +857,30 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
             
         self.splint.landmarks_set = True
         
-        if 'Articulator' not in context.scene.objects and self.splint.workflow_type != 'SIMPLE_SHELL':
+        if 'Articulator' not in context.scene.objects and self.splint.workflow_type not in {'SIMPLE_SHELL'}:#, 'DEPROGRAMMER'}:
             
             
+            if not ((self.splint.get_mandible() == "") or (self.splint.get_maxilla == "")):  #no point in articulating a single model
         
-            bpy.ops.d3splint.generate_articulator(
-                intra_condyle_width = settings.def_intra_condyle_width,
-                condyle_angle = settings.def_condyle_angle,
-                bennet_angle = settings.def_bennet_angle,
-                incisal_guidance = settings.def_incisal_guidance,
-                canine_guidance = settings.def_canine_guidance,
-                guidance_delay_ant = settings.def_guidance_delay_ant,
-                guidance_delay_lat = settings.def_guidance_delay_lat)
+                bpy.ops.d3splint.generate_articulator(
+                    intra_condyle_width = settings.def_intra_condyle_width,
+                    condyle_angle = settings.def_condyle_angle,
+                    bennet_angle = settings.def_bennet_angle,
+                    incisal_guidance = settings.def_incisal_guidance,
+                    canine_guidance = settings.def_canine_guidance,
+                    guidance_delay_ant = settings.def_guidance_delay_ant,
+                    guidance_delay_lat = settings.def_guidance_delay_lat)
             
             
-            bpy.ops.d3splint.generate_articulator('EXEC_DEFAULT')
+            else:
+                if self.splint.jaw_type == 'MAXILLA':
+                    if Mand_Model:
+                        Mand_Model.hide = True
+                    bpy.ops.view3d.viewnumpad(type = 'BOTTOM')
+                else: # self.splint.jaw_type == 'MANDIBLE':
+                    Model.hide = True
+                    bpy.ops.view3d.viewnumpad(type = 'TOP')
+                       
         tracking.trackUsage("D3Splint:SplintLandmarks",None)
 
 class D3SPLINT_OT_splint_paint_margin(bpy.types.Operator):
@@ -1402,6 +1411,11 @@ class D3SPLINT_OT_pick_opposing(bpy.types.Operator):
             
         n = context.scene.odc_splint_index
         odc_splint = context.scene.odc_splints[n]
+        
+        if self.ob.name == odc_splint.model:
+            self.report({'WARNING'}, 'Cant set the opposing as the master model')
+            return 'main'
+        
         odc_splint.opposing = self.ob.name
         odc_splint.opposing_set = True
          

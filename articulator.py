@@ -557,34 +557,7 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         
         bpy.ops.d3splint.enable_articulator_visualizations()
         
-        if not self.auto_mount:
-            return {'FINISHED'}
-        
-        n = context.scene.odc_splint_index
-        splint = context.scene.odc_splints[n]
-        
-        opposing = splint.get_mandible()
-        Model = bpy.data.objects.get(opposing)
-        splint.ops_string += 'GenArticulator:'
-        if not Model:
-            self.report({'WARNING'},"Please use mark opposing model and then mount")
-            return {'Finished'}
-        
-        Model.hide = False    
-        cons = Model.constraints.new(type = 'CHILD_OF')
-        cons.target = art_arm
-        cons.subtarget = 'Mandibular Bow'
-        
-        mx = art_arm.matrix_world * art_arm.pose.bones['Mandibular Bow'].matrix
-        cons.inverse_matrix = mx.inverted()
-        
-        #write the lower jaw BVH to cache for fast ray_casting
-        OppModel = bpy.data.objects.get(splint.opposing)
-        bme = bmesh.new()
-        bme.from_mesh(OppModel.data)    
-        bvh = BVHTree.FromBMesh(bme)
-        splint_cache.write_mesh_cache(OppModel, bme, bvh)
-        
+        #save settings to object
         art_arm['bennet_angle'] = self.bennet_angle
         art_arm['intra_condyle_width'] = self.intra_condyle_width
         art_arm['incisal_guidance'] = self.incisal_guidance 
@@ -592,6 +565,38 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         art_arm['condyle_angle'] =  self.condyle_angle
         art_arm['guidance_delay_ant'] = self.guidance_delay_ant
         art_arm['guidance_delay_lat'] = self.guidance_delay_ant
+        splint.ops_string += 'GenArticulator:'
+        
+        if not self.auto_mount:
+            return {'FINISHED'}
+        
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        
+        mandible = splint.get_mandible()
+        Mandible = bpy.data.objects.get(mandible)
+        
+
+        if Mandible:
+            
+        
+            Mandible.hide = False    
+            cons = Mandible.constraints.new(type = 'CHILD_OF')
+            cons.target = art_arm
+            cons.subtarget = 'Mandibular Bow'
+        
+            mx = art_arm.matrix_world * art_arm.pose.bones['Mandibular Bow'].matrix
+            cons.inverse_matrix = mx.inverted()
+        
+        #write the lower jaw BVH to cache for fast ray_casting
+        OppModel = bpy.data.objects.get(splint.opposing)
+        if OppModel != None:
+            bme = bmesh.new()
+            bme.from_mesh(OppModel.data)    
+            bvh = BVHTree.FromBMesh(bme)
+            splint_cache.write_mesh_cache(OppModel, bme, bvh)
+        
+        
             
         return {'FINISHED'}
 
