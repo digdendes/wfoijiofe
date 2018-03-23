@@ -292,22 +292,22 @@ class addon_updater_install_manually(bpy.types.Operator):
 		# if check hasn't happened, ie accidentally called this menu
 		# allow to check here
 
-		row = layout.row()
+		#row = layout.row()
 
-		if updater.update_link != None:
-			row.operator("wm.url_open",text="Direct download").url=\
-					updater.update_link
-		else:
-			row.operator("wm.url_open",text="(failed to retrieve)")
-			row.enabled = False
+		#if updater.update_link != None:
+		#	row.operator("wm.url_open",text="Direct download").url=\
+		#			updater.update_link
+		#else:
+		#	row.operator("wm.url_open",text="(failed to retrieve)")
+		#	row.enabled = False
 
-			if updater.website != None:
-				row = layout.row()
-				row.operator("wm.url_open",text="Open website").url=\
-						updater.website
-			else:
-				row = layout.row()
-				row.label("See source website to download the update")
+		#	if updater.website != None:
+		#		row = layout.row()
+		#		row.operator("wm.url_open",text="Open website").url=\
+		#				updater.website
+		#	else:
+		#		row = layout.row()
+		#		row.label("See source website to download the update")
 
 	def execute(self,context):
 
@@ -666,9 +666,9 @@ def update_notice_box_ui(self, context):
 	
 	if updater.manual_only==False:
 		col.label("Update ready!",icon="ERROR")
-		col.operator("wm.url_open", text="Open website").url = updater.website
+		#col.operator("wm.url_open", text="Open website").url = updater.website
 		#col.operator("wm.url_open",text="Direct download").url=updater.update_link
-		col.operator(addon_updater_install_manually.bl_idname, "Install manually")
+		#col.operator(addon_updater_install_manually.bl_idname, "Install manually")
 		col.operator(addon_updater_update_now.bl_idname,
 						"Update now", icon="LOOP_FORWARDS")
 	else:

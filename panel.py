@@ -280,19 +280,26 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         row = layout.row()
         row.label('Splint Boundaries')
         
-        if splint and splint.splint_outline: 
-            ico = 'CHECKBOX_HLT'
-        else:
-            ico = 'CHECKBOX_DEHLT'
-        row = layout.row()
-        row.operator("d3splint.draw_splint_margin", text = "Mark Splint Margin", icon = ico)
+        
+        if  not (prefs.use_alpha_tools and prefs.use_poly_cut):
+            if splint and splint.splint_outline: 
+                ico = 'CHECKBOX_HLT'
+            else:
+                ico = 'CHECKBOX_DEHLT'
+            row = layout.row()
+            row.operator("d3splint.draw_splint_margin", text = "Mark Splint Margin", icon = ico)
         
         if splint and splint.trim_upper: 
             ico = 'CHECKBOX_HLT'
         else:
             ico = 'CHECKBOX_DEHLT'
-        row = layout.row()
-        row.operator("d3splint.splint_model_trim", text = "Trim Model", icon = ico)
+            
+        if prefs.use_alpha_tools and prefs.use_poly_cut:
+            row = layout.row()
+            row.operator("d3splint.polytrim_splint_outline", text = "Mark and Trim Model", icon = ico)
+        else:
+            row = layout.row()
+            row.operator("d3splint.splint_model_trim", text = "Trim Model", icon = ico)
         
         #row = layout.row()
         #row.label('Paint Method')
@@ -594,6 +601,8 @@ class VIEW3D_PT_D3SplintModels(bpy.types.Panel):
         row = layout.row()
         col = row.column()      
         #col.operator("d3splint.simple_offset_surface", text = "Simple Offset")
+        col.operator("d3splint.splint_plane_cut", text = "Plane Cut Open Model").cut_method = "SURFACE"
+        col.operator("d3splint.splint_plane_cut", text = "Plane Cut Closed Model").cut_method = "SOLID"
         col.operator("d3splint.ragged_edges", text = "Remove Ragged Edges")
         col.operator("d3splint.simple_base", text = "Simple Base")            
         col.operator("d3splint.model_wall_thicken", text = 'Hollow Model')
@@ -611,7 +620,8 @@ class VIEW3D_PT_D3SplintModelText(bpy.types.Panel):
     def draw(self, context):
         sce = bpy.context.scene
         layout = self.layout
-        
+        prefs = get_settings()
+         
         row = layout.row()
         row.label(text = "Model Labelling")
         #row.operator("wm.url_open", text = "", icon="INFO").url = "https://github.com/patmo141/odc_public/wiki"
@@ -625,13 +635,20 @@ class VIEW3D_PT_D3SplintModelText(bpy.types.Panel):
             row = layout.row()
             row.label(text = "Please Select a Model")
             
-            row = layout.row()
-            row.label(text = 'SVG Image Workflow')
-            
+            #row = layout.row()
+            #row.label(text = 'SVG Image Workflow')
+        
         row = layout.row()
-        row.operator("d3splint.place_text_on_model", text = 'Place Text at Cursor')
+        row.label(text = 'Add Text to Object')
+        
         row = layout.row()
-        row.operator("d3tool.remesh_and_emboss_text", text = 'Emboss Text onto Object')
+        col = row.column()
+        col.prop(prefs, "d3_model_label", text = '')
+        col.prop(prefs, "d3_model_label_depth", text = 'Text Depth')
+        row = layout.row()
+        row.operator("d3splint.stencil_text", text = 'Stencil Text Label')
+        row = layout.row()
+        row.operator("d3tool.remesh_and_emboss_text", text = 'Emboss All Labels onto Object')
         
         
 def register():

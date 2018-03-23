@@ -69,6 +69,8 @@ def flood_selection_faces(bme, selected_faces, seed_face, expansion_mode = 'VERT
         -a set of BMFaces
     '''
     total_selection = set([f for f in selected_faces])
+    
+    
     levy = set([f for f in selected_faces])  #it's funny because it stops the flood :-)
 
     if expansion_mode == 'VERTEX':
@@ -78,9 +80,11 @@ def flood_selection_faces(bme, selected_faces, seed_face, expansion_mode = 'VERT
         
         
     if isinstance(seed_face, bmesh.types.BMFace):
+        total_selection.add(seed_face)
         new_faces = set(neighbor_fn(seed_face)) - levy
         
     elif isinstance(seed_face, list):
+        total_selection.update(seed_face)
         new_candidates = set()
         for f in seed_face:
             new_candidates.update(neighbor_fn(f))   

@@ -6,9 +6,105 @@ from mathutils import Matrix, Vector, Color
 import loops_tools
 from mathutils.bvhtree import BVHTree
 
+ 
+def face_neighbors(bmface):
+    neighbors = []
+    for ed in bmface.edges:
+        neighbors += [f for f in ed.link_faces if f != bmface]
+        
+    return neighbors
+
+def face_neighbors_by_vert(bmface):
+    neighbors = []
+    for v in bmface.verts:
+        neighbors += [f for f in v.link_faces if f != bmface]
+        
+    return neighbors 
+ 
+def flood_selection_faces(bme, selected_faces, seed_face, expansion_mode = 'VERTEX', max_iters = 1000):
+    '''
+    bme - bmesh
+    selected_faces - should create a closed face loop to contain "flooded" selection
+    if an empty set, selection will grow to non manifold boundaries
+    seed_face - a BMFace within/out selected_faces loop, or a LIST of faces
+    expansion_mode = 'VERTEX' or 'EDGE' will epxand based on edge.link_faces or v.link_faces
+    max_iters - maximum recursions to select_neightbors
     
+    returns:
+        -a set of BMFaces
+    '''
+    total_selection = set([f for f in selected_faces])
+    levy = set([f for f in selected_faces])  #it's funny because it stops the flood :-)
+
+    if expansion_mode == 'VERTEX':
+        neighbor_fn = face_neighbors_by_vert
+    else:
+        neighbor_fn = face_neighbors
+        
+        
+    if isinstance(seed_face, bmesh.types.BMFace):
+        new_faces = set(neighbor_fn(seed_face)) - levy
+        
+    elif isinstance(seed_face, list):
+        new_candidates = set()
+        for f in seed_face:
+            new_candidates.update(neighbor_fn(f))   
+        new_faces = new_candidates - total_selection
+        total_selection |= new_faces
     
+    elif isinstance(seed_face, set):
+        new_candidates = set()
+        for f in seed_face:
+            new_candidates.update(neighbor_fn(f))   
+        new_faces = new_candidates - total_selection
+        total_selection |= new_faces
+            
+    iters = 0
+    while iters < max_iters and new_faces:
+        iters += 1
+        new_candidates = set()
+        for f in new_faces:
+            new_candidates.update(neighbor_fn(f))
+            
+        new_faces = new_candidates - total_selection
+        
+        if new_faces:
+            total_selection |= new_faces    
+    if iters == max_iters:
+        print('max iterations reached')    
+    return total_selection   
     
+def bmesh_loose_parts(bme, selected_faces = None, max_iters = 100): 
+    '''
+    bme - BMesh
+    selected_faces = list, set or None
+    max_iters = maximum amount
+    
+    return - list of lists of BMFaces
+    '''
+    if selected_faces == None:
+        total_faces = set(bme.faces[:])
+    else:
+        if isinstance(selected_faces, list):
+            total_faces = set(selected_faces)
+        elif isinstance(selected_faces, set):
+            total_faces = selected_faces.copy()
+            
+        else:
+            #raise exception
+            return []
+        
+    islands = []
+    iters = 0
+    while len(total_faces) and iters < max_iters:
+        iters += 1
+        seed = total_faces.pop()
+        island = flood_selection_faces(bme, {}, seed, max_iters = 10000)
+        islands += [island]
+        total_faces.difference_update(island)
+    
+    return islands
+ 
 def bme_rip_vertex(bme, bmvert):
     
     fs = [f for f in bmvert.link_faces]

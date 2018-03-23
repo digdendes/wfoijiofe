@@ -5,8 +5,396 @@ Created on Nov 25, 2017
 '''
 import bpy
 from mathutils import Vector, Matrix, Quaternion
-from bmesh_fns import join_objects
+from bmesh_fns import join_objects, bmesh_loose_parts
+import bmesh
+import tracking
+from curve import LineDrawer, TextLineDrawer
+from textbox import TextBox
+from common_utilities import get_settings
+from bpy_extras.view3d_utils import location_3d_to_region_2d
+        
 
+t_topo = {}
+t_topo['FACES'] = 56
+t_topo['EDGES'] = 113
+t_topo['VERTS'] = 58
+        
+def stencil_text_callback(self, context):  
+    self.help_box.draw()
+    self.crv.draw(context)
+       
+    
+class D3SPLINT_OT_stencil_text(bpy.types.Operator):
+    """Click and draw a line to place text on the model"""
+    bl_idname = "d3splint.stencil_text"
+    bl_label = "Stencil Text"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    
+    @classmethod
+    def poll(cls,context):
+        c1 = context.object != None
+        c2 = context.object.type == 'MESH'
+        
+        return c1 and c2
+    
+    def modal_nav(self, event):
+        events_nav = {'MIDDLEMOUSE', 'WHEELINMOUSE','WHEELOUTMOUSE', 'WHEELUPMOUSE','WHEELDOWNMOUSE'} #TODO, better navigation, another tutorial
+        handle_nav = False
+        handle_nav |= event.type in events_nav
+
+        if handle_nav: 
+            return 'nav'
+        return ''
+    
+    def modal_main(self,context,event):
+        # general navigation
+        nmode = self.modal_nav(event)
+        if nmode != '':
+            return nmode  #stop here and tell parent modal to 'PASS_THROUGH'
+
+        if event.type == 'MOUSEMOVE':
+            
+            x, y = event.mouse_region_x, event.mouse_region_y
+            self.crv.hover(context, x, y)
+            if len(self.crv.screen_pts) != 2:
+                self.crv.calc_text_values()
+            return 'main'
+        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+            #if len(self.crv.screen_pts) >= 2: return 'main' #can't add more
+            
+            if len(self.crv.screen_pts) == 0:
+                context.window.cursor_modal_set('CROSSHAIR')
+            
+                help_txt = "Left Click again to place end of line"
+                self.help_box.raw_text = help_txt
+                self.help_box.format_and_wrap_text()
+                
+            if len(self.crv.screen_pts) == 1:
+                help_txt = "Left Click to end the text"
+                self.help_box.raw_text = help_txt
+                self.help_box.format_and_wrap_text()
+                
+                
+            x, y = event.mouse_region_x, event.mouse_region_y
+            
+            res = self.crv.click_add_point(context, x,y)
+            
+            
+            return 'main'
+        
+        if event.type == 'DEL' and event.value == 'PRESS':
+            self.crv.click_delete_point()
+            return 'main'
+        
+        if event.type == 'P'  and event.value == 'PRESS':
+            self.create_and_project_text(context)
+            return 'main'            
+        
+        if event.type == 'T'  and event.value == 'PRESS':
+            #context.window_manager.invoke_popup(self)
+            return 'main'
+               
+        if event.type == 'LEFT_ARROW' and event.value == 'PRESS':
+            print('reset old matrix')
+            v3d = context.space_data
+            rv3d = v3d.region_3d
+            rv3d.view_rotation = self.last_view_rot
+            rv3d.view_location = self.last_view_loc
+            rv3d.view_matrix = self.last_view_matrix
+            rv3d.view_distance = self.last_view_distance
+            
+            rv3d.update()
+            return 'main'
+        
+        if event.type == 'RET' and event.value == 'PRESS':
+            if len(self.crv.screen_pts) != 2:
+                return 'main'
+            
+            if not len(self.crv.projected_points):
+                self.create_and_project_text(context)
+            
+            self.finalize_text(context)    
+            self.finish(context)
+            return 'finish'
+            
+        elif event.type == 'ESC' and event.value == 'PRESS':
+            return 'cancel' 
+
+        return 'main'
+    
+        
+    def modal(self, context, event):
+        context.area.tag_redraw()
+        
+        FSM = {}    
+        FSM['main']    = self.modal_main
+        FSM['nav']     = self.modal_nav
+        
+        nmode = FSM[self.mode](context, event)
+        
+        if nmode == 'nav': 
+            return {'PASS_THROUGH'}
+        
+        if nmode in {'finish','cancel'}:
+            #clean up callbacks
+            self.bme.free()
+            context.window.cursor_modal_restore()
+            bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+            return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
+        
+        if nmode: self.mode = nmode
+        
+        return {'RUNNING_MODAL'}
+
+    def invoke(self,context, event):
+         
+        
+        label_message = get_settings().d3_model_label
+        Model = context.object
+        
+               
+        for ob in bpy.data.objects:
+            if "D3T Label" in ob.name: continue
+            ob.select = False
+            ob.hide = True
+        Model.select = True
+        Model.hide = False
+        
+        #bpy.ops.view3d.view_selected()
+        self.crv = TextLineDrawer(context,snap_type ='OBJECT', snap_object = Model, msg = label_message)
+        
+        
+        
+        
+        #TODO, tweak the modifier as needed
+        help_txt = "Click and Draw a line to place text"
+        self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
+        self.help_box.snap_to_corner(context, corner = [1,1])
+        
+        
+        
+        self.bme= bmesh.new()
+        self.bme.from_mesh(Model.data)
+        self.ob = Model
+        self.cursor_updated = True
+        
+        #get new text data and object in the scene
+        self.txt_crv = bpy.data.curves.new("D3T Label", type = 'FONT')
+        self.txt_crv_ob = bpy.data.objects.new("D3T Label", self.txt_crv)
+        context.scene.objects.link(self.txt_crv_ob)
+        context.scene.update()
+        
+        self.txt_crv_ob.hide = True
+            
+        self.txt_me_data = self.txt_crv_ob.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')    
+        self.txt_me_ob = bpy.data.objects.new("D3T Label Mesh", self.txt_me_data)
+        context.scene.objects.link(self.txt_me_ob)
+          
+        self.txt_crv.align_x = 'LEFT'
+        self.txt_crv.align_y = 'BOTTOM'    
+        self.txt_crv.body = label_message  #TODO hook up to property
+        
+        
+        context.space_data.show_manipulator = False
+        
+        self.mode = 'main'
+        self._handle = bpy.types.SpaceView3D.draw_handler_add(stencil_text_callback, (self, context), 'WINDOW', 'POST_PIXEL')
+        context.window_manager.modal_handler_add(self) 
+        
+        v3d = context.space_data
+        rv3d = v3d.region_3d
+        
+        self.last_view_rot = rv3d.view_rotation
+        self.last_view_loc = rv3d.view_location
+        self.last_view_matrix = rv3d.view_matrix.copy()
+        self.last_view_distance = rv3d.view_distance
+        
+        return {'RUNNING_MODAL'}
+
+    def create_and_project_text(self, context):
+        
+        self.crv.project_line(context, res = 20)
+        
+        if len(self.crv.projected_points) == 0:
+            return
+        
+        v3d = context.space_data
+        rv3d = v3d.region_3d
+        self.last_view_rot = rv3d.view_rotation
+        self.last_view_loc = rv3d.view_location
+        self.last_view_matrix = rv3d.view_matrix.copy()
+        self.last_view_distance = rv3d.view_distance
+            
+        txt_ob = self.txt_crv_ob
+        txt_ob.matrix_world = Matrix.Identity(4)
+        
+        bbox = txt_ob.bound_box[:]
+        bbox_vs = []
+        for v in bbox:
+            bbox_vs += [Vector(v)]
+        
+        v_max_x= max(bbox_vs, key = lambda x: x[0])
+        v_min_x = min(bbox_vs, key = lambda x: x[0])
+        
+        X_dim = v_max_x[0] - v_min_x[0]
+        print("The text object has %f length" % X_dim)
+        
+        #really need a path and bezier class for this kind of stuff
+        proj_path_len = 0
+        s_v_map = {}
+        s_v_map[0.0] = 0
+        for i in range(0,19):
+            seg = self.crv.projected_points[i + 1] - self.crv.projected_points[i]
+            proj_path_len += seg.length
+            s_v_map[proj_path_len] = i+1
+        
+        
+        def find_path_len_v(s_len):
+            '''
+            Get the interpolated position along a polypath
+            at a given length along the path.
+            '''
+            p_len = 0
+            
+            for i in range(0, 19):
+                seg = self.crv.projected_points[i + 1] - self.crv.projected_points[i]
+                p_len += seg.length
+                
+                if p_len > s_len:
+                    delta = p_len - s_len
+                    vec = seg.normalized()
+                    
+                    v = self.crv.projected_points[i] + delta * vec
+        
+                    return v, vec
+            return self.crv.projected_points[i+1], seg.normalized()
+        
+        #place the text object on the path
+        s_factor = proj_path_len/X_dim
+        S = Matrix.Scale(s_factor, 4)
+        loc = self.crv.projected_points[0]
+        T = Matrix.Translation(loc)
+        R = self.crv.calc_matrix(context)
+        
+        
+        txt_ob.matrix_world = T * R * S
+            
+        me = txt_ob.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+        
+        bme = bmesh.new()
+        bme.from_mesh(me)
+        bme.verts.ensure_lookup_table()
+        bme.edges.ensure_lookup_table()
+        bme.faces.ensure_lookup_table()
+        
+        #bullshit it doesn't work
+        #print('dissolving degeneration')
+        #ret = bmesh.ops.dissolve_degenerate(bme, dist = .001, edges = bme.edges[:])
+        #print(ret)
+        
+        print('beauty faces')
+        bmesh.ops.beautify_fill(bme, faces = bme.faces[:], edges = bme.edges[:])
+        
+        
+        characters = bmesh_loose_parts(bme, selected_faces = None, max_iters = 200)
+        
+        #parameterize each character based on it's center of mass in the x direction
+        #eg, it's length down the curve path
+        
+        ts = []
+        path_pts = []
+        for fs in characters:
+            vs = set()
+            com = Vector((0,0,0))
+            for f in fs:
+                vs.update(f.verts[:])
+            for v in vs:
+                com += v.co
+            com *= 1/len(vs)
+            
+            world_com = T * R * S * com
+            point_2d = location_3d_to_region_2d(context.region, context.space_data.region_3d, world_com)
+            loc, no = self.crv.ray_cast_pt(context, point_2d)
+            
+            world_projected_com = self.crv.snap_ob.matrix_world * loc
+            
+            #self.crv.projected_points += [world_projected_com]
+            
+            world_delta = world_projected_com - world_com
+            
+            local_delta = (R * S).inverted().to_3x3() * world_delta
+            
+            
+            ts += [com[0]/X_dim]
+            
+            path_pt, path_tan = find_path_len_v(com[0]/X_dim * proj_path_len)
+            
+            local_tan = (R * S).inverted().to_3x3() * path_tan
+            
+            angle_dif = Vector((1,0,0)).angle(local_tan)
+            
+            if local_tan.cross(Vector((1,0,0))).dot(Vector((0,1,0))) < 0:
+                angle_dif *= -1
+                
+                
+                
+            r_prime = Matrix.Rotation(-angle_dif, 4, 'Y')
+            print('The angle difference is %f' % angle_dif)
+            #translate to center
+            for v in vs:
+                v.co -= com
+                
+                v.co = r_prime * v.co
+                
+                v.co += com + local_delta    
+            
+            
+            
+
+        #text mesh
+        
+        bme.to_mesh(me)
+        self.txt_me_ob.data = me
+        
+        if self.txt_me_data != None:
+            self.txt_me_data.user_clear()
+            bpy.data.meshes.remove(self.txt_me_data)
+            
+        self.txt_me_data = me
+        
+        
+        self.txt_me_ob.matrix_world = T * R * S
+        bme.free()
+        
+        if 'Solidify' not in self.txt_me_ob.modifiers:
+            mod = self.txt_me_ob.modifiers.new('Solidify',type = 'SOLIDIFY')
+            mod.offset = 0
+        
+        else:
+            mod = self.txt_me_ob.modifiers.get('Solidify')
+            
+        mod.thickness = .5 * 1/s_factor #TODO put as setting
+        
+        return True
+    
+    
+    def finalize_text(self,context):
+        
+        context.scene.objects.unlink(self.txt_crv_ob)
+        bpy.data.objects.remove(self.txt_crv_ob)
+        bpy.data.curves.remove(self.txt_crv)
+        
+        
+        return
+        
+        
+            
+    def finish(self, context):
+        #settings = get_settings()
+        context.window.cursor_modal_restore()
+        tracking.trackUsage("D3Splint:StencilText",None)
+        
 
 class D3Splint_place_text_on_model(bpy.types.Operator):
     """Place Custom Text at 3D Cursor on template Box"""
@@ -153,7 +541,42 @@ class D3Splint_place_text_on_model(bpy.types.Operator):
         
         
         txt_ob.matrix_world = T * R * S
+        text_mx = T * R * S
         
+        me = txt_ob.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+        bme = bmesh.new()
+        bme.from_mesh(me)
+        bme.verts.ensure_lookup_table()
+        bme.edges.ensure_lookup_table()
+        bme.faces.ensure_lookup_table()
+        
+        characters = bmesh_loose_parts(bme, selected_faces = None, max_iters = 200)
+        
+        #snap each letter individually
+        for fs in characters:
+            vs = set()
+            com = Vector((0,0,0))
+            for f in fs:
+                vs.update(f.verts[:])
+            for v in vs:
+                com += v.co
+            com *= 1/len(vs)
+            
+            #TODO Ray Cast wit view direction
+            world_com = text_mx * com
+            ok, local_com, no, ind = t_base.closest_point_on_mesh(imx * world_com) 
+            world_snap = mx * local_com
+            delta = text_mx.inverted() * world_snap - com
+            
+            for v in vs:
+                v.co += delta
+        
+        #text mesh
+        bme.to_mesh(me)
+        text_me_ob = bpy.data.objects.new('Emboss Mesh', me)
+        context.scene.objects.link(text_me_ob)
+        text_me_ob.matrix_world = text_mx
+            
         if new_mods:
             mod = txt_ob.modifiers.new('Shrinkwrap', type = 'SHRINKWRAP')
             mod.wrap_method = 'PROJECT'
@@ -183,93 +606,104 @@ class D3Splint_place_text_on_model(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class D3Splint_emboss_text_on_model(bpy.types.Operator):
+class D3SPLINT_OT_emboss_text_on_model(bpy.types.Operator):
     """Joins all emboss text label objects and boolean add/subtraction from the object"""
     bl_idname = "d3tool.remesh_and_emboss_text"
     bl_label = "Emboss Text Into Object"
     bl_options = {'REGISTER', 'UNDO'}
     
-    positive = bpy.props.BoolProperty(default = True, description = 'Add text vs subtract text')
     
+    positive = bpy.props.BoolProperty(default = True, description = 'Add text vs subtract text')
+    remesh = bpy.props.BoolProperty(default = True, description = 'Remesh text vs subtract text')
+    solver = bpy.props.EnumProperty(description="Boolean Method", items=(("BMESH", "Bmesh", "Faster/More Errors"),("CARVE", "Carve", "Slower/Less Errors")), default = "CARVE")
     @classmethod
     def poll(cls, context):
+        if not context.object: return False
         
-        return True
+        c1 = "D3T Label" not in context.object.name
+        c2 = context.object.type == 'MESH'
+        
+        return c1 and c2
     
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
     
     
+    def draw(self,contxt):
+        layout = self.layout
+        row = layout.row()
+        row.prop(self, "positive")
+        row = layout.row()
+        row.prop(self, "remesh")
+        row = layout.row()
+        row.prop(self, "solver")
+        
     def execute(self, context):
         
 
-        labels = [ob for ob in bpy.data.objects if ob.type == 'FONT' and 'Emboss' in ob.name]
+        labels = [ob for ob in bpy.data.objects if 'D3T Label Mesh' in ob.name]
         
         if len(labels) == 0:
-            self.report({'ERROR'}, 'Need to add Emboss like a Boss text')
+            self.report({'ERROR'}, 'Need to add Stencil Text Labels')
             return {'CACELLED'}
         
-        ob0 = labels[0]
-        
-        if len(ob0.modifiers) == 0 and 'Shrinkwrap' not in ob0.modifiers:
-            self.report({'WARNING'}, 'No idea which model to emboss upon, choosing context')
-            
-            if not context.object:
-                self.report({'ERROR'}, 'No idea what object and no selected object')
-                return {'CANCELLED'}
-            elif context.object.type != 'MESH':
-                self.report({'ERROR'}, 'No idea what object and selected object is not MESH type')
-                return {'CANCELLED'}
-            
-            model = context.object
-        else:
-            model = ob0.modifiers.get('Shrinkwrap').target
+        model = context.object
             
         all_obs = [ob.name for ob in bpy.data.objects]
         
-        bpy.ops.object.select_all(action = 'DESELECT')
-        for ob in labels:
-            
+        if self.remesh:
             bpy.ops.object.select_all(action = 'DESELECT')
-            ob.select = True
-            ob.hide = False
-            context.scene.objects.active = ob
+            for ob in labels:
+                ob.select = True
+                ob.hide = False
+                context.scene.objects.active = ob
+                bpy.ops.object.mode_set(mode = 'EDIT')
+                bpy.ops.mesh.select_all(action = 'SELECT')
+                #bpy.ops.mesh.dissolve_degenerate()
+                bpy.ops.mesh.separate(type = 'LOOSE')
+                bpy.ops.object.mode_set(mode = 'OBJECT')
+                bpy.ops.object.origin_set(type = 'ORIGIN_GEOMETRY', center = 'BOUNDS')
+                
+            labels_new = [ob for ob in bpy.data.objects if ob.name not in all_obs]    
             
-            old_obs = [eob.name for eob in bpy.data.objects]
+            for ob in labels_new + labels:
+                context.scene.objects.active = ob
+                ob.select = True
+                bpy.ops.object.mode_set(mode = 'EDIT')
+                bpy.ops.mesh.select_all(action = 'SELECT')
+                bpy.ops.mesh.dissolve_degenerate()
+                bpy.ops.object.mode_set(mode = 'OBJECT')
+                                        
+                                        
+                mod = ob.modifiers.new('Remesh', type = 'REMESH')
+                mod.octree_depth = 5
+                ob.update_tag()
             
-            bpy.ops.object.convert(target='MESH', keep_original=True)
-            ob.select = False
+            context.scene.update()
+            label_final = join_objects(labels_new + labels, name = 'Text Labels')
             
-            new_ob = [eob for eob in bpy.data.objects if eob.name not in old_obs][0]
+            for ob in labels_new + labels:
+                bpy.ops.object.select_all(action = 'DESELECT')
+                context.scene.objects.unlink(ob)
+                me = ob.data
+                bpy.data.objects.remove(ob)
+                bpy.data.meshes.remove(me)
+            context.scene.objects.link(label_final)
+        else:
+            if len(labels) > 1:
+                label_final = join_objects(labels_new, name = 'Text Labels')
+                for ob in labels_new:
+                    bpy.ops.object.select_all(action = 'DESELECT')
+                    context.scene.objects.unlink(ob)
+                    me = ob.data
+                    bpy.data.objects.remove(ob)
+                    bpy.data.meshes.remove(me)
+                
+                context.scene.objects.link(label_final)
+                
+            else:
+                label_final = labels[0]
             
-            new_ob.select = True
-            context.scene.objects.active = new_ob
-            bpy.ops.object.mode_set(mode = 'EDIT')
-            bpy.ops.mesh.select_all(action = 'SELECT')
-            bpy.ops.mesh.remove_doubles()
-            bpy.ops.mesh.separate(type = 'LOOSE')
-            bpy.ops.object.mode_set(mode = 'OBJECT')
-            bpy.ops.object.origin_set(type = 'ORIGIN_GEOMETRY', center = 'BOUNDS')
-            
-    
-        labels_new = [ob for ob in bpy.data.objects if ob.name not in all_obs]    
-        for ob in labels_new:
-            mod = ob.modifiers.new('Remesh', type = 'REMESH')
-            mod.octree_depth = 5
-            ob.update_tag()
-        
-        context.scene.update()
-        label_final = join_objects(labels_new, name = 'Text Labels')
-        
-        for ob in labels_new:
-            bpy.ops.object.select_all(action = 'DESELECT')
-            context.scene.objects.unlink(ob)
-            me = ob.data
-            bpy.data.objects.remove(ob)
-            bpy.data.meshes.remove(me)
-             
-        context.scene.objects.link(label_final)
-        
         label_final.select = True
         context.scene.objects.active = label_final
         bpy.ops.object.mode_set(mode = 'EDIT')
@@ -291,8 +725,10 @@ class D3Splint_emboss_text_on_model(bpy.types.Operator):
     
 def register():
     bpy.utils.register_class(D3Splint_place_text_on_model)
-    bpy.utils.register_class(D3Splint_emboss_text_on_model)
+    bpy.utils.register_class(D3SPLINT_OT_emboss_text_on_model)
+    bpy.utils.register_class(D3SPLINT_OT_stencil_text)
    
 def unregister():
     bpy.utils.unregister_class(D3Splint_place_text_on_model)
-    bpy.utils.unregister_class(D3Splint_emboss_text_on_model)
+    bpy.utils.unregister_class(D3SPLINT_OT_emboss_text_on_model)
+    bpy.utils.register_class(D3SPLINT_OT_stencil_text)

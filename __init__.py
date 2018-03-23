@@ -170,6 +170,10 @@ class D3SplintAddonPreferences(AddonPreferences):
     def_blockout_radius = FloatProperty(default = .05 , min = .01, max = .12, description = 'Allowable Undercut, larger numbers means more retention', name = 'Undercut Strength')
     
     
+    ##### Text Stencilling ##########
+    #this value used to seed the modal operator
+    d3_model_label = StringProperty(name = 'Text Label', default = 'Model Label')
+    d3_model_label_depth = FloatProperty(name = 'Emboss Depth', min = .2, max = 4, default = .5)
     ##########################################
     ###### Articulator Defaults   ############
     ##########################################
@@ -192,6 +196,24 @@ class D3SplintAddonPreferences(AddonPreferences):
 
     def_condylar_resolution = IntProperty(name = "Condyle Resolution", default = 20, min = 5, max = 40, description = "Number of steps to interpolate each condylar position, higher = longer simulation times")
     def_range_of_motion = FloatProperty(name = "Condylar Range of Motion", default = 6, min = 3, max = 8, description = "Distance each condylar path is simulated")
+    
+    
+    ##########################################
+    ###### Alpha Experimental Properties ######
+    ##########################################
+    
+    use_alpha_tools = bpy.props.BoolProperty(
+        name = "Use Alpha Tools",
+        description = "If enabled, display alpha experimental options",
+        default = False,
+        )
+    
+    use_poly_cut = bpy.props.BoolProperty(
+        name = "Use Poly Cut",
+        description = "If enabled, use the experimental poly knife to mark splint margin",
+        default = False,
+        )
+    
     
     ##########################################
     ###### Updater Properties     ############
@@ -338,6 +360,20 @@ class D3SplintAddonPreferences(AddonPreferences):
         row.prop(self, "def_condylar_resolution")
         row.prop(self, "def_range_of_motion")
        
+
+        #Experiental Settings
+        row = layout.row()
+        row.label('Alpha Features and Experiments')
+        row = layout.row()
+        row.label('Only use this if not in a time crung or willing to crash Blender')
+        
+        row = layout.row()
+        row.prop(self, "use_alpha_tools")
+        
+        if self.use_alpha_tools:
+            row = layout.row()
+            row.prop(self, "use_poly_cut")
+    
         addon_updater_ops.update_settings_ui(self, context)
         
 class D3Splint_OT_general_preferences(Operator):
@@ -435,8 +471,10 @@ def register():
     
     import d3classes, odcutils, crown, margin, bridge, splint, implant, panel, help, flexible_tooth, bracket_placement, denture_base, occlusion, ortho, curve_partition, articulator, splint_landmark_fns # , odcmenus, bgl_utils
     import healing_abutment, model_work, tracking, import_export, splint_booleans, splint_face_bow
-    import meta_modelling, model_labels, splint_occlusal_surfaces, incremental_save, articulator_handlers
+    import meta_modelling, model_labels, splint_occlusal_surfaces, incremental_save, articulator_handlers, plane_cut
     
+    from .cut_mesh.op_hole_filler import hole_filler_modal
+    from .cut_mesh.op_splint_outline import splint_outline_modal
     #register them
     d3classes.register()
     odcutils.register()
@@ -453,6 +491,9 @@ def register():
     splint_face_bow.register()
     meta_modelling.register()
     model_labels.register()
+    plane_cut.register()
+    hole_filler_modal.register()
+    splint_outline_modal.register()
     splint_occlusal_surfaces.register()
     incremental_save.register()
     articulator_handlers.register()
