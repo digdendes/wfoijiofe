@@ -590,24 +590,51 @@ class VIEW3D_PT_D3SplintModels(bpy.types.Panel):
         col.operator("d3splint.delete_sculpt_mask", text = "Delete Painted") #defaults to .value = 0
         col.operator("d3splint.close_paint_hole", text = 'Close Paint Hole')
         col.operator("d3splint.delete_sculpt_mask_inverse", text = "Keep Only Painted")
-        col.operator("d3splint.delete_islands", text = "Delete Small Parts")
-        
-        
+
         if context.mode == 'SCULPT':
             col.operator("object.mode_set", text = 'Finish Sculpt/Paint')
         
         row = layout.row()
-        row.label('Object Mode Operators')
+        row.label('Cleaning Operators')
         row = layout.row()
         col = row.column()      
         #col.operator("d3splint.simple_offset_surface", text = "Simple Offset")
-        col.operator("d3splint.splint_plane_cut", text = "Plane Cut Open Model").cut_method = "SURFACE"
-        col.operator("d3splint.splint_plane_cut", text = "Plane Cut Closed Model").cut_method = "SOLID"
+        col.operator("d3model.mesh_repair", text = "Fix Holes and Islands")
+        col.operator("d3splint.delete_islands", text = "Delete Loose Parts")
         col.operator("d3splint.ragged_edges", text = "Remove Ragged Edges")
+        
+        row = layout.row()
+        row.label('Open Model Cutting')
+        row = layout.row()
+        col = row.column()
+        col.operator("d3splint.splint_plane_cut", text = "Plane Cut Open Model").cut_method = "SURFACE"
+        
+        row = layout.row()
+        row.label('Close Model Cutting')
+        row = layout.row()
+        
+        col = row.column()
+        col.operator("d3splint.splint_plane_cut", text = "Plane Cut Closed Model").cut_method = "SOLID"
+        
+        col.operator("d3splint.splint_pause_plane_cuts", text = "De-Activate Cuts")
+        col.operator("d3splint.splint_activate_plane_cuts", text = "Re-Activate Cuts")
+        col.operator("d3splint.splint_finalize_plane_cuts", text = "Apply All Cuts")
+        
+        row = layout.row()
+        row.label('Base and Thickness Operators')
+        row = layout.row()
+        col = row.column()
         col.operator("d3splint.simple_base", text = "Simple Base")            
-        col.operator("d3splint.model_wall_thicken", text = 'Hollow Model')
-        col.operator("d3splint.model_wall_thicken2", text = 'Hollow Model2')
+        #col.operator("d3splint.model_wall_thicken", text = 'Hollow Model')
+        col.operator("d3splint.model_wall_thicken2", text = 'Hollow Model')
         col.operator("d3tool.model_vertical_base", text = 'Vertical Base')
+        
+        row = layout.row()
+        row.label('Batch Processing')
+        row = layout.row()
+        col = row.column()
+        
+        col.operator("d3splint.batch_process_plane_cuts", text = 'Hollow Model')
         
         
 class VIEW3D_PT_D3SplintModelText(bpy.types.Panel):

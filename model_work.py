@@ -102,11 +102,11 @@ def calc_angle(v):
     if len(eds_all) == 2:
         if any([ed.other_vert(va) == vb for ed in vb.link_edges]):
             #already a tri over here
-            print('va and vb connect')
+            #print('va and vb connect')
             return 2 * math.pi, None, None
     
         elif any([f in eds_non_man[0].link_faces for f in eds_non_man[1].link_faces]):
-            print('va and vb share face')
+            #print('va and vb share face')
             return 2 * math.pi, None, None
         
         else: #completely regular situation
@@ -858,8 +858,20 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
             bad_triangles = []
             for f in perim_faces:
                 check = [ed for ed in f.edges if ed in non_man_eds]
-                if len(check) == 3 or len(check) ==2:
+                if len(check) == 3:
                     bad_triangles.append(f)
+                elif len(check) ==2:
+                    for v in f.verts:
+                        if v in check[0].verts and v in check[1].verts:
+                            veca = check[0].other_vert(v).co - v.co
+                            vecb = check[1].other_vert(v).co - v.co
+                            
+                            
+                            if veca.angle(vecb) < 50 * math.pi/180:
+                                print(veca.angle(vecb))
+                                bad_triangles.append(f)
+                        
+                    
             
             if len(bad_triangles):
                 bad_verts = set()
@@ -998,7 +1010,7 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         start = time.time()
         clean_iterations = 0
         test = -1
-        while clean_iterations < 20 and test == -1:
+        while clean_iterations < 10 and test == -1:
             print('Cleaning iteration %i' % clean_iterations)
             clean_iterations += 1
             test = clean_geom(bme) 
@@ -1034,6 +1046,11 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         
         
         non_man_inds = [ed.index for ed in non_man_eds]
+        
+        if len(non_man_inds) == 0:
+            print('no perimeter loop')
+            bme.free()
+            return
         loops = edge_loops_from_bmedges(bme, non_man_inds)
         
         
@@ -3107,7 +3124,7 @@ class D3Tool_OT_model_vertical_base(bpy.types.Operator):
 
 class D3PLINT_OT_base_and_hollow(bpy.types.Operator):
     """Base the models selected and hollow them out """
-    bl_idname = "d3splint.simple_base"
+    bl_idname = "d3splint.simple_base_and_hollow"
     bl_label = "Model Base and Hollow"
     bl_options = {'REGISTER', 'UNDO'}
     

@@ -1113,9 +1113,12 @@ class LineDrawer(object):
         self.snap_type = snap_type  #'SCENE' 'OBJECT'
         self.snap_ob = snap_object
         
+        self.over_object = False  #determines if mouse is on the object or not
         
         self.selected = -1
         self.hovered = [None, -1]
+        
+        self.box_coords = []
         
         self.grab_undo_loc = None
         self.mouse = (None, None)
@@ -1198,96 +1201,6 @@ class LineDrawer(object):
             self.screen_pts.append(Vector((x,y)))
             return 'ADD POINT'
         
-        '''
-        view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
-        ray_origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, coord)
-        ray_target = ray_origin + (view_vector * 1000)
-        
-        crv_mx = self.crv_obj.matrix_world
-        i_crv_mx = crv_mx.inverted()  
-        
-        
-        hit = False
-        if self.snap_type == 'SCENE':
-            mx = Matrix.Identity(4)  #loc is given in world loc...no need to multiply by obj matrix
-            if bversion() < '002.077.000':
-                res, obj, omx, loc, no = context.scene.ray_cast(ray_origin, ray_target)  #changed in 2.77
-            else:
-                res, loc, no, ind, obj, omx = context.scene.ray_cast(ray_origin, view_vector)
-                
-            hit = res
-            if not hit:
-                #cast the ray into a plane a
-                #perpendicular to the view dir, at the last bez point of the curve
-            
-                view_direction = rv3d.view_rotation * Vector((0,0,-1))
-            
-                if len(self.b_pts):
-                    if self.hovered[0] == 'EDGE':
-                        plane_pt = self.b_pts[self.hovered[1]]
-                    else:
-                        plane_pt = self.b_pts[-1]
-                else:
-                    plane_pt = context.scene.cursor_location
-                loc = intersect_line_plane(ray_origin, ray_target,plane_pt, view_direction)
-                hit = True
-        
-        elif self.snap_type == 'OBJECT':
-            mx = self.snap_ob.matrix_world
-            imx = mx.inverted()
-            
-            if bversion() < '002.077.000':
-                loc, no, face_ind = self.snap_ob.ray_cast(imx * ray_origin, imx * ray_target)
-                if face_ind != -1:
-                    hit = True
-            else:
-                ok, loc, no, face_ind = self.snap_ob.ray_cast(imx * ray_origin, imx * ray_target - imx*ray_origin)
-                if ok:
-                    hit = True
-            
-            if face_ind != -1:
-                hit = True
-        
-        if not hit: 
-            self.selected = -1
-            return
-        
-        if self.hovered[0] == None:  #adding in a new point
-            if self.started:
-                self.crv_data.splines[0].bezier_points.add(count = 1)
-                bp = self.crv_data.splines[0].bezier_points[-1]
-                bp.handle_right_type = 'AUTO'
-                bp.handle_left_type = 'AUTO'
-                bp.co =i_crv_mx* mx * loc
-                self.b_pts.append(mx * loc)
-                
-            else:
-                print('adding a new point!')
-                self.started = True
-                delta = i_crv_mx *mx * loc - self.crv_data.splines[0].bezier_points[0].co
-                bp = self.crv_data.splines[0].bezier_points[0]
-                bp.co += delta
-                bp.handle_left += delta
-                bp.handle_right += delta  
-                self.b_pts.append(mx * loc) 
-          
-        if self.hovered[0] == 'POINT':
-            self.selected = self.hovered[1]
-            if self.hovered[1] == 0:  #clicked on first bpt, close loop
-                
-                print('The first point was clicked')
-                print(self.cyclic)
-                if self.cyclic in {'MANDATORY','OPTIONAL'}:
-                    self.crv_data.splines[0].use_cyclic_u = self.crv_data.splines[0].use_cyclic_u == False
-            return
-
-            
-        elif self.hovered[0] == 'EDGE':  #cut in a new point
-            self.b_pts.insert(self.hovered[1]+1, mx * loc)
-            self.update_blender_curve_data()   
-            return
-        '''
-        
     def click_delete_point(self, mode = 'mouse'):
         if mode == 'mouse':
             if not self.hovered[0] == 'POINT': return
@@ -1344,7 +1257,12 @@ class LineDrawer(object):
                 self.update_blender_curve_data()
                           
     
-    def calc_matrix(self, context):
+    def calc_matrix(self, context, depth = 'SURFACE'):
+        '''
+        -if depth is Surface, it will ray_cast the object and place it there
+        -if depth is 'BOUNDS' it will place the matrix with translation at the
+        midpoint of the user drawn line at the depth of the bbox center
+        '''
         region = context.region
         rv3d = context.region_data
         
@@ -1384,28 +1302,35 @@ class LineDrawer(object):
         R[0][0], R[0][1], R[0][2]  = X[0] ,Y[0],  Z[0]
         R[1][0], R[1][1], R[1][2]  = X[1], Y[1],  Z[1]
         R[2][0] ,R[2][1], R[2][2]  = X[2], Y[2],  Z[2]
+        R = R.to_4x4()
+        
+        if depth == 'SURFACE':
+            view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, mid)
+            ray_origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, mid)
+            ray_target = ray_origin + (view_vector * 1000)
+        
+            mx = self.snap_ob.matrix_world
+            imx = mx.inverted()
         
         
-        view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, mid)
-        ray_origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, mid)
-        ray_target = ray_origin + (view_vector * 1000)
-        
-        mx = self.snap_ob.matrix_world
-        imx = mx.inverted()
-        
-        if bversion() < '002.077.000':
-            loc, no, face_ind = self.snap_ob.ray_cast(imx * ray_origin, imx * ray_target)
-            if face_ind == -1: 
-                return R.to_4x4()
-                pass
-        else:
             res, loc, no, face_ind = self.snap_ob.ray_cast(imx * ray_origin, imx * ray_target - imx * ray_origin)
             if not res:
-                return R.to_4x4()
-                pass
                 
-        T = Matrix.Translation(mx * loc)  
-        return T * R.to_4x4()
+                local_bbox_center = 0.125 * sum((Vector(b) for b in self.snap_ob.bound_box), Vector())
+                global_bbox_center = self.snap_ob.matrix_world * local_bbox_center
+                v_3d = view3d_utils.region_2d_to_location_3d(region, rv3d, mid, global_bbox_center)
+                T = Matrix.Translation(v_3d)
+                
+            else:
+                T = Matrix.Translation(mx * loc)      
+        else:
+            local_bbox_center = 0.125 * sum((Vector(b) for b in self.snap_ob.bound_box), Vector())
+            global_bbox_center = self.snap_ob.matrix_world * local_bbox_center
+            v_3d = view3d_utils.region_2d_to_location_3d(region, rv3d, mid, global_bbox_center)
+            T = Matrix.Translation(v_3d)
+                   
+        
+        return T * R
 
     def calc_line_limits(self, context):
         region = context.region
@@ -1414,39 +1339,51 @@ class LineDrawer(object):
         if len(self.screen_pts) != 2: return None
         
         mouse = self.mouse
-        mid = .5 * (self.screen_pts[0] + self.screen_pts[1])
-        #Z = view3d_utils.region_2d_to_vector_3d(region, rv3d, mid)
-        
-        mouse_v = mouse - mid
+        mid_screen = .5 * (self.screen_pts[0] + self.screen_pts[1])
+        mouse_v = mouse - mid_screen
 
         
+        #x direction of the user drawn line
+        user_x_screen = self.screen_pts[0] - self.screen_pts[1]
+        user_x_screen.normalize()
+        
+        #y direction of the user drawn line
+        user_y_screen = mouse_v - mouse_v.dot(user_x_screen) * user_x_screen
+        
+        
+        #map the screen x and y to world axes
         x_view_world = rv3d.view_rotation * Vector((1,0,0))
         y_view_world = rv3d.view_rotation * Vector((0,1,0))
         
-        user_x = self.screen_pts[0] - self.screen_pts[1]
-        user_x.normalize()
-        
         #the world vector of the line on the screen
-        user_world_x = user_x[0] * x_view_world + user_x[1] * y_view_world
+        user_world_x = user_x_screen[0] * x_view_world + user_x_screen[1] * y_view_world
         user_world_x.normalize()
         
        
         
         mouse_world = mouse_v[0] * x_view_world + mouse_v[1] * y_view_world
-        mouse_world.normalize()
+        #mouse_world.normalize()
         
         
-        user_world_y = mouse_world - mouse_world.dot(user_world_x) * user_world_x
+        
+        #user_world_y = mouse_world - mouse_world.dot(user_world_x) * user_world_x
+        user_world_y = user_y_screen[0] * x_view_world + user_y_screen[1] * y_view_world
         
         
-        #orthographic view depth doesn't matter
+        
+        #orthographic view is enforced, so depth doesn't matter
+        world_mid = view3d_utils.region_2d_to_location_3d(region, rv3d, mid_screen, Vector((0,0,0)))
         world_0 = view3d_utils.region_2d_to_location_3d(region, rv3d, self.screen_pts[0], Vector((0,0,0)))
         world_1 = view3d_utils.region_2d_to_location_3d(region, rv3d, self.screen_pts[1], Vector((0,0,0)))
+        
+        world_orthogonal_mouse = view3d_utils.region_2d_to_location_3d(region, rv3d, mid_screen + user_y_screen, Vector((0,0,0)))
+        
+        world_mouse_line = world_orthogonal_mouse - world_mid
         
         world_line = world_1 - world_0
         world_line.length
         
-        return world_0, world_1, user_world_y
+        return world_0, world_1, world_mouse_line
     
        
     def hover(self,context,x,y):
@@ -1462,48 +1399,19 @@ class LineDrawer(object):
         rv3d = context.region_data
         self.mouse = Vector((x, y))
         coord = x, y
-        loc3d_reg2D = view3d_utils.location_3d_to_region_2d
-        
-        view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
-        ray_origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, coord)
-        ray_target = ray_origin + (view_vector * 1000)
-        
-        #if self.snap_type == 'OBJECT':
-        #    mx = self.snap_ob.matrix_world
-        #    imx = mx.inverted()
-        
-        #    if bversion() < '002.077.000':
-        #        loc, no, face_ind = self.snap_ob.ray_cast(imx * ray_origin, imx * ray_target)
-        #        if face_ind == -1: 
-                    #do some shit
-        #            pass
-        #    else:
-        #        res, loc, no, face_ind = self.snap_ob.ray_cast(imx * ray_origin, imx * ray_target - imx * ray_origin)
-        #        if not res:
-                    #do some shit
-        #            pass
-        #elif self.snap_type == 'SCENE':
-            
-        #    mx = Matrix.Identity(4) #scene ray cast returns world coords
-        #    if bversion() < '002.077.000':
-        #        res, obj, omx, loc, no = context.scene.ray_cast(ray_origin, ray_target)
-        #    else:
-        #        res, loc, no, ind, obj, omx = context.scene.ray_cast(ray_origin, view_vector)
+
+        world_loc = self.ray_cast_ob(context, x, y)
+
+        if world_loc == None:
+            self.over_object = False
+        else:
+            self.over_object = True
                 
                     
         def dist(v):
             diff = v - Vector((x,y))
             return diff.length
-        
-        #def dist3d(v3):
-        #    if v3 == None:
-        #        return 100000000
-        #    delt = v3 - mx * loc
-        #    return delt.length
-        
-        #closest_3d_point = min(self.b_pts, key = dist3d)
-        #screen_dist = dist(loc3d_reg2D(context.region, context.space_data.region_3d, closest_3d_point))
-        
+
         
         closest_2d_point = min(self.screen_pts, key = dist)
         screen_dist = dist(closest_2d_point)
@@ -1518,8 +1426,34 @@ class LineDrawer(object):
             return
         
         
+    def calc_box(self):
         
-    def draw(self,context, three_d = True):
+        if len(self.screen_pts) != 2: 
+            self.box_coords = []
+            return None
+        
+        mouse = self.mouse
+        mid_screen = .5 * (self.screen_pts[0] + self.screen_pts[1])
+        mouse_v = mouse - mid_screen
+
+        
+        #x direction of the user drawn line
+        user_x_screen = self.screen_pts[0] - self.screen_pts[1]
+        user_x_screen.normalize()
+        
+        #y direction of the user drawn line
+        user_y_screen = mouse_v - mouse_v.dot(user_x_screen) * user_x_screen
+        
+        p0= self.screen_pts[0]
+        p1 = self.screen_pts[1]
+        p2 = self.screen_pts[1] + user_y_screen
+        p3 = self.screen_pts[0] + user_y_screen
+        
+        self.box_coords = [p0, p1, p2, p3]
+        
+        
+           
+    def draw(self,context):
         if len(self.screen_pts) == 0: return
         
         col = (self.point_color[0], self.point_color[1], self.point_color[2], 1)
@@ -1546,6 +1480,8 @@ class LineDrawer(object):
         elif len(self.screen_pts) == 1:
             common_drawing.draw_polyline_from_points(context, [self.screen_pts[0], Vector(self.mouse)], (0,0,1,1), 4, "GL_LINE_STRIP")    
 
+        if len(self.box_coords) == 4:
+            common_drawing.draw_outline_or_region("GL_POLYGON", self.box_coords, (.1, .1, .7, .5))
 class TextLineDrawer(object):
     '''
     a helper class for drawing 2D lines in the view and extracting 3D infomration from it

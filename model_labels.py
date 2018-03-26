@@ -33,10 +33,9 @@ class D3SPLINT_OT_stencil_text(bpy.types.Operator):
     
     @classmethod
     def poll(cls,context):
-        c1 = context.object != None
-        c2 = context.object.type == 'MESH'
+        if context.object == None: return False
+        if context.object.type != 'MESH': return False
         
-        return c1 and c2
     
     def modal_nav(self, event):
         events_nav = {'MIDDLEMOUSE', 'WHEELINMOUSE','WHEELOUTMOUSE', 'WHEELUPMOUSE','WHEELDOWNMOUSE'} #TODO, better navigation, another tutorial
@@ -619,7 +618,6 @@ class D3SPLINT_OT_emboss_text_on_model(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         if not context.object: return False
-        
         c1 = "D3T Label" not in context.object.name
         c2 = context.object.type == 'MESH'
         
