@@ -28,12 +28,12 @@
 bl_info = {
     'name': "D3T Splint Module",
     'author': "Patrick R. Moore",
-    'version': (0,4,0),
+    'version': (0,4,1),
     'blender': (2, 7, 9),
     'api': "3c04373",
     'location': "3D View -> Tool Shelf",
     'description': "A training and educational Dental Design CAD Tool not intended for clinical use",
-    'warning': "Not Intended for Clincal Use!",
+    'warning': "Not Intended for Clinical Use!",
     'wiki_url': "",
     'tracker_url': "",
     'category': '3D View'}

@@ -634,7 +634,7 @@ class VIEW3D_PT_D3SplintModels(bpy.types.Panel):
         row = layout.row()
         col = row.column()
         
-        col.operator("d3splint.batch_process_plane_cuts", text = 'Hollow Model')
+        col.operator("d3splint.batch_process_plane_cuts", text = 'Batch Plane Cuts')
         
         
 class VIEW3D_PT_D3SplintModelText(bpy.types.Panel):
