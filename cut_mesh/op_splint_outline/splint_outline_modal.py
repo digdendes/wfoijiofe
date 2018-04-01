@@ -4,6 +4,7 @@ Created on Oct 8, 2015
 @author: Patrick
 '''
 import bpy
+import bmesh
 
 from ..modaloperator import ModalOperator
 from .splint_outline_ui            import SplintOutline_UI
@@ -58,11 +59,65 @@ class D3Splint_CutSplintMargin(ModalOperator, SplintOutline_UI, SplintOutline_UI
         self.end_ui(context)
     
     def end_commit(self, context):
-        ''' Called when tool is committing '''
+        
         
         
         self.cleanup(context, 'commit')
-    
+        
+        pmodel = bpy.data.objects.get('Perim Model')
+        pmodel.select = True
+        context.scene.objects.active = pmodel
+        
+        bpy.ops.object.mode_set(mode = 'SCULPT')
+        if not pmodel.use_dynamic_topology_sculpting:
+            bpy.ops.sculpt.dynamic_topology_toggle()
+        bpy.ops.paint.mask_flood_fill(mode = 'VALUE', value = 0)
+        context.scene.tool_settings.sculpt.detail_type_method = 'CONSTANT'
+        context.scene.tool_settings.sculpt.constant_detail_resolution = 5.5
+        bpy.ops.sculpt.detail_flood_fill()
+        bpy.ops.object.mode_set(mode = 'OBJECT')
+        
+        tmodel = bpy.data.objects.get('Trimmed_Model')
+        
+        bme = bmesh.new()
+        bme.from_mesh(pmodel.data)
+        bme.verts.ensure_lookup_table()
+        bme.edges.ensure_lookup_table()
+        
+        to_keep = set()
+        to_delete = set()
+        for v in bme.verts:
+            hit, point, normal, face = tmodel.closest_point_on_mesh(v.co)
+            R = v.co - point
+            if not hit: continue
+            if R.length > .01:
+                to_keep.add(v)
+            else:
+                to_delete.add(v)
+        expand = set()
+        for v in to_keep:
+            for ed in v.link_edges:
+                expand.add(ed.other_vert(v))
+        
+        to_keep |= expand
+        
+        to_delete = set(bme.verts[:])
+        to_delete -= to_keep        
+        bmesh.ops.delete(bme, geom = list(to_delete), context = 1)
+        bme.to_mesh(pmodel.data)
+        bme.free()
+        tmodel.select = True
+        context.scene.objects.active = tmodel
+        
+        bpy.ops.object.mode_set(mode = 'SCULPT')
+        if not pmodel.use_dynamic_topology_sculpting:
+            bpy.ops.sculpt.dynamic_topology_toggle()
+        bpy.ops.paint.mask_flood_fill(mode = 'VALUE', value = 0)
+        context.scene.tool_settings.sculpt.detail_type_method = 'CONSTANT'
+        context.scene.tool_settings.sculpt.constant_detail_resolution = 5.5
+        bpy.ops.sculpt.detail_flood_fill()
+        bpy.ops.object.mode_set(mode = 'OBJECT')
+        
     def end_cancel(self, context):
         ''' Called when tool is canceled '''
         self.cleanup(context, 'cancel')

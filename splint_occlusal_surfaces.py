@@ -481,6 +481,10 @@ class D3Splint_automatic_opposing_surface(bpy.types.Operator):
 def landmarks_draw_callback(self, context):  
     self.crv.draw(context)
     self.help_box.draw()    
+    prefs = get_settings()
+    r,g,b = prefs.active_region_color
+    outline_region(context.region,(r,g,b,1))  
+    
     
 class D3SPLINT_OT_splint_manual_auto_surface(bpy.types.Operator):
     """Help make a nice flat plane"""

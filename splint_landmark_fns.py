@@ -20,10 +20,15 @@ from common_utilities import bversion, get_settings
 import tracking
 from odcutils import get_bbox_center
 from multiprocessing import get_start_method
+from common_drawing import outline_region
+
 
 def arch_crv_draw_callback(self, context):  
     self.crv.draw(context)
-    self.help_box.draw()   
+    self.help_box.draw()
+    prefs = get_settings()
+    r,g,b = prefs.active_region_color
+    outline_region(context.region,(r,g,b,1))    
     
 class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
     """Draw a line along the cusps of the maxillary model"""
@@ -503,7 +508,10 @@ class D3SPLINT_OT_splint_occlusal_curve_mand(bpy.types.Operator):
 
 def landmarks_draw_callback(self, context):  
     self.crv.draw(context)
-    self.help_box.draw()    
+    self.help_box.draw()
+    prefs = get_settings()
+    r,g,b = prefs.active_region_color
+    outline_region(context.region,(r,g,b,1))    
     
 class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
     """Define Right Molar, Left Molar, Midline"""
@@ -1122,6 +1130,9 @@ class D3SPLINT_OT_splint_trim_model_paint(bpy.types.Operator):
 
 def pick_model_callback(self, context):
     self.help_box.draw()
+    prefs = get_settings()
+    r,g,b = prefs.active_region_color
+    outline_region(context.region,(r,g,b,1))  
     
 class D3SPLINT_OT_pick_model(bpy.types.Operator):
     """Left Click on Model to Build Splint"""

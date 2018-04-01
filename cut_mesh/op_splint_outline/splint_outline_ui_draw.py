@@ -23,6 +23,7 @@ class SplintOutline_UI_Draw():
     
     def draw_2d(self,context):
         self.knife.draw(context)
+        self.help_box.draw()
         
         if len(self.sketch):
             common_drawing.draw_polyline_from_points(context, self.sketch, (.8,.3,.3,.8), 2, "GL_LINE_SMOOTH")

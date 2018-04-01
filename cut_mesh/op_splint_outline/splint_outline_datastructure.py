@@ -24,7 +24,7 @@ from ..bmesh_fns import grow_selection, new_bmesh_from_bmelements
 class PolyLineKnife(object):
     '''
     A class which manages user placed points on an object to create a
-    poly_line, adapted to the objects surface.
+    poly_line, adapted to the objects surface. customized for d3tool
     '''
     def __init__(self,context, cut_object, ui_type = 'DENSE_POLY'):   
         self.cut_ob = cut_object
@@ -1575,8 +1575,7 @@ class PolyLineKnife(object):
             cons = trimmed_obj.constraints.new('COPY_TRANSFORMS')
             cons.target = bpy.data.objects.get(splint.model)
         
-        
-        
+
         output_bme = bmesh.new()
         
         verts = set()

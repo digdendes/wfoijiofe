@@ -148,8 +148,8 @@ class D3SplintAddonPreferences(AddonPreferences):
             )
     
     def_point_color = FloatVectorProperty(name="Points Color", description="Color of reference points in interactive operators", min =0, max = 1, default=(.8, .1,.1), subtype="COLOR")
-    active_point_color = FloatVectorProperty(name="Active Point Color", description="Color of the selected point in interactive operators", min=0, max=1, default=(.8, .8,.2), subtype="COLOR")
- 
+    active_point_color = FloatVectorProperty(name="Active Point Color", description="Color of the selected point in interactive operators", default=(.8, .8,.2), subtype="COLOR")
+    active_region_color = FloatVectorProperty(name="Active Region Color", description="A border of this color will be drawn when in interactive modes", default=(.8, .2,.1), subtype="COLOR")
     ##########################################
     ###### Operator Defaults      ############
     ##########################################
@@ -300,7 +300,7 @@ class D3SplintAddonPreferences(AddonPreferences):
         row.prop(self, "point_size")
         row.prop(self, "def_point_color")
         row.prop(self, "active_point_color")
-
+        row.prop(self, "active_region_color")
     
 
         ## Operator Defaults

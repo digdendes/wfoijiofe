@@ -30,6 +30,7 @@ import splint_cache
 import tracking
 from cmath import exp
 from _hashlib import new
+from common_drawing import outline_region
 
 '''
 https://occlusionconnections.com/gnm-optimized/which-occlusal-plane-do-you-undestand-dont-get-confused/
@@ -547,7 +548,10 @@ class D3SPLINT_OT_splint_add_guides(bpy.types.Operator):
 
 def arch_crv_draw_callback_px(self, context):  
     self.crv.draw(context, three_d = False)
-    self.help_box.draw()      
+    self.help_box.draw()
+    prefs = get_settings()
+    r,g,b = prefs.active_region_color
+    outline_region(context.region,(r,g,b,1))  
     
 def arch_crv_draw_callback_pv(self, context):
     self.crv.draw3d(context)
@@ -706,15 +710,19 @@ class D3SPLINT_OT_splint_mark_margin(bpy.types.Operator):
      
 def ispltmgn_draw_callback(self, context):  
     self.crv.draw(context)
-    self.help_box.draw()      
+    self.help_box.draw()
+    prefs = get_settings()
+    r,g,b = prefs.active_region_color
+    outline_region(context.region,(r,g,b,1))       
        
 def plyknife_draw_callback(self, context):
     self.knife.draw(context)
     self.help_box.draw()
     if len(self.sketch):
         common_drawing.draw_polyline_from_points(context, self.sketch, (.3,.3,.3,.8), 2, "GL_LINE_SMOOTH")
-        
-
+    prefs = get_settings()
+    r,g,b = prefs.active_region_color
+    outline_region(context.region,(r,g,b,1))  
    
 class D3SPLINT_OT_survey_model(bpy.types.Operator):
     '''Calculates silhouette of object which surveys convexities AND concavities from the current view axis'''
@@ -1322,25 +1330,109 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
             new_ob.hide = True
         
         bvh = BVHTree.FromBMesh(new_bme)
+        
+        
+        for ob in bpy.data.objects:
+            ob.select = False
+        Master.select = True
+        context.scene.objects.active = Master
+        bpy.ops.object.mode_set(mode = 'SCULPT')
+        
         trimmed_bme = bmesh.new()
         trimmed_bme.from_mesh(Model.data)
         trimmed_bme.verts.ensure_lookup_table()
         
+        mask = trimmed_bme.verts.layers.paint_mask.verify()
+        
+        for v in trimmed_bme.verts:
+            v.select_set(False)
+        for ed in trimmed_bme.edges:
+            ed.select_set(False)
+        for f in trimmed_bme.faces:
+            f.select_set(False)
+        
+            
         long_eds = [ed for ed in trimmed_bme.edges if ed.calc_length() > 1]
-
-
-
-
+        
+        #adjacent face to the long edges:
+        long_faces = set()
+        for ed in long_eds:
+            long_faces.update(ed.link_faces)
+        
+        long_verts = set()
+        for f in long_faces:
+            long_verts.update(f.verts[:])
+        
+        print('there are %i long verts' % len(long_verts))
+        
+        #first, long edges are often degenerate filling of faces
+        
+        #gdict = bmesh.ops.beautify_fill(trimmed_bme, faces = list(long_faces), edges = list(long_eds))
+        
+        #gdict = bmesh.ops.dissolve_limit(trimmed_bme, angle_limit = 1/180 * math.pi, verts = list(long_verts), edges = list(long_eds))
+        
+        #mask = trimmed_bme.verts.layers.paint_mask.verify()
+        #print(gdict.keys())
+        #then we will subdivide those remaining long edges
+        #long_eds = set()
+        #for f in gdict['region']:
+        #for f in gdict['geom']:
+            #if not isinstance(f, bmesh.types.BMFace): continue
+        #    for ed in f.edges:
+        #        if ed.calc_length() > 1:
+        #            long_eds.add(ed)
+        
+        #for v in trimmed_bme.verts:
+        #    if v in long_verts:
+        #        v[mask] = 1.0
+        #        v.select_set(True)
+        #    else:
+        #        v[mask] = 0
+        
+        for v in trimmed_bme.verts:
+            if v in long_verts:
+                v.select_set(True)
+                v[mask] = 1.0
+            else:
+                v[mask] = 0.0
+        for ed in long_eds:
+            ed.select_set(True)
+        interval_start = time.time()
+        
         n_long = len(long_eds)
         iters = 0
         
+        
+        #def cut_edges_to_length(long_edges):
+        #    print('cutting to length')
+        #    vert_set = set()
+        #    n_long = len(long_edges)
+        #    n_cuts = 0
+        #    while n_long and n_cuts < 10:
+        #        gdict = bmesh.ops.subdivide_edges(trimmed_bme, edges = list(long_eds), cuts = 1)
+        #    
+                #faces associated with the subdivision
+        #        new_edges = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMEdge)]
+        #        new_verts = set([ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMVert)])
+                
+        #        vert_set.update(new_verts)
+        #        long_edges = [ed for ed in new_edges if ed.calc_length() > 1]
+        #        n_cuts += 1
+        #        n_long = len(long_edges)
+                
+        #    return vert_set
+        
         while n_long > 5 and iters < 4:
+                        
+            #cleaning long edges
+            iter_start = time.time()
+            
+            #cut long edges in half
+            print('subdividing %i long edges' % len(long_eds))
             
             gdict = bmesh.ops.subdivide_edges(trimmed_bme, edges = long_eds, cuts = 1)
-            
-            non_tris = [f for f in trimmed_bme.faces if len(f.verts) > 4]
+            non_tris = [f for f in trimmed_bme.faces if len(f.verts) > 3]
             bmesh.ops.triangulate(trimmed_bme, faces = non_tris)
-            
             trimmed_bme.verts.ensure_lookup_table()
             trimmed_bme.edges.ensure_lookup_table()
             trimmed_bme.faces.ensure_lookup_table()
@@ -1348,6 +1440,94 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
             long_eds = [ed for ed in trimmed_bme.edges if ed.calc_length() > 1]
             n_long = len(long_eds)
             iters += 1
+            
+            #vert_set = cut_edges_to_length(long_eds)
+            
+            #non_tri_faces = set()
+            
+            #for v in vert_set:
+            #    if v.is_valid:
+                    #non_tri_faces.update(v.link_faces[:])
+            #faces associated with the subdivision
+            #new_faces = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMFace)]
+            #new_edges = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMEdge)]
+            #new_verts = set([ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMVert)])
+                
+            #triangulate the faces which were turned into quads or ngons by subdividion
+            #non_tri_faces = [f for f in new_faces if len(f.verts) > 3]
+            #print('triangulating %i faces' % len(non_tri_faces))
+            #gdict = bmesh.ops.triangulate(trimmed_bme, faces = list(non_tri_faces))
+            #tri_edges = gdict['edges']
+            
+            #long_eds = [ed for ed in tri_edges if ed.calc_length() > 1]
+            
+
+            
+            #merge really short edges
+            #short_connected_eds = []
+            #for ed in new_edges + tri_edges:
+            #    if ed.calc_length() < .05 and all([v in new_verts for v in ed.verts]):
+            #        short_connected_eds += [ed]
+            
+            #print('there are %i short edges' % len(short_connected_eds))   
+            #bmesh.ops.collapse(trimmed_bme, edges = short_connected_eds)
+            
+            #annoyingly find out which verts were removed by collapse...no return dictionary :-(
+            #invalid_verts = [v for v in new_verts if not v.is_valid]
+            #valid_verts = set(new_verts) - set(invalid_verts)
+            
+            #poke large area faces
+            #big_faces = set()
+            #new_non_tris = set()
+            #for v in valid_verts:
+            #    for f in v.link_faces:
+            #        if len(f.verts) > 3:
+            #            new_non_tris.add(f)
+                        
+            #print('there are now %i non tris' % len(new_non_tris))
+            #gdict = bmesh.ops.triangulate(trimmed_bme, faces = list(new_non_tris))
+            
+            #for v in valid_verts:
+            #    for f in v.link_faces:
+            #        if f.calc_area() > .16:
+            #            big_faces.add(f)                         
+            #poke_dict = bmesh.ops.poke(trimmed_bme, faces = list(big_faces))
+            
+            #print(poke_dict.keys())
+            
+            #for v in poke_dict['verts']:
+            #    valid_verts.add(v)
+            #    v.select_set(True)
+            
+            #collapse any new short edges by poking
+            #new_short_edges = set()
+            #for v in valid_verts:
+            #    for ed in v.link_edges:
+            #        if ed.calc_length() < .05 and all([v in valid_verts for v in ed.verts]):
+            #            new_short_edges.add(ed)
+            
+            #print('collapsing %i new short edges' % len(new_short_edges))
+            #bmesh.ops.collapse(trimmed_bme, edges = list(new_short_edges))
+            
+            
+            #invalid_verts = [v for v in valid_verts if not v.is_valid]
+            #valid_verts.difference_update(invalid_verts)
+            
+            
+            #long_eds = set()
+            #for v in valid_verts:
+            #    for ed in v.link_edges:
+            #        if ed.calc_length() > .5:
+            #            long_eds.add(ed)
+            
+            
+            #iters += 1
+            #n_long = len(long_eds)
+        
+        
+        print('took %f seconds to subdivide long edges in %i iterations' % ((time.time() - interval_start), iters))
+        
+        
         to_keep = set()
         
         mx2 = Model.matrix_world
@@ -2276,6 +2456,9 @@ class D3SPLINT_OT_remesh_smooth_inflate(bpy.types.Operator):
 def convex_mand_draw_callback(self, context):  
     self.crv.draw(context)
     self.help_box.draw()   
+    prefs = get_settings()
+    r,g,b = prefs.active_region_color
+    outline_region(context.region,(r,g,b,1))  
     
 class D3SPLINT_OT_convexify_model(bpy.types.Operator):
     """Click along embrasures to make model locally convex"""

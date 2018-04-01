@@ -11,6 +11,7 @@ import tracking
 from curve import LineDrawer, TextLineDrawer
 from textbox import TextBox
 from common_utilities import get_settings
+from common_drawing import outline_region
 from bpy_extras.view3d_utils import location_3d_to_region_2d
         
 
@@ -22,7 +23,9 @@ t_topo['VERTS'] = 58
 def stencil_text_callback(self, context):  
     self.help_box.draw()
     self.crv.draw(context)
-       
+    prefs = get_settings()
+    r,g,b = prefs.active_region_color
+    outline_region(context.region,(r,g,b,1))     
     
 class D3SPLINT_OT_stencil_text(bpy.types.Operator):
     """Click and draw a line to place text on the model"""
@@ -36,6 +39,7 @@ class D3SPLINT_OT_stencil_text(bpy.types.Operator):
         if context.object == None: return False
         if context.object.type != 'MESH': return False
         
+        return True
     
     def modal_nav(self, event):
         events_nav = {'MIDDLEMOUSE', 'WHEELINMOUSE','WHEELOUTMOUSE', 'WHEELUPMOUSE','WHEELDOWNMOUSE'} #TODO, better navigation, another tutorial
@@ -65,14 +69,14 @@ class D3SPLINT_OT_stencil_text(bpy.types.Operator):
             if len(self.crv.screen_pts) == 0:
                 context.window.cursor_modal_set('CROSSHAIR')
             
-                help_txt = "Left Click again to place end of line"
-                self.help_box.raw_text = help_txt
-                self.help_box.format_and_wrap_text()
+                #help_txt = "Left Click again to place end of line"
+                #self.help_box.raw_text = help_txt
+                #self.help_box.format_and_wrap_text()
                 
-            if len(self.crv.screen_pts) == 1:
-                help_txt = "Left Click to end the text"
-                self.help_box.raw_text = help_txt
-                self.help_box.format_and_wrap_text()
+            #if len(self.crv.screen_pts) == 1:
+                #help_txt = "Left Click to end the text"
+                #self.help_box.raw_text = help_txt
+                #self.help_box.format_and_wrap_text()
                 
                 
             x, y = event.mouse_region_x, event.mouse_region_y
@@ -90,8 +94,35 @@ class D3SPLINT_OT_stencil_text(bpy.types.Operator):
             self.create_and_project_text(context)
             return 'main'            
         
-        if event.type == 'T'  and event.value == 'PRESS':
-            #context.window_manager.invoke_popup(self)
+        if event.type == 'RIGHTMOUSE'  and event.value == 'PRESS':
+            
+            x, y = event.mouse_region_x, event.mouse_region_y
+            
+            v3d = context.space_data
+            rv3d = v3d.region_3d
+            rot = rv3d.view_rotation
+            
+            X = rot * Vector((1,0,0))
+            Y = rot * Vector((0,1,0))
+            Z = rot * Vector((0,0,1))
+            
+            loc, no = self.crv.ray_cast_pt(context, (x,y))
+            no_mx = self.crv.snap_ob.matrix_world.inverted().transposed().to_3x3()
+            world_no = no_mx * no
+            
+            
+            
+            world_no_aligned = world_no - world_no.dot(X) * X
+            world_no_aligned.normalize()
+            
+            angle = world_no_aligned.angle(Z)
+            
+            if world_no.dot(Y) > 0:
+                angle = -1 * angle
+            R_mx = Matrix.Rotation(angle, 3, X)
+            R_quat = R_mx.to_quaternion()
+            rv3d.view_rotation = R_quat * rot
+            
             return 'main'
                
         if event.type == 'LEFT_ARROW' and event.value == 'PRESS':
@@ -167,7 +198,8 @@ class D3SPLINT_OT_stencil_text(bpy.types.Operator):
         
         
         #TODO, tweak the modifier as needed
-        help_txt = "Click and Draw a line to place text"
+        help_txt = "INTERACTIVE LABEL STENCIL\n\n-  LeftClick and move mouse to define a line across your model \n-  The line will stick to your mouse until you Left Click again\n-  A preview of the text label will follow your line\n  -press 'ENTER' to project the text onto your model and finish the operator.\n\nADVANCED USAGE\n\n-RightMouse in the middle of the label to snap your view perpendicular to the model surface, you may need to adjust the position slightly\n-  You can press 'P' to project the  text onto the object without leaving the operator.  You can then alter your view to inspect the text projection.\n-  LEFT_ARROW key to snap back to the original view, you can then modify your viewing angle and press 'P' again.  When satisfied, press 'ENTER' to finish."
+        
         self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
         self.help_box.snap_to_corner(context, corner = [1,1])
         
@@ -425,6 +457,10 @@ class D3Splint_place_text_on_model(bpy.types.Operator):
         
         if not context.object:
             return False
+        
+        if "D3T Label" in context.object.name:
+            return False
+        
         return True
             
     
@@ -721,12 +757,71 @@ class D3SPLINT_OT_emboss_text_on_model(bpy.types.Operator):
         label_final.hide = True
         return {"FINISHED"}
     
+class D3SPLINT_OT_finalize_all_labels(bpy.types.Operator):
+    """Apply all label boolean modifiers for label stencils"""
+    bl_idname = "d3splint.splint_finalize_labels"
+    bl_label = "Finalize Labels"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls,context):
+        if context.object == None: return False
+        if context.object.type != 'MESH': return False
+        
+        return True
+    
+    def execute(self, context):
+    
+        if "D3T Label" in context.object.name:
+            self.report({'ERROR'}, 'You need to select the object to be labelled, not a label object')
+            return {'CANCELLED'}
+        
+        if len(context.object.modifiers) == 0:
+            self.report({'ERROR'}, 'This object does not have any boolean modifiers which means it is finalized already')
+
+        
+        labels = []
+        for mod in context.object.modifiers:
+            if not mod.show_viewport:
+                mod.show_viewport = True
+        
+            if hasattr(mod, 'object'):
+                if "Text Labels" in mod.object.name:
+                    labels.append(mod.object)
+                        
+        old_mesh = context.object.data
+                
+        # settings for to_mesh
+        apply_modifiers = True
+        settings = 'PREVIEW'
+        new_mesh = context.object.to_mesh(context.scene, apply_modifiers, settings)
+
+        # object will still have modifiers, remove them
+        context.object.modifiers.clear()
+        
+        # assign the new mesh to obj.data 
+        context.object.data = new_mesh
+        
+        # remove the old mesh from the .blend
+        bpy.data.meshes.remove(old_mesh)
+        
+        #clean up old labels:
+        for ob in labels:
+            context.scene.objects.unlink(ob)
+            old_data = ob.data
+            bpy.data.objects.remove(ob)
+            bpy.data.meshes.remove(old_data)
+        
+        return {'FINISHED'}
+    
 def register():
     bpy.utils.register_class(D3Splint_place_text_on_model)
     bpy.utils.register_class(D3SPLINT_OT_emboss_text_on_model)
     bpy.utils.register_class(D3SPLINT_OT_stencil_text)
+    bpy.utils.register_class(D3SPLINT_OT_finalize_all_labels)
    
 def unregister():
     bpy.utils.unregister_class(D3Splint_place_text_on_model)
     bpy.utils.unregister_class(D3SPLINT_OT_emboss_text_on_model)
     bpy.utils.register_class(D3SPLINT_OT_stencil_text)
+    bpy.utils.register_class(D3SPLINT_OT_finalize_all_labels)

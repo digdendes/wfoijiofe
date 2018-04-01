@@ -676,7 +676,8 @@ class VIEW3D_PT_D3SplintModelText(bpy.types.Panel):
         row.operator("d3splint.stencil_text", text = 'Stencil Text Label')
         row = layout.row()
         row.operator("d3tool.remesh_and_emboss_text", text = 'Emboss All Labels onto Object')
-        
+        row = layout.row()
+        row.operator("d3splint.splint_finalize_labels", text = 'Finalize Label Modifiers')
         
 def register():
     bpy.utils.register_class(SCENE_UL_odc_teeth)

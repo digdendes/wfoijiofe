@@ -10,6 +10,8 @@ from mathutils import Vector, Matrix, Quaternion
 from test.test_binop import isint
 from odcutils import get_com_bme
 import common_drawing
+from common_drawing import outline_region
+from common_utilities import get_settings
 from bpy_extras import view3d_utils
 import odcutils
 
@@ -17,25 +19,9 @@ def plane_cut_draw_callback(self, context):
     self.crv.draw(context)
     self.help_box.draw() 
     
-    
-    region = context.region
-
-    bgl.glEnable(bgl.GL_BLEND)
-    bgl.glEnable(bgl.GL_LINE_SMOOTH)
-    bgl.glColor4f(.1, .7, .4, 1)
-    lw = 4 // 2
-    bgl.glLineWidth(lw*4)
-
-    bgl.glBegin(bgl.GL_LINE_STRIP)
-    bgl.glVertex2i(lw, lw)
-    bgl.glVertex2i(region.width - lw, lw)
-    bgl.glVertex2i(region.width - lw, region.height - lw)
-    bgl.glVertex2i(lw, region.height - lw)
-    bgl.glVertex2i(lw, lw)
-    bgl.glEnd()
-    bgl.glDisable(bgl.GL_BLEND)
-    bgl.glDisable(bgl.GL_LINE_SMOOTH)
-    
+    prefs = get_settings()
+    r,g,b = prefs.active_region_color
+    outline_region(context.region,(r,g,b,1))  
     
     if len(self.new_geom_draw_points):
         
@@ -50,10 +36,10 @@ class D3SPLINT_OT_finalize_all_cuts(bpy.types.Operator):
     
     @classmethod
     def poll(cls,context):
-        c1 = context.object != None
-        c2 = context.object.type == 'MESH'
+        if context.object == None: return False
+        if context.object.type != 'MESH': return False
         
-        return c1 and c2
+        return True
     
     def execute(self, context):
     
@@ -97,10 +83,10 @@ class D3SPLINT_OT_batch_process_plane_cuts(bpy.types.Operator):
     
     @classmethod
     def poll(cls,context):
-        c1 = context.object != None
-        c2 = context.object.type == 'MESH'
+        if context.object == None: return False
+        if context.object.type != 'MESH': return False
         
-        return c1 and c2
+        return True
     
     
     simple_base = bpy.props.BoolProperty(default = False, description = 'Extude open edge downward before cutting')
@@ -181,10 +167,10 @@ class D3SPLINT_OT_pause_all_cuts(bpy.types.Operator):
     
     @classmethod
     def poll(cls,context):
-        c1 = context.object != None
-        c2 = context.object.type == 'MESH'
+        if context.object == None: return False
+        if context.object.type != 'MESH': return False
         
-        return c1 and c2
+        return True
     
     def execute(self, context):
     
@@ -216,10 +202,10 @@ class D3SPLINT_OT_activate_all_cuts(bpy.types.Operator):
     
     @classmethod
     def poll(cls,context):
-        c1 = context.object != None
-        c2 = context.object.type == 'MESH'
+        if context.object == None: return False
+        if context.object.type != 'MESH': return False
         
-        return c1 and c2
+        return True
     
     def execute(self, context):
     
@@ -251,10 +237,10 @@ class D3SPLINT_OT_plane_cut_mesh_rough(bpy.types.Operator):
     cut_method = bpy.props.EnumProperty(name = 'Mode', items = (('SURFACE','SURFACE','SURFACE'), ('SOLID', 'SOLID','SOLID')), default = 'SURFACE')
     @classmethod
     def poll(cls,context):
-        c1 = context.object != None
-        c2 = context.object.type == 'MESH'
+        if context.object == None: return False
+        if context.object.type != 'MESH': return False
         
-        return c1 and c2
+        return True
     
     def modal_nav(self, event):
         events_nav = {'MIDDLEMOUSE', 'WHEELINMOUSE','WHEELOUTMOUSE', 'WHEELUPMOUSE','WHEELDOWNMOUSE'} #TODO, better navigation, another tutorial
@@ -414,12 +400,12 @@ class D3SPLINT_OT_plane_cut_mesh_rough(bpy.types.Operator):
                     return 'finish'
                 else:
                     self.bmesh_bisect_object(context, mesh_filter= filter_geom)
-                    
+                    return 'main'
 
                 context.window.cursor_modal_set('KNIFE')
-                help_txt = "Left Click to start a cut, then move mouse"
-                self.help_box.raw_text = help_txt
-                self.help_box.format_and_wrap_text()
+                #help_txt = "Left Click to start a cut, then move mouse"
+                #self.help_box.raw_text = help_txt
+                #self.help_box.format_and_wrap_text()
                 return 'main'
             
             return 'main'
@@ -440,13 +426,12 @@ class D3SPLINT_OT_plane_cut_mesh_rough(bpy.types.Operator):
             
                
         if event.type == 'RET' and event.value == 'PRESS':
-            if len(self.crv.screen_pts) != 4:
-                return 'main'
             self.finish(context)
             return 'finish'
             
         elif event.type == 'ESC' and event.value == 'PRESS':
-            return 'cancel' 
+            #need to return 'finish' to get the undo, since our 'cancel' function does not "reset" the bmesh data
+            return 'finish' 
 
         return 'main'
     
@@ -488,7 +473,7 @@ class D3SPLINT_OT_plane_cut_mesh_rough(bpy.types.Operator):
         Model.select = True
         Model.hide = False
         
-        bpy.ops.view3d.view_selected()
+        #bpy.ops.view3d.view_selected()
         self.crv = LineDrawer(context,snap_type ='OBJECT', snap_object = Model)
         context.space_data.show_manipulator = False
         context.space_data.transform_manipulators = {'TRANSLATE'}
@@ -497,7 +482,14 @@ class D3SPLINT_OT_plane_cut_mesh_rough(bpy.types.Operator):
         
         
         #TODO, tweak the modifier as needed
-        help_txt = "Click and Draw a line to slice and dice"
+        #help_txt = "Interactive Plane Cutting\n\nLeft click, move the mouse, and left click again.\nThen place your mouse on the side of the line to remove. \n Click on the model to isolate the cut to the line limits.\nClick off the model to cut beyond the end-points of the line."
+        help_txt_open = "INTERACTIVE PLANE CUTTING OPEN\n\n-  LeftClick and move mouse to define a line across your model \n-  The line will stick to your mouse until you Left Click again\n-  LeftClick a 3rd time on the side of the line to be cut\n-  If you click on the model, the cut will be limited to the edges of the line \n-  If you click off of the model, the cut will extend into space\n\n\nEXTRUDING\n\n-  A dot will appear next to the most recent cut, you can click and move your mouse to extrude the new cut edge.\n-  LeftClick to confirm the position of the extrusion"
+        help_txt_solid = "INTERACTIVE PLANE CUTTING SOLID\n\n-  LeftClick and move mouse to define a line across your model \n-  The line will stick to your mouse until you Left Click again\n-  A blue preview of the region to be deleted will present itself, everything behind the blue preview will be removed from the model\n-  LeftClick a 3rd time to confirm and the operator will end"
+        
+        if self.cut_method == 'SOLID':
+            help_txt = help_txt_solid
+        else:
+            help_txt = help_txt_open
         self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
         self.help_box.snap_to_corner(context, corner = [1,1])
         self.mode = 'main'

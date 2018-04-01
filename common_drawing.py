@@ -38,7 +38,23 @@ from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vecto
 from common_utilities import dprint
 
 
+def outline_region(region, color):
 
+    bgl.glEnable(bgl.GL_BLEND)
+    bgl.glEnable(bgl.GL_LINE_SMOOTH)
+    bgl.glColor4f(*color)
+    lw = 4 // 2
+    bgl.glLineWidth(lw*4)
+
+    bgl.glBegin(bgl.GL_LINE_STRIP)
+    bgl.glVertex2i(lw, lw)
+    bgl.glVertex2i(region.width - lw, lw)
+    bgl.glVertex2i(region.width - lw, region.height - lw)
+    bgl.glVertex2i(lw, region.height - lw)
+    bgl.glVertex2i(lw, lw)
+    bgl.glEnd()
+    bgl.glDisable(bgl.GL_BLEND)
+    bgl.glDisable(bgl.GL_LINE_SMOOTH)
 
 def bgl_col(rgb, alpha):
     '''

@@ -22,6 +22,7 @@ from bmesh_fns import join_bmesh, bme_linked_flat_faces
 from mathutils import Vector, Matrix
 import odcutils
 from common_utilities import bversion, get_settings
+from common_drawing import outline_region
 from loops_tools import relax_loops_util
 import time
 import bmesh_fns
@@ -2914,6 +2915,9 @@ def landmarks_draw_callback(self, context):
     self.crv.draw(context)
     self.crv.draw_extra(context)
     self.help_box.draw()
+    prefs = get_settings()
+    r,g,b = prefs.active_region_color
+    outline_region(context.region,(r,g,b,1))  
      
     
 class D3Tool_OT_model_vertical_base(bpy.types.Operator):

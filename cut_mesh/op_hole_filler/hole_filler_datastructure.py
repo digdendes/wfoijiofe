@@ -452,23 +452,39 @@ def triangulate_fill(bme, verts, max_iters, res, smooth_iters = 1):
         if len(front) == 3:
             face = list(front)
             
-            avg_normal = Vector((0,0,0))
-            for v in face:
-                v.normal_update()
-                avg_normal += v.normal
-                
-            avg_normal *= 1/3
-            avg_normal.normalize()
+            existing_faces = []
+            for v in front:
+                for f in v.link_faces:
+                    face_key = set([vrt.index for vrt in f.verts])
+                    existing_faces.append(face_key)
             
-            new_f = bme.faces.new(face)
-            new_f.select_set(True)
-            new_f.normal_update()
             
-            if new_f.normal.dot(avg_normal) < 0:
-                print('flipping final face normal')
-                new_f.normal_flip()
+            already_exists = False
+            for f_set in existing_faces:
+                if all(v.index in f_set for v in face):
+                    already_exists = True
+                    break
+            
+            if not already_exists:    
+                   
+                avg_normal = Vector((0,0,0))
+                for v in face:
+                    v.normal_update()
+                    avg_normal += v.normal
+                    
+                avg_normal *= 1/3
+                avg_normal.normalize()
                 
-            new_fs += [new_f]
+                
+                new_f = bme.faces.new(face)
+                new_f.select_set(True)
+                new_f.normal_update()
+                
+                if new_f.normal.dot(avg_normal) < 0:
+                    print('flipping final face normal')
+                    new_f.normal_flip()
+                    
+                new_fs += [new_f]
         
         bme.verts.ensure_lookup_table()
         bme.edges.ensure_lookup_table()
@@ -946,7 +962,7 @@ class MeshHole(object):
         
     def fill_hole(self):
         
-        triangulate_fill(self.bme, self.bmverts, 1000, .3, smooth_iters = 1)
+        triangulate_fill(self.bme, self.bmverts, 1000, .2, smooth_iters = 1)
         
         #todo, succes
         #TODO try,except, etc

@@ -18,6 +18,7 @@ from textbox import TextBox
 from curve import CurveDataManager, PolyLineKnife
 from loops_tools import relax_loops_util
 from common_utilities import get_settings
+from common_drawing import outline_region
 import survey_utils
 import tracking
 import time
@@ -28,6 +29,9 @@ from odcutils import get_bbox_center
 def arch_crv_draw_callback(self, context):  
     self.crv.draw(context)
     self.help_box.draw()
+    prefs = get_settings()
+    r,g,b = prefs.active_region_color
+    outline_region(context.region,(r,g,b,1))  
     
 class D3SPLINT_OT_draw_meta_curve(bpy.types.Operator):
     """Draw a curve on the scene to be used with Meta modelling"""
