@@ -843,7 +843,7 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
                 return -1
             if len(zero_len_eds):
                 print('dissolving zero length edges')
-                bmesh.ops.dissolve_degenerate(bme, dist = .0001, eds = zero_len_eds)    
+                bmesh.ops.dissolve_degenerate(bme, dist = .0001, edges = zero_len_eds)    
             if len(loose_eds):
                 loose_vs = set()
                 for ed in loose_eds:
