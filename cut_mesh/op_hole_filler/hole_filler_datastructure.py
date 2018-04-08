@@ -195,6 +195,10 @@ def calc_angle(v):
     Va = va.co - v.co
     Vb = vb.co - v.co
     
+    if Va.length < .00001 or Vb.length < .00001:
+        print('zero length edge')
+        return 2 * math.pi, None, None
+    
     angle = Va.angle(Vb)
     
     #check for connectivity
@@ -919,6 +923,14 @@ class MeshHole(object):
 
         return
     
+    def verify_valid(self):
+        
+        for v in self.bmverts:
+            if not v.is_valid:
+                return False
+            
+        return True
+        
     def verify_fillable(self):
         return
     
@@ -968,6 +980,17 @@ class MeshHole(object):
         #TODO try,except, etc
         return
     
+    def blot_hole(self):
+        
+       
+        total_faces = set()
+        for v in self.bmverts:
+            total_faces.update(v.link_faces[:])
+        
+        bmesh.ops.delete(self.bme, geom = list(total_faces), context = 3)
+        bmesh.ops.delete(self.bme, geom = list(set(self.bmverts)), context = 1)
+        
+        
     def draw(self):
         
         #draw the boundary loop
@@ -1053,6 +1076,9 @@ class HoleManager(object):
         self.island_sets = []
         self.holes = []
         self.smallest_hole = None
+        
+        
+        self.identify_and_clean_bad_geometry()
         self.find_holes()
         
         self.hovered = None
@@ -1180,10 +1206,6 @@ class HoleManager(object):
         self.bme.faces.ensure_lookup_table()        
         
     def find_holes(self):
-        
-        #first, make a big cleanup pass
-        self.identify_and_clean_bad_geometry()
-        
         self.holes = []
         eds_one_face = [ed for ed in self.bme.edges if len(ed.link_faces) == 1]
         
@@ -1273,7 +1295,34 @@ class HoleManager(object):
         else:
             self.smallest_hole = min(self.holes, key = lambda x: len(x.bmverts))
         
-          
+    
+    
+    def fill_holes_by_size(self, hole_size):
+        
+        if len(self.holes) == 0: return
+        
+        
+        small_holes = []
+        for hole in self.holes:
+            if len(hole.bmverts) <= hole_size:
+                small_holes += [hole]
+        
+        print('filling %i small holes' % len(small_holes))
+        for hole_small in small_holes:
+            hole_small.fill_hole()
+            self.holes.remove(hole_small)
+        
+        self.bme.to_mesh(self.ob.data)
+        self.ob.data.update()
+        
+        if len(self.holes) == 0:
+            self.smallest_hole = None
+            return len(small_holes)
+        else:
+            self.smallest_hole = min(self.holes, key = lambda x: len(x.bmverts))   
+            
+        return len(small_holes)
+       
     def ray_cast_holes(self, context,x,y):
         
         return
@@ -1577,7 +1626,29 @@ class HoleManager(object):
             self.bme.to_mesh(self.ob.data)
             self.ob.data.update()
         
-                         
+    def blot_hovered_element(self):
+        if self.hovered == None: return
+        
+        if isinstance(self.hovered, MeshHole):
+            
+            self.hovered.blot_hole()
+            self.hovered = None
+            self.bme.to_mesh(self.ob.data)
+            self.ob.data.update()
+    
+        self.verify_holes()
+        
+    def verify_holes(self):
+        
+        to_delete = []
+        for ele in self.holes:
+            if not ele.verify_valid():
+                to_delete.append(ele)
+                
+        for ele in to_delete:
+            self.holes.remove(ele)
+            del ele
+            
     def draw(self,context):
         pass
 

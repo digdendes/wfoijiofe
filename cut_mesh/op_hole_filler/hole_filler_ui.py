@@ -11,7 +11,8 @@ from mathutils import Matrix, Vector
 
 from .hole_filler_datastructure import HoleManager
 from .cache import holefiller_undo_cache
-
+from ...textbox import TextBox
+from ...common_utilities import get_settings
 class HoleFiller_UI:
     
     def start_ui(self, context):
@@ -26,8 +27,30 @@ class HoleFiller_UI:
         self.sketch          = []
         
         self.hole_manager = HoleManager(context,context.object)
+        
+        prefs = get_settings()
+        
+        #d3_model_hole_fill_edge_length
+        #d3_model_max_hole_size
+        #d3_model_auto_fill_small
+        
+        if prefs.d3_model_auto_fill_small:
+            n_filled = self.hole_manager.fill_holes_by_size(prefs. d3_model_max_hole_size)
+        
+        
         context.window.cursor_modal_set('CROSSHAIR')
-        context.area.header_text_set("Poly Trim.  Left click to place cut points on the mesh, then press 'C' to preview the cut")
+
+        help_txt = "HOLE FILLER and INSPECTOR\n\n-   Holes are outlined in green\n-   Islands are outlined in red\n\
+        -  Left Click to close hole or delete island\n\
+        -  Right Click to blot a hole which will delete the immediately surrounding faces\n\
+        -  'R' to recalculate and find new holes after blotting\n\n\nENTER to confirm and leave the Hole Filler session"
+        
+        
+        if prefs.d3_model_auto_fill_small:
+            help_txt += '\n\n Auto filled ' + str(n_filled) + ' holes on first pass'
+            
+        self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
+        self.help_box.snap_to_corner(context, corner = [1,1])
         
     def end_ui(self, context):            
         context.area.header_text_set()

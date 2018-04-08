@@ -977,12 +977,31 @@ class D3SPLINT_OT_blockout_trimmed_model(bpy.types.Operator):
     
     meta_type = EnumProperty(name = 'Meta Type', items = [ ('CYLINDER', 'CYLINDER','CYLINDER'),('ELLIPSOID', 'ELLIPSOID','ELLIPSOID')], default = 'ELLIPSOID')
     
+    
     @classmethod
     def poll(cls, context):
         #restoration exists and is in scene
         return  True
 
     def invoke(self,context, evenet):
+        Axis = bpy.data.objects.get('Insertion Axis')
+        if Axis == None:
+            self.report({'ERROR'},'Need to set survey from view first, then adjust axis arrow')
+            return {'CANCELLED'}
+        
+        if len(context.scene.odc_splints) == 0:
+            self.report({'ERROR'},'Need to plan a splint first')
+            return {'CANCELLED'}
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        axis_z = Axis.matrix_world.to_quaternion() * Vector((0,0,1))
+        
+        angle = axis_z.angle(Vector((0,0,1)))
+        angle_deg = 180/math.pi * angle
+        
+        if angle_deg > 25:
+            self.angle = angle_deg
+        
         
         return context.window_manager.invoke_props_dialog(self)
     
@@ -1631,8 +1650,9 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
     resolution = FloatProperty(default = 1.5, description = 'Mesh resolution. 1.5 seems ok?')
     scale = FloatProperty(default = 10, description = 'Only chnage if willing to crash blender.  Small chnages can make drastic differences')
     
-    meta_type = EnumProperty(name = 'Meta Type', items = [ ('CYLINDER', 'CYLINDER','CYLINDER'),('ELLIPSOID', 'ELLIPSOID','ELLIPSOID')], default = 'ELLIPSOID')
-    
+    max_blockout = FloatProperty(default = 10.0 , min = 2, max = 10.0, description = 'Limit the depth of blockout to save processing itme', name = 'Blockout Limit')
+    override_large_angle = BoolProperty(name = 'Angle Override', default = False, description = 'Large deviations between insertion asxis and world Z')
+    angle = FloatProperty(default = 0.0 , min = 0.0, max = 180.0, description = 'Angle between insertion axis and world Z', name = 'Insertion angle')
     @classmethod
     def poll(cls, context):
         #restoration exists and is in scene
@@ -1648,9 +1668,43 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
         
         row = layout.row()
         row.prop(self, "c_radius")
+        
+        row = layout.row()
+        row.prop(self, "max_blockout")
+        
+        if self.angle > 25:
+            row = layout.row()
+            msg  = 'The angle between insertion axis and world z is: ' + str(self.angle)[0:3]
+            row.label(msg)
+            
+            row = layout.row()
+            row.label('You will need to confirm this by overriding')
+            
+            row = layout.row()
+            row.label('Consider cancelling (right click) and inspecting your insertion axis')
+            
+            row = layout.row()
+            row.prop(self, "override_large_angle")
             
     def invoke(self,context, evenet):
+        #gather some information
+        Axis = bpy.data.objects.get('Insertion Axis')
+        if Axis == None:
+            self.report({'ERROR'},'Need to set survey from view first, then adjust axis arrow')
+            return {'CANCELLED'}
         
+        if len(context.scene.odc_splints) == 0:
+            self.report({'ERROR'},'Need to plan a splint first')
+            return {'CANCELLED'}
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        axis_z = Axis.matrix_world.to_quaternion() * Vector((0,0,1))
+        
+        angle = axis_z.angle(Vector((0,0,1)))
+        angle_deg = 180/math.pi * angle
+        
+        if angle_deg > 25:
+            self.angle = angle_deg
         return context.window_manager.invoke_props_dialog(self)
     
     def execute(self, context):
@@ -1670,6 +1724,15 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
             self.report({'ERROR'},'Need to set survey from view first, then adjust axis arrow')
             return {'CANCELLED'}
         
+        axis_z = Axis.matrix_world.to_quaternion() * Vector((0,0,1))
+        angle = axis_z.angle(Vector((0,0,1)))
+        angle_deg = 180/math.pi * angle
+        
+        if angle_deg > 25 and not self.override_large_angle:
+            self.report({'ERROR'},'The insertion axis is very deviated from the world Z, confirm this is correct by using the override feature or survey the model from view again')
+            return {'CANCELLED'}
+            
+            
         
         start = time.time()
         interval_start = start
@@ -1883,17 +1946,14 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
         
             
             if v in perimeter_verts:
-                N = math.ceil(height/.125)
+                N = min(math.ceil(height/.125), math.ceil(self.max_blockout/.125))  #limit the blockout depth
                 if size_x < self.scale * .125 and size_y < self.scale * .125:
                         n_voids += 1
                 for i in range(0,N):
                     n_elements += 1
                     
                     mb = meta_data.elements.new(type = 'ELLIPSOID')
-                    mb.co = self.scale * (co - i * .125 * local_axis_z)
-                    
-                    
-                        
+                    mb.co = self.scale * (co - i * .125 * local_axis_z)  
                         
                     mb.size_x = max(size_x, self.scale*.125)
                     mb.size_y = max(size_y, self.scale*.125)
@@ -1902,7 +1962,7 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
                     
     
             if v in undercut_verts:
-                N = math.ceil(height/.2)
+                N = min(math.ceil(height/.2), math.ceil(self.max_blockout/.2))  #limit the blockout depth
                 for i in range(0,N):
                     
                     n_elements += 1
@@ -1928,9 +1988,10 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
                 mb.rotation = quat
                 
                 #Add a flat base
-                mb= meta_data.elements.new(type = 'BALL')
-                mb.co = self.scale * co_top
-                mb.radius = self.scale * .3
+                if self.angle < 25:
+                    mb= meta_data.elements.new(type = 'BALL')
+                    mb.co = self.scale * co_top
+                    mb.radius = self.scale * .3
                  
         #Now do teh passive spacer part
         for v in bme.verts: 
@@ -1999,10 +2060,7 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
         
         bme_final = bmesh.new()
         bme_final.from_mesh(me)
-        
-    
-        
-        
+
         bme_final.verts.ensure_lookup_table()
         bme_final.edges.ensure_lookup_table()
         bme_final.faces.ensure_lookup_table()
@@ -2200,8 +2258,7 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
         print('corrected %i verts using too far away' % n_too_far)
         print('ignored %i verts clsoe to trim boundary' % n_boundary)
         
-        
-        
+
         if 'Child Of' not in new_ob.constraints:
             Master = bpy.data.objects.get(splint.model)
             cons = new_ob.constraints.new('CHILD_OF')

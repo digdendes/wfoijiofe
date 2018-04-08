@@ -75,6 +75,7 @@ def calc_angle(v):
     if len(eds_non_man) == 0:
         print('this is not a hole perimeter vertex')
         return 2 * math.pi, None, None
+    
         
     eds_all = [ed for ed in v.link_edges]
     
@@ -89,13 +90,16 @@ def calc_angle(v):
         print("more than 2 non manifold edges, loop self intersects or there is a dangling edge")
         return 2 * math.pi, None, None
     
+    
     va = eds_non_man[0].other_vert(v)
     vb = eds_non_man[1].other_vert(v)
     
-    
-    
     Va = va.co - v.co
     Vb = vb.co - v.co
+    
+    if Va.length < .00001 or Vb.length < .00001:
+        print("zero length edge")
+        return 2 * math.pi, None, None
     
     angle = Va.angle(Vb)
     
@@ -822,12 +826,14 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
             #make sure no loose triangles
             
             #first pass, collect all funky edges
-            funky_edges = [ed for ed in bme.edges if len(ed.link_faces) != 2]
+            funky_edges = [ed for ed in bme.edges if (len(ed.link_faces) != 2 or ed.calc_length() < .00001)]
             
             
             degenerate_eds = [ed for ed in funky_edges if len(ed.link_faces) > 2]
+            zero_len_eds = [ed for ed in funky_edges if ed.calc_length() < .00001]
             loose_eds = [ed for ed in funky_edges if len(ed.link_faces) == 0]
             non_man_eds = [ed for ed in funky_edges if len(ed.link_faces) == 1]
+            
             
             if len(degenerate_eds):
                 print('found %i degenerate edges' % len(degenerate_eds))
@@ -835,7 +841,9 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
                 
                 #now need to run again, and hopefully delete loose triangles
                 return -1
-                
+            if len(zero_len_eds):
+                print('dissolving zero length edges')
+                bmesh.ops.degenerate_dissolve(bme, dist = .0001, eds = zero_len_eds)    
             if len(loose_eds):
                 loose_vs = set()
                 for ed in loose_eds:
@@ -872,8 +880,7 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
                                 print(veca.angle(vecb))
                                 bad_triangles.append(f)
                         
-                    
-            
+                               
             if len(bad_triangles):
                 bad_verts = set()
                 bad_edges = set()

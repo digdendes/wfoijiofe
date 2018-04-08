@@ -28,7 +28,7 @@
 bl_info = {
     'name': "D3T Splint Module",
     'author': "Patrick R. Moore",
-    'version': (0,4,2),
+    'version': (0,4,3),
     'blender': (2, 7, 9),
     'api': "3c04373",
     'location': "3D View -> Tool Shelf",
@@ -174,6 +174,15 @@ class D3SplintAddonPreferences(AddonPreferences):
     #this value used to seed the modal operator
     d3_model_label = StringProperty(name = 'Text Label', default = 'Model Label')
     d3_model_label_depth = FloatProperty(name = 'Emboss Depth', min = .2, max = 4, default = .5)
+    
+    
+    ##### Hole Filler ##########
+    #this value used to seed the modal operator
+    d3_model_hole_fill_edge_length = FloatProperty(name = 'Hole Filler Edge Length', min = .1, max = 2.0, default = .25, description = 'Size of the edges hole filler uses to fill the hole.  Use larger values for larger holes.  .2 to .3 is typically good for tooth holes, .4 to .7 is good for bases and large areas')
+    d3_model_max_hole_size = IntProperty(name = 'Auto Fill Hole Size', min = 3, max = 200, default = 20)
+    d3_model_auto_fill_small = BoolProperty(name = 'Auto Fill Small Holes', default = False)
+    
+    
     ##########################################
     ###### Articulator Defaults   ############
     ##########################################
@@ -316,6 +325,13 @@ class D3SplintAddonPreferences(AddonPreferences):
         row.prop(self, "def_passive_radius")
         row.prop(self, "def_blockout_radius")
     
+        ##### Model Work ####
+        row = layout.row()
+        row.label('Model Work Settings')
+        row = layout.row()
+        row.prop(self, "d3_model_auto_fill_small")
+        row.prop(self, "d3_model_max_hole_size")
+        row.prop(self, "d3_model_hole_fill_edge_length")
         
         ##### Deprogrammer #####
         row = layout.row()

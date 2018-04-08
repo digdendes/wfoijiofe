@@ -400,9 +400,10 @@ class D3SPLINT_OT_plane_cut_mesh_rough(bpy.types.Operator):
                     return 'finish'
                 else:
                     self.bmesh_bisect_object(context, mesh_filter= filter_geom)
+                    context.window.cursor_modal_set('KNIFE')
                     return 'main'
 
-                context.window.cursor_modal_set('KNIFE')
+                
                 #help_txt = "Left Click to start a cut, then move mouse"
                 #self.help_box.raw_text = help_txt
                 #self.help_box.format_and_wrap_text()

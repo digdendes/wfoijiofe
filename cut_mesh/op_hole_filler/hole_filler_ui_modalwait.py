@@ -25,44 +25,61 @@ class HoleFiller_UI_ModalWait():
             if self.hole_manager.hovered != None:
                 self.hole_manager.process_hovered_element()
             return 'main'
-                
-        if eventd['press'] == 'F':
+        
+        if  eventd['press'] == 'RIGHTMOUSE':
+            x,y = eventd['mouse']
             
-            self.hole_manager.fill_smallest_hole()
-            
+            if self.hole_manager.hovered != None:
+                self.hole_manager.blot_hovered_element()
             return 'main'
+                
+        
+        
+        if eventd['press'] == 'R':    
+            self.hole_manager.find_holes()
+            return 'main'
+        
+        
+        if eventd['press'] == 'F':
+            self.hole_manager.fill_smallest_hole()
+            return 'main'
+        
+        
+        if eventd['press'] in {'THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE','NUMPAD_3', 'NUMPAD_4', 'NUMPAD_5','NUMPAD_6','NUMPAD_7','NUMPAD_8', 'NUMPAD_9'}:
+            
+            if eventd['press'] in {'THREE','NUMPAD_3'}:
+                self.hole_manager.fill_holes_by_size(3)
+                
+            elif eventd['press'] in {'FOUR','NUMPAD_4'}:
+                self.hole_manager.fill_holes_by_size(4)
+            
+            elif eventd['press'] in {'FIVE','NUMPAD_5'}:
+                self.hole_manager.fill_holes_by_size(5)
+            
+            elif eventd['press'] in {'SIX','NUMPAD_6'}:
+                self.hole_manager.fill_holes_by_size(6)
+            
+            elif eventd['press'] in {'SEVEN','NUMPAD_7'}:
+                self.hole_manager.fill_holes_by_size(7)
+            
+            elif eventd['press'] in {'EIGHT','NUMPAD_8'}:
+                self.hole_manager.fill_holes_by_size(8)
+                
+            elif eventd['press'] in {'NINE','NUMPAD_9'}:
+                self.hole_manager.fill_holes_by_size(9)
+                    
+            return 'main'    
+            
         
         if eventd['press'] == 'S':
             self.hole_manager.snap_smallest_hole(context)
             return 'main'
             
-        if eventd['press'] == 'K':     
-            if self.knife.split and self.knife.face_seed and len(self.knife.ed_map):
-                self.knife.split_geometry(eventd['context'], mode = 'KNIFE')
-                return 'finish' 
         
-        if eventd['press'] == 'P':
-            #self.knife.preview_mesh(eventd['context'])
-            self.knife.split_geometry(eventd['context'], mode = 'SEPARATE')
-            return 'finish'
-        
-        if eventd['press'] == 'X':
-            self.knife.split_geometry(eventd['context'], mode = 'DELETE')
-            return 'finish'
-        
-        if eventd['press'] == 'Y':
-            self.knife.split_geometry(eventd['context'], mode = 'SPLIT')
-            return 'finish'
-        
-        if eventd['press'] == 'SHIFT+D':
-            self.knife.split_geometry(eventd['context'], mode = 'DUPLICATE')
-            return 'finish'
-            
         
             
           
         if eventd['press'] == 'RET' :
-            self.knife.confirm_cut_to_mesh()
             return 'finish'
             
         elif eventd['press'] == 'ESC':

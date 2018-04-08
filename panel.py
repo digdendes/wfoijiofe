@@ -545,6 +545,8 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
             ico = 'CHECKBOX_DEHLT'
         
         col.operator("d3splint.splint_finish_booleans3", text = "Finalize The Splint", icon = ico)
+        col.operator("d3splint.splint_clean_islands", text = "Remove Small Parts")
+       
         #col.operator("d3guard.splint_cork_boolean", text = "Finalize Splint (CORK EGINE)")
         col.operator("d3splint.export_splint_stl", text = "Export Splint STL")
         col.operator("d3splint.auto_check_model", text = "Auto Plane Cut Model")
@@ -565,6 +567,7 @@ class VIEW3D_PT_D3SplintModels(bpy.types.Panel):
     bl_context = ""
     
     def draw(self, context):
+        prefs = get_settings()
         sce = bpy.context.scene
         layout = self.layout
         
@@ -595,10 +598,16 @@ class VIEW3D_PT_D3SplintModels(bpy.types.Panel):
             col.operator("object.mode_set", text = 'Finish Sculpt/Paint')
         
         row = layout.row()
-        row.label('Cleaning Operators')
+        row.label('Fixing and Cleaning Operators')
         row = layout.row()
-        col = row.column()      
+              
         #col.operator("d3splint.simple_offset_surface", text = "Simple Offset")
+        
+        row.prop(prefs, "d3_model_auto_fill_small")
+        row.prop(prefs, "d3_model_max_hole_size")
+        
+        row = layout.row()
+        col = row.column()
         col.operator("d3model.mesh_repair", text = "Fix Holes and Islands")
         col.operator("d3splint.delete_islands", text = "Delete Loose Parts")
         col.operator("d3splint.ragged_edges", text = "Remove Ragged Edges")

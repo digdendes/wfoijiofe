@@ -3,8 +3,8 @@ Created on Oct 8, 2015
 
 @author: Patrick
 '''
-from .. import common_drawing
-
+from ... import common_drawing
+from ... import common_utilities
 
 class HoleFiller_UI_Draw():
     def draw_postview(self, context):
@@ -27,3 +27,8 @@ class HoleFiller_UI_Draw():
         if len(self.sketch):
             common_drawing.draw_polyline_from_points(context, self.sketch, (.8,.3,.3,.8), 2, "GL_LINE_SMOOTH")
         
+        self.help_box.draw()
+        
+        prefs = common_utilities.get_settings()
+        r,g,b = prefs.active_region_color
+        common_drawing.outline_region(context.region,(r,g,b,1)) 

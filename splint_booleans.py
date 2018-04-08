@@ -16,6 +16,7 @@ import tracking
 from bpy.props import FloatProperty, BoolProperty, IntProperty, EnumProperty
 import common_utilities
 from common_utilities import get_settings
+from bmesh_fns import bmesh_loose_parts
   
 class D3SPLINT_OT_splint_cork_boolean(Operator):
     """Use external boolean engine when fast Blender solver has errors"""
@@ -99,10 +100,20 @@ class D3SPLINT_OT_splint_cork_boolean(Operator):
                 del_edges += [ed]
         bmesh.ops.delete(bme, geom = del_edges, context = 4) 
         
-        me = bpy.data.meshes.new('Final Splint')
-        ob = bpy.data.objects.new('Final Splint', me)
-        context.scene.objects.link(ob)
-        bme.to_mesh(me)
+        if 'Final Splint' in bpy.data.objects:
+            ob = bpy.data.objects.get('Final Splint')
+            
+            if len(ob.modifiers):
+                ob.modifiers.clear()
+                
+            bme.to_mesh(ob.data)
+            ob.data.update()
+            
+        else:
+            me = bpy.data.meshes.new('Final Splint')
+            ob = bpy.data.objects.new('Final Splint', me)
+            context.scene.objects.link(ob)
+        
         bme.free()
         
         for obj in context.scene.objects:
@@ -125,9 +136,9 @@ class D3SPLINT_OT_splint_cork_boolean(Operator):
             return {'CANCELLED'}
 
 
-        spacer = bpy.data.objects.get('Passive Spacer')
+        spacer = bpy.data.objects.get('Refractory Model')
         shell = bpy.data.objects.get('Splint Shell')
-        base_teeth = bpy.data.objects.get('Based_Model')
+        
         
         if not shell:
             self.report({'ERROR'}, 'Need to calculate the shell first')
@@ -469,8 +480,7 @@ class D3SPLINT_OT_splint_finish_booleans3(bpy.types.Operator):
     solver = EnumProperty(
         description="Boolean Method",
         items=(("BMESH", "Bmesh", "Faster/More Errors"),
-               ("CARVE", "Carve", "Slower/Less Errors"),
-               ("CORK", "Cork", "Slowest/Least Errors, Not re-implemented yet")),
+               ("CARVE", "Carve", "Slower/Less Errors")),
         default = "BMESH")
   
     
@@ -521,8 +531,6 @@ class D3SPLINT_OT_splint_finish_booleans3(bpy.types.Operator):
         
         start = time.time()
         #don't add multiple boolean modifiers
-        
-        
         
         if 'Final Splint' not in bpy.data.objects:
             me = Shell.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
@@ -689,6 +697,88 @@ class D3SPLINT_OT_splint_finish_booleans_bite(bpy.types.Operator):
         splint.finalize_splint = True
         tracking.trackUsage("D3Splint:FinishBiteBoolean",(self.solver, str(completion_time)[0:4]))
         return {'FINISHED'}    
+
+
+class D3SPLINT_OT_splint_delete_islands(bpy.types.Operator):
+    """Finish the Booleans"""
+    bl_idname = "d3splint.splint_clean_islands"
+    bl_label = "Remove Islands From Splint"
+    bl_options = {'REGISTER', 'UNDO'}
+         
+    @classmethod
+    def poll(cls, context):
+        #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':
+        #    return True
+        #else:
+        #    return False
+        return True
+    
+    def execute(self, context):
+        
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        prefs = get_settings()
+        
+        start = time.time()
+        
+        Shell = bpy.data.objects.get('Final Splint')
+       
+        
+        
+        if Shell == None:
+            self.report({'ERROR'}, 'Need to calculate the finalize the splint first')
+            return {'CANCELLED'}
+        
+        bme = bmesh.new()
+        bme.from_object(Shell, context.scene)
+        bme.verts.ensure_lookup_table()
+        bme.edges.ensure_lookup_table()
+        bme.faces.ensure_lookup_table()
+        
+        
+        islands = bmesh_loose_parts(bme, selected_faces = None, max_iters = 100)
+        
+        if len(islands) == 1:
+            print('there is only one solid part')
+            Shell.modifiers.clear()
+            bme.to_mesh(Shell.data)
+            bme.free()
+            return {'FINISHED'}
+            
+        best_island = max(islands, key = len)
+        to_keep = set(best_island)
+        
+        total_faces = set(bme.faces[:])
+        del_faces = total_faces - to_keep
+        bmesh.ops.delete(bme, geom = list(del_faces), context = 3)
+        del_verts = []  #There has GOT to be a smarter way.  Maybe by iterating over del_faces?
+        for v in bme.verts:
+            if all([f in del_faces for f in v.link_faces]):
+                del_verts += [v]        
+        
+        bmesh.ops.delete(bme, geom = del_verts, context = 1)
+        del_edges = []
+        for ed in bme.edges:
+            if len(ed.link_faces) == 0:
+                del_edges += [ed]
+                
+        bmesh.ops.delete(bme, geom = del_edges, context = 4)
+        
+        
+        Shell.modifiers.clear()
+        bme.to_mesh(Shell.data)
+        
+        bme.free()
+        
+        finish = time.time()
+        print('took %f seconds to clean islands' % (finish - start))
+        
+        
+        completion_time = time.time() - start
+        print('Applied all modifiers and removed islands in %f seconds' % completion_time)   
+       
+        tracking.trackUsage("D3Splint:RemoveIslands",str(completion_time)[0:4])
+        return {'FINISHED'}  
 # ############################################################
 # Registration
 # ############################################################
@@ -700,6 +790,7 @@ def register():
     bpy.utils.register_class(D3SPLINT_OT_splint_finish_booleans2)
     bpy.utils.register_class(D3SPLINT_OT_splint_finish_booleans3)
     bpy.utils.register_class(D3SPLINT_OT_splint_finish_booleans_bite)
+    bpy.utils.register_class(D3SPLINT_OT_splint_delete_islands)
 
 
 def unregister():
@@ -708,3 +799,4 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_splint_finish_booleans2)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_finish_booleans3)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_finish_booleans_bite)
+    bpy.utils.unregister_class(D3SPLINT_OT_splint_delete_islands)
