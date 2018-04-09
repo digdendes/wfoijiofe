@@ -158,7 +158,7 @@ def calc_angle(v):
             
             else:
                 #PROBLEMS!
-                print("BIG BIG PROBLEMS")
+                #print("BIG BIG PROBLEMS")
                 return angle, vb, va
 
 def clockwise_loop(vert_loop, z):
@@ -842,8 +842,9 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
                 #now need to run again, and hopefully delete loose triangles
                 return -1
             if len(zero_len_eds):
-                print('dissolving zero length edges')
-                bmesh.ops.dissolve_degenerate(bme, dist = .0001, edges = zero_len_eds)    
+                print('dissolving zero length edges %i' % len(zero_len_eds))
+                bmesh.ops.dissolve_degenerate(bme, dist = .0001, edges = zero_len_eds)  
+                return -1  
             if len(loose_eds):
                 loose_vs = set()
                 for ed in loose_eds:
