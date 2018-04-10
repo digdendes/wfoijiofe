@@ -1336,7 +1336,7 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
             ob.select = False
         Master.select = True
         context.scene.objects.active = Master
-        bpy.ops.object.mode_set(mode = 'SCULPT')
+        #bpy.ops.object.mode_set(mode = 'SCULPT')
         
         trimmed_bme = bmesh.new()
         trimmed_bme.from_mesh(Model.data)
