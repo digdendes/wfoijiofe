@@ -1700,10 +1700,15 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
         splint = context.scene.odc_splints[n]
         axis_z = Axis.matrix_world.to_quaternion() * Vector((0,0,1))
         
-        angle = axis_z.angle(Vector((0,0,1)))
+        if splint.jaw_type == 'MAXILLA':
+            Z = Vector((0,0,-1))
+        else:
+            Z = Vector((0,0,1))
+            
+        angle = axis_z.angle(Z)
         angle_deg = 180/math.pi * angle
         
-        if angle_deg > 25:
+        if angle_deg > 35:
             self.angle = angle_deg
         return context.window_manager.invoke_props_dialog(self)
     
@@ -1724,12 +1729,17 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
             self.report({'ERROR'},'Need to set survey from view first, then adjust axis arrow')
             return {'CANCELLED'}
         
-        axis_z = Axis.matrix_world.to_quaternion() * Vector((0,0,1))
-        angle = axis_z.angle(Vector((0,0,1)))
+        if splint.jaw_type == 'MAXILLA':
+            Z = Vector((0,0,-1))
+        else:
+            Z = Vector((0,0,1))
+            
+        axis_z = Axis.matrix_world.to_quaternion() * Vector((0,0,1))    
+        angle = axis_z.angle(Z)
         angle_deg = 180/math.pi * angle
         
-        if angle_deg > 25 and not self.override_large_angle:
-            self.report({'ERROR'},'The insertion axis is very deviated from the world Z, confirm this is correct by using the override feature or survey the model from view again')
+        if angle_deg > 35 and not self.override_large_angle:
+            self.report({'ERROR'},'The insertion axis is very deviated from the world Z,\n confirm this is correct by using the override feature or \nsurvey the model from view again')
             return {'CANCELLED'}
             
             
