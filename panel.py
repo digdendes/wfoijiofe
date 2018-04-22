@@ -288,7 +288,8 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
                 ico = 'CHECKBOX_DEHLT'
             row = layout.row()
             row.operator("d3splint.draw_splint_margin", text = "Mark Splint Margin", icon = ico)
-        
+            row.operator("d3splint.clear_margin", text = '', icon = 'CANCEL')
+            
         if splint and splint.trim_upper: 
             ico = 'CHECKBOX_HLT'
         else:
@@ -300,7 +301,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         else:
             row = layout.row()
             row.operator("d3splint.splint_model_trim", text = "Trim Model", icon = ico)
-        
+            
         #row = layout.row()
         #row.label('Paint Method')
         #row = layout.row()

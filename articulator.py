@@ -744,7 +744,7 @@ class D3SPLINT_OT_splint_open_pin_on_articulator(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     
-    amount = FloatProperty(name = 'Pin Setting', default = 0.5, step = 10, min = -3.0, max = 3.0)
+    amount = FloatProperty(name = 'Pin Setting', default = 0.5, step = 10, min = -3.0, max = 6.0)
     @classmethod
     def poll(cls, context):
         #if context.mode == "OBJECT" and context.object != None and context.object.type == 'CURVE':

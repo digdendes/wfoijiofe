@@ -285,7 +285,9 @@ class D3SPLINT_OT_splint_virtual_wax_on_curve(bpy.types.Operator):
             # create material
             mat = bpy.data.materials.new(name="Splint Material")
             mat.diffuse_color = get_settings().def_splint_color
-        
+            mat.use_transparency = True
+            mat.transparency_method = 'Z_TRANSPARENCY'
+            mat.alpha = .4
         
         if mat.name not in meta_obj.data.materials:
             meta_obj.data.materials.append(mat)
@@ -481,7 +483,9 @@ class D3SPLINT_OT_surgical_bite_positioner(bpy.types.Operator):
             # create material
                 mat = bpy.data.materials.new(name="Splint Material")
                 mat.diffuse_color = get_settings().def_splint_color
-        
+                mat.use_transparency = True
+                mat.transparency_method = 'Z_TRANSPARENCY'
+                mat.alpha = .4
             new_ob.data.materials.append(mat)
             
         else:
@@ -2164,8 +2168,10 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
             # create material
             mat = bpy.data.materials.new(name="Refractory Material")
             mat.diffuse_color = Color((0.36, .8,.36))
-        
-        
+            mat.use_transparency = True
+            mat.transparency_method = 'Z_TRANSPARENCY'
+            mat.alpha = .4
+            
         if len(new_ob.material_slots) == 0:
             new_ob.data.materials.append(mat)
         

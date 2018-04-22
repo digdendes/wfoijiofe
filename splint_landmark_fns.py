@@ -159,6 +159,15 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
         if event.type == 'RET' and event.value == 'PRESS':
             if self.splint.jaw_type == 'MANDIBLE':
                 self.convert_curve_to_plane(context)
+            
+            
+            context.space_data.show_backface_culling = False
+            opp = self.splint.get_mandible()
+            if opp and opp in bpy.data.objects:
+                Opposing = bpy.data.objects.get(opp)
+                Opposing.show_transparent = False
+                Opposing.hide = True
+            
             self.splint.curve_max = True
             return 'finish'
             
@@ -219,30 +228,44 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
         self.crv = None
         margin = "Occlusal Curve Max"
         
-        model = self.splint.get_maxilla()   
-        if model != '' and model in bpy.data.objects:
-            Model = bpy.data.objects[model]
-            for ob in bpy.data.objects:
-                ob.select = False
-                ob.hide = True
-            Model.select = True
-            Model.hide = False
-            context.scene.objects.active = Model
-            bpy.ops.view3d.viewnumpad(type = 'BOTTOM')
-            bpy.ops.view3d.view_selected()
-            self.crv = CurveDataManager(context,snap_type ='OBJECT', 
-                                        snap_object = Model, 
-                                        shrink_mod = False, 
-                                        name = margin,
-                                        cyclic = 'FALSE')
-            self.crv.crv_obj.parent = Model
-            self.crv.point_size, self.crv.point_color, self.crv.active_color = prefs.point_size, prefs.def_point_color, prefs.active_point_color
-            
-            context.space_data.show_manipulator = False
-            context.space_data.transform_manipulators = {'TRANSLATE'}
-        else:
+        model = self.splint.get_maxilla()
+        
+        
+        
+        if model == '' or (model not in bpy.data.objects):
             self.report({'ERROR'}, "Need to set the Master Model first!")
             return {'CANCELLED'}
+        
+        
+   
+        Model = bpy.data.objects[model]
+        for ob in bpy.data.objects:
+            ob.select = False
+            ob.hide = True
+        
+        context.space_data.show_backface_culling = True
+        opp = self.splint.get_mandible()
+        if opp and opp in bpy.data.objects:
+            Opposing = bpy.data.objects.get(opp)
+            Opposing.show_transparent = True
+            Opposing.hide = False
+            
+        Model.select = True
+        Model.hide = False
+        context.scene.objects.active = Model
+        bpy.ops.view3d.viewnumpad(type = 'BOTTOM')
+        bpy.ops.view3d.view_selected()
+        self.crv = CurveDataManager(context,snap_type ='OBJECT', 
+                                    snap_object = Model, 
+                                    shrink_mod = False, 
+                                    name = margin,
+                                    cyclic = 'FALSE')
+        self.crv.crv_obj.parent = Model
+        self.crv.point_size, self.crv.point_color, self.crv.active_color = prefs.point_size, prefs.def_point_color, prefs.active_point_color
+        
+        context.space_data.show_manipulator = False
+        context.space_data.transform_manipulators = {'TRANSLATE'}
+        
             
         
         #self.splint.occl = self.crv.crv_obj.name
@@ -370,7 +393,15 @@ class D3SPLINT_OT_splint_occlusal_curve_mand(bpy.types.Operator):
             else:
                 bpy.ops.view3d.viewnumpad(type = 'TOP')
             bpy.ops.view3d.view_selected()
-            
+        
+        context.space_data.show_backface_culling = False
+        opp = self.splint.get_maxilla()
+        if opp and opp in bpy.data.objects:
+            Opposing = bpy.data.objects.get(opp)
+            Opposing.show_transparent = False
+            #Opposing.hide = True
+                
+                    
     def modal_nav(self, event):
         events_nav = {'MIDDLEMOUSE', 'WHEELINMOUSE','WHEELOUTMOUSE', 'WHEELUPMOUSE','WHEELDOWNMOUSE'} #TODO, better navigation, another tutorial
         handle_nav = False
@@ -474,27 +505,31 @@ class D3SPLINT_OT_splint_occlusal_curve_mand(bpy.types.Operator):
         margin = 'Occlusal Curve Mand'
         
         model = self.splint.get_mandible()   
-        if model != '' and model in bpy.data.objects:
-            Model = bpy.data.objects[model]
-            for ob in bpy.data.objects:
-                ob.select = False
-                ob.hide = True
-            Model.select = True
-            Model.hide = False
-            context.scene.objects.active = Model
-            bpy.ops.view3d.viewnumpad(type = 'TOP')
-            bpy.ops.view3d.view_selected()
-            context.space_data.show_manipulator = False
-            context.space_data.transform_manipulators = {'TRANSLATE'}
-            self.crv = CurveDataManager(context,snap_type ='OBJECT', snap_object = Model, shrink_mod = False, name = margin, cyclic = 'FALSE')
-            self.crv.crv_obj.parent = Model
-            self.crv.point_size, self.crv.point_color, self.crv.active_color = prefs.point_size, prefs.def_point_color, prefs.active_point_color
-            
-        else:
+        if model == '' or (model not in bpy.data.objects):
             self.report({'ERROR'}, "Need to mark the Opposing model first!")
             return {'CANCELLED'}
             
-        
+        Model = bpy.data.objects[model]
+        for ob in bpy.data.objects:
+            ob.select = False
+            ob.hide = True
+        Model.select = True
+        Model.hide = False
+        context.scene.objects.active = Model
+        bpy.ops.view3d.viewnumpad(type = 'TOP')
+        bpy.ops.view3d.view_selected()
+        context.space_data.show_manipulator = False
+        context.space_data.transform_manipulators = {'TRANSLATE'}
+        self.crv = CurveDataManager(context,snap_type ='OBJECT', snap_object = Model, shrink_mod = False, name = margin, cyclic = 'FALSE')
+        self.crv.crv_obj.parent = Model
+        self.crv.point_size, self.crv.point_color, self.crv.active_color = prefs.point_size, prefs.def_point_color, prefs.active_point_color
+ 
+        context.space_data.show_backface_culling = True
+        opp = self.splint.get_maxilla()
+        if opp and opp in bpy.data.objects:
+            Opposing = bpy.data.objects.get(opp)
+            Opposing.show_transparent = True
+            Opposing.hide = False
         #self.splint.occl = self.crv.crv_obj.name
         
         #TODO, tweak the modifier as needed
@@ -1263,6 +1298,10 @@ class D3SPLINT_OT_pick_model(bpy.types.Operator):
             mat.diffuse_color = prefs.def_model_color
             mat.diffuse_intensity = 1
             mat.emit = .8
+            mat.use_transparency = True
+            mat.transparency_method = 'Z_TRANSPARENCY'
+            mat.alpha = .4
+            
         else:
             mat = bpy.data.materials.get('Model Mat')
         
@@ -1281,7 +1320,7 @@ class D3SPLINT_OT_pick_model(bpy.types.Operator):
         
         self.ob.data.transform(iT)
         self.ob.matrix_world *= T
-        
+        self.ob.lock_location[0], self.ob.lock_location[1], self.ob.lock_location[2] = True, True, True
         tracking.trackUsage("D3Splint:PickModel")
         return 'finish'
             
@@ -1436,6 +1475,10 @@ class D3SPLINT_OT_pick_opposing(bpy.types.Operator):
             mat.diffuse_intensity = 1
             mat.emit = 0.0
             mat.specular_intensity = 0.0
+            mat.use_transparency = True
+            mat.transparency_method = 'Z_TRANSPARENCY'
+            mat.alpha = .4
+            
         else:
             mat = bpy.data.materials.get('Opposing Mat')
         
@@ -1453,7 +1496,7 @@ class D3SPLINT_OT_pick_opposing(bpy.types.Operator):
         
         self.ob.data.transform(iT)
         self.ob.matrix_world *= T
-            
+        self.ob.lock_location[0], self.ob.lock_location[1], self.ob.lock_location[2] = True, True, True    
         tracking.trackUsage("D3Splint:SetOpposing")
         return 'finish'
             
@@ -1612,6 +1655,10 @@ class D3SPLINT_OT_pick_external_shell(bpy.types.Operator):
         if "Splint Material" not in bpy.data.materials:
             mat = bpy.data.materials.new(name = 'Splint Material')
             mat.diffuse_color = get_settings().def_splint_color
+            mat.use_transparency = True
+            mat.transparency_method = 'Z_TRANSPARENCY'
+            mat.alpha = .4
+            
         else:
             mat = bpy.data.materials.get('Splint Material')
         
