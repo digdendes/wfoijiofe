@@ -600,6 +600,10 @@ class VIEW3D_PT_D3SplintModels(bpy.types.Panel):
         
         row = layout.row()
         row.label('Fixing and Cleaning Operators')
+        
+        row = layout.row()
+        row.operator("d3model.remesh_and_decimate", text = "Auto Remesh")
+        
         row = layout.row()
               
         #col.operator("d3splint.simple_offset_surface", text = "Simple Offset")

@@ -546,7 +546,117 @@ class D3SPLINT_OT_mask_to_convex_hull(bpy.types.Operator):
         final_bme.free()
         
         return {'FINISHED'}
+
+class D3SPLINT_OT_remesh_decimate(bpy.types.Operator):
+    '''Remesh to close holes and decimate to target resolution'''
+    bl_idname = "d3model.remesh_and_decimate"
+    bl_label = "Remesh and Decimate"
+    bl_options = {'REGISTER','UNDO'}
+
+    remesh_depth = bpy.props.IntProperty(default = 9, min = 5, max = 10, description = 'Remesh Modifier depth 9 is usually good, 10 is slow, 8 for quick prints')
+    detail_level = bpy.props.IntProperty(default = 3, min = 1, max = 8, description = 'Sculpt remesh triangulation detail, 3 to 4 is fine for splints')
+    #target_resolution = bpy.props.IntProperty(default = 150, min = 30, max = 300, step = 10,description = 'Target number of verts in thousands')
+    method = bpy.props.EnumProperty(items = (('BMESH','BMESH','BMESH'),('MESH','MESH','MESH')),default = 'BMESH')
+    @classmethod
+    def poll(cls, context):
         
+        c1 = context.object.type == 'MESH'
+        c2 = context.mode != 'EDIT'
+        return c1 & c2
+    
+    def invoke(self,context,event):
+        return context.window_manager.invoke_props_dialog(self)
+        
+    def execute(self, context):
+        
+        ob = context.object
+        
+        mod = ob.modifiers.new('Remesh', type = 'REMESH')
+        mod.mode = 'SMOOTH'
+        mod.octree_depth = self.remesh_depth
+        
+        if self.method == 'BMESH':
+            start = time.time()
+            bme = bmesh.new()
+            bme.from_object(ob, context.scene)
+            bme.verts.ensure_lookup_table()
+            n = len(bme.verts)
+            finish = time.time()
+            print('took %f seconds to extract BMesh' % (finish-start))
+        else:
+            start = time.time()
+            me = ob.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+            n = len(me.vertices)
+            finish = time.time()
+            print('took %f seconds to extract regular Mesh' % (finish-start))
+        
+        
+        
+        #factor = self.target_resolution * 1000 / n
+        
+        ob.modifiers.clear()
+        
+        
+        if self.method == 'BMESH':
+            bme.to_mesh(ob.data)
+            bme.free()
+            print('took %f seconds to entire operation BMesh' % (finish-start))
+        else:
+            old_me = ob.data
+            ob.data = me
+            bpy.data.meshes.remove(old_me)
+            finish = time.time()
+            print('took %f seconds to do entire operation Mesh' % (finish-start))
+            
+            
+        
+        
+        bpy.ops.object.mode_set(mode = 'SCULPT')
+        if not ob.use_dynamic_topology_sculpting:
+            bpy.ops.sculpt.dynamic_topology_toggle()
+        context.scene.tool_settings.sculpt.detail_type_method = 'CONSTANT'
+        context.scene.tool_settings.sculpt.constant_detail_resolution = self.detail_level
+        bpy.ops.sculpt.detail_flood_fill()
+        bpy.ops.object.mode_set(mode = 'OBJECT')
+        
+        
+        #if factor < 1:
+        #    mod = ob.modifiers.new('Decimate', type = 'DECIMATE')
+        #    mod.use_collapse_triangulate = True
+        #    mod.ratio = factor
+            
+        #    if self.method == 'BMESH':
+        #        start = time.time()
+        #        bme = bmesh.new()
+        #        bme.from_object(ob, context.scene)
+        #        bme.verts.ensure_lookup_table()
+        #        n = len(bme.verts)
+        #        finish = time.time()
+        #        print('took %f seconds to extract 2nd BMesh' % (finish-start))
+        #    else:
+        #        start = time.time()
+        #        me = ob.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+        #        n = len(me.vertices)
+        #        finish = time.time()
+        #        print('took %f seconds to extract 2nd regular Mesh' % (finish-start))
+        
+        #    ob.modifiers.clear()
+        
+        
+        #    if self.method == 'BMESH':
+        #        bme.to_mesh(ob.data)
+        #        bme.free()
+        #        print('took %f seconds to entire operation BMesh' % (finish-start))
+        #    else:
+        #        old_me = ob.data
+        #        ob.data = me
+        #        bpy.data.meshes.remove(old_me)
+        #        finish = time.time()
+        #        print('took %f seconds to do entire operation Mesh' % (finish-start))
+                        
+        return {'FINISHED'}
+    
+    
 class D3SPLINT_OT_delete_islands(bpy.types.Operator):
     '''Delete small disconnected pieces of mesh'''
     bl_idname = "d3splint.delete_islands"
@@ -3573,6 +3683,7 @@ def register():
     bpy.utils.register_class(D3SPLINT_OT_remove_ragged_edges)
     bpy.utils.register_class(D3Tool_OT_model_vertical_base)
     bpy.utils.register_class(D3Splint_OT_auto_check_model)
+    bpy.utils.register_class(D3SPLINT_OT_remesh_decimate)
     #bpy.utils.register_class(D3SPLINT_OT_sculpt_model_undo)
     
 def unregister():
@@ -3590,6 +3701,7 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_remove_ragged_edges)
     bpy.utils.unregister_class(D3Tool_OT_model_vertical_base)
     bpy.utils.unregister_class(D3Splint_OT_auto_check_model)
+    bpy.utils.unregister_class(D3SPLINT_OT_remesh_decimate)
     #bpy.utils.unregister_class(D3SPLINT_OT_sculpt_model_undo)
     
 if __name__ == "__main__":
