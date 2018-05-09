@@ -7,7 +7,6 @@ from textbox import TextBox
 import tracking
 
 from mathutils import Vector, Matrix, Quaternion
-from test.test_binop import isint
 from odcutils import get_com_bme
 import common_drawing
 from common_drawing import outline_region
