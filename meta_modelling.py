@@ -25,6 +25,7 @@ import time
 import random
 import odcutils
 from odcutils import get_bbox_center
+from lib2to3.fixes.fix_input import context
 
 def arch_crv_draw_callback(self, context):  
     self.crv.draw(context)
@@ -517,6 +518,71 @@ class D3SPLINT_OT_surgical_bite_positioner(bpy.types.Operator):
     def invoke(self, context, event):
 
         return context.window_manager.invoke_props_dialog(self)
+
+def generate_bmesh_dprogrammer(guidance_angle,
+                               anterior_length,
+                               posterior_length,
+                               posterior_width,
+                               anterior_width,
+                               thickness,
+                               support_height,
+                               support_width):
+    
+    bme = bmesh.new()
+        
+    RMx = Matrix.Rotation(guidance_angle * math.pi/180, 3, 'Y')
+
+    v0 =  bme.verts.new(RMx * Vector((anterior_length, .5 * (anterior_width - 2), thickness)))
+    v1 =  bme.verts.new(RMx * Vector((anterior_length, -.5 * (anterior_width - 2), thickness)))
+    v2 =  bme.verts.new(RMx * Vector((posterior_length, -.5 * (posterior_width - 2), thickness)))
+    v3 =  bme.verts.new(RMx * Vector((posterior_length, .5 * (posterior_width - 2), thickness)))
+    
+    bme.faces.new([v0, v1, v2, v3])
+    
+    v4 =  bme.verts.new(RMx * Vector((anterior_length, .5 * anterior_width, -thickness + 1)))
+    v5 =  bme.verts.new(RMx * Vector((anterior_length, -.5 * anterior_width, -thickness + 1)))
+    v6 =  bme.verts.new(RMx * Vector((-posterior_length, -.5 * posterior_width, -thickness + 1)))
+    v7 =  bme.verts.new(RMx * Vector((-posterior_length, .5 * posterior_width, -thickness + 1)))
+    
+    bme.faces.new([v4, v5, v1, v0])
+    bme.faces.new([v5, v6, v2, v1])
+    bme.faces.new([v6, v7, v3, v2])
+    bme.faces.new([v7, v4, v0, v3])
+
+    v8 = bme.verts.new(RMx * Vector((anterior_length, .5 * anterior_width, 0)))
+    v9 = bme.verts.new(RMx * Vector((anterior_length, -.5 * anterior_width, 0)))
+    v10 = bme.verts.new(RMx * Vector((-posterior_length, -.5 * posterior_width, 0)))
+    v11 = bme.verts.new(RMx * Vector((-posterior_length, .5 * posterior_width, 0)))
+
+    bme.faces.new([v8, v9, v5, v4])
+    bme.faces.new([v9, v10, v6, v5])
+    bme.faces.new([v10, v11, v7, v6])
+    bme.faces.new([v11, v8, v4, v7])
+    
+    v12  =  bme.verts.new(Vector((.5 * support_width, .5 * anterior_width, support_height)))
+    v13  =  bme.verts.new(Vector((.5 * support_width, -.5 * anterior_width, support_height)))
+    v14 =  bme.verts.new(Vector((-.5 * support_width, -.5 * posterior_width, support_height)))
+    v15 =  bme.verts.new(Vector((-.5 * support_width, .5 * posterior_width, support_height)))    
+    
+    bme.faces.new([v12, v13, v9, v8])
+    bme.faces.new([v13, v14, v10, v9])
+    bme.faces.new([v14, v15, v11, v10])
+    bme.faces.new([v15, v12, v8, v11])
+    
+    
+    bme.faces.new([v15, v14, v13, v12])
+    
+    bme.verts.ensure_lookup_table()
+    bme.edges.ensure_lookup_table()
+    bme.faces.ensure_lookup_table()
+    
+    e0 = bme.edges[0]
+    e2 = bme.edges[2]
+    #bevel_verts = [e0.verts[0].index, e0.verts[1].index, e2.verts[0].index, e2.verts[1].index]
+    
+    bme.normal_update()
+    
+    return bme
     
 class D3SPLINT_OT_anterior_deprogrammer_element(bpy.types.Operator):
     """Create an anterior deprogrammer ramp"""
@@ -550,6 +616,151 @@ class D3SPLINT_OT_anterior_deprogrammer_element(bpy.types.Operator):
         self.thickness = settings.def_thickness
         self.support_height = settings.def_support_height
         self.support_width = settings.def_support_width
+        
+        return context.window_manager.invoke_props_dialog(self)
+        
+    def execute(self, context):
+        
+        
+        if len(context.scene.odc_splints):
+            n = context.scene.odc_splint_index
+            splint = context.scene.odc_splints[n]
+            if splint.jaw_type == 'MANDIBLE':
+                R = Matrix.Rotation(math.pi, 4, 'X')
+            else:
+                R = Matrix.Identity(4)
+        else:
+            R = Matrix.Identity(4)
+            
+        loc = context.scene.cursor_location
+        
+        
+        bme = generate_bmesh_dprogrammer(self.guidance_angle,
+                                         self.anterior_length,
+                                         self.posterior_length, 
+                                         self.posterior_width,
+                                         self.anterior_width,
+                                         self.thickness,
+                                         self.support_height,
+                                         self.support_width)
+        
+        
+        if "Anterior Deprogrammer" in bpy.data.objects:
+            ob = bpy.data.objects.get('Anterior Deprogrammer')
+            me = ob.data
+            ob.hide = False
+            
+        else:
+            me = bpy.data.meshes.new('Anterior Deprogrammer')
+            ob = bpy.data.objects.new('Anterior Deprogrammer', me)
+            context.scene.objects.link(ob)
+            
+            T = Matrix.Translation(loc)
+            ob.matrix_world = T * R
+            
+            b1 = ob.modifiers.new('Bevel', type = 'BEVEL')
+            b1.width = .5
+            b1.segments = 3
+
+            rm = ob.modifiers.new('Remesh', type = 'REMESH')
+            rm.octree_depth = 6
+            rm.mode = 'SMOOTH'
+        
+        
+        ob['guidance_angle'] =  self.guidance_angle
+        ob['anterior_length'] = self.anterior_length
+        ob['posterior_length'] = self.posterior_length
+        ob['anterior_width'] = self.anterior_width
+        ob['posterior_width'] = self.posterior_width
+        ob['thickness'] = self.thickness
+        ob['support_height'] =  self.support_height
+        ob['support_width'] = self.support_width
+                                      
+        bme.to_mesh(me)
+        bme.free()
+                
+        return {'FINISHED'}
+
+    
+
+
+ 
+def update_deprogrammer_element(self, context):
+    if self.hold_update:
+        return
+    
+    ob = context.object
+    me = ob.data
+    
+    bme_b = generate_bmesh_dprogrammer(self.guidance_angle,
+                                         self.anterior_length,
+                                         self.posterior_length, 
+                                         self.posterior_width,
+                                         self.anterior_width,
+                                         self.thickness,
+                                         self.support_height,
+                                         self.support_width)
+            
+                          
+    #set ID props        
+    ob['guidance_angle'] =  self.guidance_angle
+    ob['anterior_length'] = self.anterior_length
+    ob['posterior_length'] = self.posterior_length
+    ob['anterior_width'] = self.anterior_width
+    ob['posterior_width'] = self.posterior_width
+    ob['thickness'] = self.thickness
+    ob['support_height'] =  self.support_height
+    ob['support_width'] = self.support_width
+    
+    
+    bme_b.to_mesh(me)
+    #update the mesh so it redraws
+    me.update()
+    bme_b.free()
+    
+    return
+
+class D3SPLINT_OT_anterior_deprogrammer_edit(bpy.types.Operator):
+    """Edit an anterior deprogrammer ramp"""
+    bl_idname = "d3splint.anterior_deprogrammer_element_edit"
+    bl_label = "Anterior Deprogrammer Edit"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    pause_update = BoolProperty(default = True, description = 'Pause live update')
+    guidance_angle = IntProperty(default = 15, min = -90, max = 90, description = 'Angle off of world Z', update = update_deprogrammer_element)
+    anterior_length = FloatProperty(default = 5, description = 'Length of anterior ramp', update = update_deprogrammer_element)
+    posterior_length = FloatProperty(default = 10, description = 'Length of posterior ramp', update = update_deprogrammer_element)
+    posterior_width = FloatProperty(default = 10, description = 'Posterior Width of ramp', update = update_deprogrammer_element)
+    anterior_width = FloatProperty(default = 8, description = 'Anterior Width of ramp', update = update_deprogrammer_element)
+    thickness = FloatProperty(default = 2.75, description = 'Thickness of ramp', update = update_deprogrammer_element)
+    support_height = FloatProperty(default = 3, description = 'Height of support strut', update = update_deprogrammer_element)
+    support_width =  FloatProperty(default = 6, description = 'Width of support strut', update = update_deprogrammer_element)
+    
+    
+    @classmethod
+    def poll(cls, context):
+        if context.object == None:
+            return False
+        
+        if 'Deprogrammer' not in context.object.name:
+            return False
+        
+        return True
+    
+    def invoke(self, context, event):
+        
+        ob = context.object
+            
+        self.guidance_angle = ob['guidance_angle']
+        self.anterior_length = ob['anterior_length']
+        self.posterior_length = ob['posterior_length'] 
+        self.posterior_width = ob['posterior_width']
+        self.anterior_width = ob['anterior_width']
+        self.thickness = ob['thickness']
+        self.support_height = ob['support_height']
+        self.support_width = ob['support_width']
+        
+        self.pause_update = False
         
         return context.window_manager.invoke_props_dialog(self)
         
@@ -646,7 +857,6 @@ class D3SPLINT_OT_anterior_deprogrammer_element(bpy.types.Operator):
         return {'FINISHED'}
 
     
-
 
 
 class D3SPLINT_OT_splint_join_depro_to_shell(bpy.types.Operator):
@@ -2483,6 +2693,7 @@ def register():
     bpy.utils.register_class(D3SPLINT_OT_splint_virtual_wax_on_curve)
     bpy.utils.register_class(D3SPLINT_OT_splint_join_meta_to_shell)
     bpy.utils.register_class(D3SPLINT_OT_anterior_deprogrammer_element)
+    bpy.utils.register_class(D3SPLINT_OT_anterior_deprogrammer_edit)
     bpy.utils.register_class(D3SPLINT_OT_splint_join_depro_to_shell)
     bpy.utils.register_class(D3SPLINT_OT_blockout_splint_shell)
     bpy.utils.register_class(D3SPLINT_OT_sculpt_concavities)
@@ -2496,6 +2707,7 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_splint_virtual_wax_on_curve)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_join_meta_to_shell)
     bpy.utils.unregister_class(D3SPLINT_OT_anterior_deprogrammer_element)
+    bpy.utils.unregister_class(D3SPLINT_OT_anterior_deprogrammer_edit)
     bpy.utils.unregister_class(D3SPLINT_OT_splint_join_depro_to_shell)
     bpy.utils.unregister_class(D3SPLINT_OT_blockout_splint_shell)
     bpy.utils.unregister_class(D3SPLINT_OT_sculpt_concavities)
