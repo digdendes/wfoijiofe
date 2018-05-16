@@ -834,6 +834,7 @@ class D3SPLINT_OT_survey_model(bpy.types.Operator):
         context.space_data.transform_manipulators = {'ROTATE'}
         
         splint.insertion_path = True
+        Model.lock_location[0], Model.lock_location[1], Model.lock_location[2] = True, True, True
         return {'FINISHED'}
 
 class D3SPLINT_OT_blockout_model_meta(bpy.types.Operator):
@@ -3930,6 +3931,8 @@ class D3SPLINT_OT_meta_splint_minimum_thickness(bpy.types.Operator):
             new_ob.data = me
             new_ob.data.materials.append(mat)
             
+        new_ob.show_transparent = True
+        context.space_data.show_backface_culling = True
             
         context.scene.objects.unlink(meta_obj)
         bpy.data.objects.remove(meta_obj)

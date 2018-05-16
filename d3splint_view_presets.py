@@ -31,20 +31,32 @@ class D3SPLINT_OT_view_presets(bpy.types.Operator):
         max_model = splint.get_maxilla()
         mand_model = splint.get_mandible()
     
-        for ob in bpy.data.objects:
-            ob.hide = True
+        
                         
         if self.mode == "U/O":
-            MaxModel = bpy.data.objects.get(max_model)  
+            MaxModel = bpy.data.objects.get(max_model)
+            if not MaxModel:
+                return {'CANCELLED'}
+            
+            for ob in bpy.data.objects:
+                ob.hide = True
+            
             MaxModel.hide = False
             bpy.ops.view3d.viewnumpad(type = 'BOTTOM')  
         elif self.mode == "L/O":
-            ManModel = bpy.data.objects.get(mand_model)   
+            ManModel = bpy.data.objects.get(mand_model)
+            if not ManModel:
+                return {'CANCELLED'}
+            
+            for ob in bpy.data.objects:
+                ob.hide = True  
             ManModel.hide = False
             bpy.ops.view3d.viewnumpad(type = 'TOP')    
         return {'FINISHED'}
     
-    
+
+
+ 
 def register():
     bpy.utils.register_class(D3SPLINT_OT_view_presets)
     

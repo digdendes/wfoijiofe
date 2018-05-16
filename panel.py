@@ -265,7 +265,10 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
                 row = layout.row()
                 row.operator("d3splint.draw_occlusal_curve_mand", text = "Mark Mand Curve", icon = ico)
         
-         
+        
+        row = layout.row()
+        row.operator("d3splint.view_presets", text = "Upper View").mode = "U/O"
+        row.operator("d3splint.view_presets", text = "Lower View").mode = "L/O"
         row = layout.row()
         col = row.column()
         

@@ -657,20 +657,17 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         n = context.scene.odc_splint_index
         self.splint = context.scene.odc_splints[n]    
         
-        model = self.splint.get_maxilla()
+        max_model = self.splint.get_maxilla()
         mand_model = self.splint.get_mandible()
         
         
-        if model == '' or model not in bpy.data.objects:
-            self.report({'ERROR'}, "Need to mark the UpperJaw model first!")
-            return {'CANCELLED'}
-        
-        if mand_model == '' or mand_model not in bpy.data.objects:
-            self.report({'WARNING'}, "Consider marking Mandibular model first!")  
+        if self.splint.jaw_type == 'MANDIBLE' and max_model == '':
             
-        
-        Model = bpy.data.objects[model]
-        Mand_Model = bpy.data.objects.get(mand_model)
+            Model = bpy.data.objects.get(mand_model)
+            
+        else:
+            Model = bpy.data.objects.get(max_model)
+            Mand_Model = bpy.data.objects.get(mand_model)
         
         #if Model and Mand_Model:
             #Make both models have same origin if they don't
@@ -714,7 +711,13 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
 
     def finish(self, context):
         settings = get_settings()
-        Model =  bpy.data.objects[self.splint.get_maxilla()]
+        
+        if self.splint.jaw_type == 'MANDIBLE' and self.splint.get_maxilla() == '':
+            Model = bpy.data.objects[self.splint.get_mandible()]
+        
+        else:
+            Model =  bpy.data.objects[self.splint.get_maxilla()]
+            
         mx = Model.matrix_world
         imx = mx.inverted()
         
@@ -771,12 +774,14 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         #Now we have the rotation matrix that got us where we wanted
         Model.data.transform(iR)
         #Model.matrix_world = Identity is implied, we will reset the matrix later
-        if Mand_Model:
-            Mand_Model.data.transform(mx_mand)
-            Mand_Model.matrix_world = Model.matrix_world
-            Mand_Model.data.transform(Model.matrix_world.inverted())
-            
-            Mand_Model.data.transform(iR)
+        
+        if not (self.splint.jaw_type == 'MANDIBLE' and self.splint.get_maxilla() == ''):
+            if Mand_Model:
+                Mand_Model.data.transform(mx_mand)
+                Mand_Model.matrix_world = Model.matrix_world
+                Mand_Model.data.transform(Model.matrix_world.inverted())
+                
+                Mand_Model.data.transform(iR)
               
         #Lets Calculate the matrix transform for an
         #8 degree Fox plane cant.
@@ -843,8 +848,8 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
             empty = bpy.data.objects.get('Incisal')
             empty.matrix_world = Matrix.Translation(incisal_final)    
             
-        if Mand_Model:
-            #todo..check to move lower jaw after landmarks?    
+        if Mand_Model and not (self.splint.jaw_type == 'MANDIBLE' and self.splint.get_maxilla() == ''):
+             
             if len(Mand_Model.constraints):
                 for cons in Mand_Model.constraints:
                     Mand_Model.constraints.remove(cons)
@@ -1320,7 +1325,7 @@ class D3SPLINT_OT_pick_model(bpy.types.Operator):
         
         self.ob.data.transform(iT)
         self.ob.matrix_world *= T
-        self.ob.lock_location[0], self.ob.lock_location[1], self.ob.lock_location[2] = True, True, True
+        #self.ob.lock_location[0], self.ob.lock_location[1], self.ob.lock_location[2] = True, True, True
         tracking.trackUsage("D3Splint:PickModel")
         return 'finish'
             
@@ -1496,7 +1501,7 @@ class D3SPLINT_OT_pick_opposing(bpy.types.Operator):
         
         self.ob.data.transform(iT)
         self.ob.matrix_world *= T
-        self.ob.lock_location[0], self.ob.lock_location[1], self.ob.lock_location[2] = True, True, True    
+        #self.ob.lock_location[0], self.ob.lock_location[1], self.ob.lock_location[2] = True, True, True    
         tracking.trackUsage("D3Splint:SetOpposing")
         return 'finish'
             
