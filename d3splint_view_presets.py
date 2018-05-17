@@ -13,8 +13,8 @@ class D3SPLINT_OT_view_presets(bpy.types.Operator):
     
     
     mode = bpy.props.EnumProperty(name = "mode", items = (("U/O","U/O","U/O"),
-                                                          ("L/O","L/O","L/O")))
-                                                          #("T/B", "T/B","T/B"),
+                                                          ("L/O","L/O","L/O"),
+                                                          ("Q", "Q","Q")))
                                                           #("B/T", "B/T","B/T"),
                                                           #("A/A", "A/A","A/A"),
                                                           #  ))                    
@@ -52,6 +52,8 @@ class D3SPLINT_OT_view_presets(bpy.types.Operator):
                 ob.hide = True  
             ManModel.hide = False
             bpy.ops.view3d.viewnumpad(type = 'TOP')    
+        elif self.mode == "Q":
+            bpy.ops.screen.region_quadview()
         return {'FINISHED'}
     
 

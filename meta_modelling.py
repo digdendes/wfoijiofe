@@ -531,11 +531,12 @@ def generate_bmesh_dprogrammer(guidance_angle,
     bme = bmesh.new()
         
     RMx = Matrix.Rotation(guidance_angle * math.pi/180, 3, 'Y')
-
-    v0 =  bme.verts.new(RMx * Vector((anterior_length, .5 * (anterior_width - 2), thickness)))
-    v1 =  bme.verts.new(RMx * Vector((anterior_length, -.5 * (anterior_width - 2), thickness)))
-    v2 =  bme.verts.new(RMx * Vector((posterior_length, -.5 * (posterior_width - 2), thickness)))
-    v3 =  bme.verts.new(RMx * Vector((posterior_length, .5 * (posterior_width - 2), thickness)))
+    
+    
+    v0 =  bme.verts.new(RMx * Vector((anterior_length, .5 * (anterior_width - 2), -thickness)))
+    v1 =  bme.verts.new(RMx * Vector((anterior_length, -.5 * (anterior_width - 2), -thickness)))
+    v2 =  bme.verts.new(RMx * Vector((-posterior_length, -.5 * (posterior_width - 2), -thickness)))
+    v3 =  bme.verts.new(RMx * Vector((-posterior_length, .5 * (posterior_width - 2), -thickness)))
     
     bme.faces.new([v0, v1, v2, v3])
     
@@ -543,6 +544,7 @@ def generate_bmesh_dprogrammer(guidance_angle,
     v5 =  bme.verts.new(RMx * Vector((anterior_length, -.5 * anterior_width, -thickness + 1)))
     v6 =  bme.verts.new(RMx * Vector((-posterior_length, -.5 * posterior_width, -thickness + 1)))
     v7 =  bme.verts.new(RMx * Vector((-posterior_length, .5 * posterior_width, -thickness + 1)))
+    
     
     bme.faces.new([v4, v5, v1, v0])
     bme.faces.new([v5, v6, v2, v1])
@@ -558,6 +560,7 @@ def generate_bmesh_dprogrammer(guidance_angle,
     bme.faces.new([v9, v10, v6, v5])
     bme.faces.new([v10, v11, v7, v6])
     bme.faces.new([v11, v8, v4, v7])
+    
     
     v12  =  bme.verts.new(Vector((.5 * support_width, .5 * anterior_width, support_height)))
     v13  =  bme.verts.new(Vector((.5 * support_width, -.5 * anterior_width, support_height)))
@@ -578,7 +581,7 @@ def generate_bmesh_dprogrammer(guidance_angle,
     
     e0 = bme.edges[0]
     e2 = bme.edges[2]
-    #bevel_verts = [e0.verts[0].index, e0.verts[1].index, e2.verts[0].index, e2.verts[1].index]
+    bevel_verts = [e0.verts[0].index, e0.verts[1].index, e2.verts[0].index, e2.verts[1].index]
     
     bme.normal_update()
     
@@ -666,7 +669,19 @@ class D3SPLINT_OT_anterior_deprogrammer_element(bpy.types.Operator):
             rm.octree_depth = 6
             rm.mode = 'SMOOTH'
         
+        mat = bpy.data.materials.get("Splint Material")
+        if mat is None:
+            # create material
+            mat = bpy.data.materials.new(name="Splint Material")
+            mat.diffuse_color = get_settings().def_splint_color
+            mat.use_transparency = True
+            mat.transparency_method = 'Z_TRANSPARENCY'
+            mat.alpha = .4
         
+        if mat.name not in ob.data.materials:
+            ob.data.materials.append(mat)
+            
+            
         ob['guidance_angle'] =  self.guidance_angle
         ob['anterior_length'] = self.anterior_length
         ob['posterior_length'] = self.posterior_length
@@ -678,10 +693,17 @@ class D3SPLINT_OT_anterior_deprogrammer_element(bpy.types.Operator):
                                       
         bme.to_mesh(me)
         bme.free()
-                
+       
+        for ob in bpy.data.objects:
+            ob.select = False
+            
+        ob.select = True
+        context.scene.objects.active = ob
+        context.space_data.show_manipulator = True
+        context.space_data.transform_manipulators = {'TRANSLATE','ROTATE'}
+        context.space_data.transform_orientation = 'LOCAL'
+                 
         return {'FINISHED'}
-
-    
 
 
  
@@ -726,7 +748,7 @@ class D3SPLINT_OT_anterior_deprogrammer_edit(bpy.types.Operator):
     bl_label = "Anterior Deprogrammer Edit"
     bl_options = {'REGISTER', 'UNDO'}
     
-    pause_update = BoolProperty(default = True, description = 'Pause live update')
+    hold_update = BoolProperty(default = True, description = 'Pause live update')
     guidance_angle = IntProperty(default = 15, min = -90, max = 90, description = 'Angle off of world Z', update = update_deprogrammer_element)
     anterior_length = FloatProperty(default = 5, description = 'Length of anterior ramp', update = update_deprogrammer_element)
     posterior_length = FloatProperty(default = 10, description = 'Length of posterior ramp', update = update_deprogrammer_element)
@@ -748,9 +770,17 @@ class D3SPLINT_OT_anterior_deprogrammer_edit(bpy.types.Operator):
         return True
     
     def invoke(self, context, event):
+        if len(context.scene.odc_splints):
+            
+            Shell = bpy.data.objects.get('Splint Shell')
+            if Shell:
+                Shell.show_transparent = True
+        
+        context.space_data.show_backface_culling = True        
+        #make the shell and other objects opaque again
         
         ob = context.object
-            
+        #ob.show_transparent = True    
         self.guidance_angle = ob['guidance_angle']
         self.anterior_length = ob['anterior_length']
         self.posterior_length = ob['posterior_length'] 
@@ -760,98 +790,20 @@ class D3SPLINT_OT_anterior_deprogrammer_edit(bpy.types.Operator):
         self.support_height = ob['support_height']
         self.support_width = ob['support_width']
         
-        self.pause_update = False
+        self.hold_update = False
         
         return context.window_manager.invoke_props_dialog(self)
         
     def execute(self, context):
             
-        loc = context.scene.cursor_location
-        
-        
-        bme = bmesh.new()
-        
-        RMx = Matrix.Rotation(self.guidance_angle * math.pi/180, 3, 'Y')
-        
-        
-        v0 =  bme.verts.new(RMx * Vector((self.anterior_length, .5 * (self.anterior_width - 2), -self.thickness)))
-        v1 =  bme.verts.new(RMx * Vector((self.anterior_length, -.5 * (self.anterior_width - 2), -self.thickness)))
-        v2 =  bme.verts.new(RMx * Vector((-self.posterior_length, -.5 * (self.posterior_width - 2), -self.thickness)))
-        v3 =  bme.verts.new(RMx * Vector((-self.posterior_length, .5 * (self.posterior_width - 2), -self.thickness)))
-        
-        bme.faces.new([v0, v1, v2, v3])
-        
-        v4 =  bme.verts.new(RMx * Vector((self.anterior_length, .5 * self.anterior_width, -self.thickness + 1)))
-        v5 =  bme.verts.new(RMx * Vector((self.anterior_length, -.5 * self.anterior_width, -self.thickness + 1)))
-        v6 =  bme.verts.new(RMx * Vector((-self.posterior_length, -.5 * self.posterior_width, -self.thickness + 1)))
-        v7 =  bme.verts.new(RMx * Vector((-self.posterior_length, .5 * self.posterior_width, -self.thickness + 1)))
-        
-        
-        bme.faces.new([v4, v5, v1, v0])
-        bme.faces.new([v5, v6, v2, v1])
-        bme.faces.new([v6, v7, v3, v2])
-        bme.faces.new([v7, v4, v0, v3])
-
-        v8 = bme.verts.new(RMx * Vector((self.anterior_length, .5 * self.anterior_width, 0)))
-        v9 = bme.verts.new(RMx * Vector((self.anterior_length, -.5 * self.anterior_width, 0)))
-        v10 = bme.verts.new(RMx * Vector((-self.posterior_length, -.5 * self.posterior_width, 0)))
-        v11 = bme.verts.new(RMx * Vector((-self.posterior_length, .5 * self.posterior_width, 0)))
-
-        bme.faces.new([v8, v9, v5, v4])
-        bme.faces.new([v9, v10, v6, v5])
-        bme.faces.new([v10, v11, v7, v6])
-        bme.faces.new([v11, v8, v4, v7])
-        
-        
-        v12  =  bme.verts.new(Vector((.5 * self.support_width, .5 * self.anterior_width, self.support_height)))
-        v13  =  bme.verts.new(Vector((.5 * self.support_width, -.5 * self.anterior_width, self.support_height)))
-        v14 =  bme.verts.new(Vector((-.5 * self.support_width, -.5 * self.posterior_width, self.support_height)))
-        v15 =  bme.verts.new(Vector((-.5 * self.support_width, .5 * self.posterior_width, self.support_height)))    
-        
-        bme.faces.new([v12, v13, v9, v8])
-        bme.faces.new([v13, v14, v10, v9])
-        bme.faces.new([v14, v15, v11, v10])
-        bme.faces.new([v15, v12, v8, v11])
-        
-        
-        bme.faces.new([v15, v14, v13, v12])
-        
-        bme.verts.ensure_lookup_table()
-        bme.edges.ensure_lookup_table()
-        bme.faces.ensure_lookup_table()
-        
-        e0 = bme.edges[0]
-        e2 = bme.edges[2]
-        bevel_verts = [e0.verts[0].index, e0.verts[1].index, e2.verts[0].index, e2.verts[1].index]
-        
-        bme.normal_update()
-        #gdict = bmesh.ops.bevel(bme, geom = [e0.verts[0], e0.verts[1], e0], offset = 1) #, offset = .5, offset_type = 1, segments = 2, profile = .3, vertex_only = False, clamp_overlap = True)
-        #gdict = bmesh.ops.bevel(bme, geom = [e2.verts[0], e2.verts[1], e2], offset = 1)
-        
-        
-        if "Anterior Deprogrammer" in bpy.data.objects:
-            ob = bpy.data.objects.get('Anterior Deprogrammer')
-            me = ob.data
-            ob.hide = False
+        if len(context.scene.odc_splints):
             
-        else:
-            me = bpy.data.meshes.new('Anterior Deprogrammer')
-            ob = bpy.data.objects.new('Anterior Deprogrammer', me)
-            context.scene.objects.link(ob)
-            ob.location = loc
-            
-            b1 = ob.modifiers.new('Bevel', type = 'BEVEL')
-            b1.width = .5
-            b1.segments = 3
-
-            rm = ob.modifiers.new('Remesh', type = 'REMESH')
-            rm.octree_depth = 6
-            rm.mode = 'SMOOTH'
-        
-        bme.to_mesh(me)
-        bme.free()
+            Shell = bpy.data.objects.get('Splint Shell')
+            if Shell:
+                Shell.show_transparent = False
                 
-        
+        #make the shell and other objects opaque again
+        context.object.show_transparent = False
         
         
         return {'FINISHED'}

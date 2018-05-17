@@ -928,7 +928,13 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
                 else: # self.splint.jaw_type == 'MANDIBLE':
                     Model.hide = True
                     bpy.ops.view3d.viewnumpad(type = 'TOP')
+        
+        for ob in bpy.data.objects:
+            ob.select = False
+            
         context.scene.objects.active = Model               
+        Model.select = True
+        Model.hide = False
         tracking.trackUsage("D3Splint:SplintLandmarks",None)
 
 class D3SPLINT_OT_splint_paint_margin(bpy.types.Operator):

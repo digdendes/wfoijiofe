@@ -367,13 +367,20 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
             row = layout.row()
             col = row.column()
             col.operator("d3splint.anterior_deprogrammer_element", text = 'Anterior Deprogrammer Ramp')
+            col.operator("d3splint.anterior_deprogrammer_element_edit", text = 'Edit Deprogrammer')
             col.operator("d3splint.splint_join_deprogrammer", text = 'Fuse Deprogrammer')
             
             
         if splint.workflow_type == 'DEPROGRAMMER':
             row = layout.row()
+            row.label('Deprogrammer Element')
+            
+            row = layout.row()
+            
+            row = layout.row()
             col = row.column()
             col.operator("d3splint.anterior_deprogrammer_element", text = 'Anterior Deprogrammer Ramp')
+            col.operator("d3splint.anterior_deprogrammer_element_edit", text = 'Edit Deprogrammer')
             col.operator("d3splint.splint_join_deprogrammer", text = 'Fuse Deprogrammer')
             col.operator("d3splint.meta_blockout_shell", text = 'Blockout Large Concavities')
             col.operator("d3splint.remesh_smooth_inflate", text = 'Remesh/Smooth')

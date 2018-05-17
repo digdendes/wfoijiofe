@@ -2406,11 +2406,12 @@ def reorient_object(ob, orientation):
         sce.update()
         parent_in_place(ob, Parent)
         
-def silouette_brute_force(context, ob, view, world = True, smooth = True, debug = False):
+def silouette_brute_force(context, ob, view, world = True, smooth = True, apply = True, debug = False):
     '''
     args:
       ob - mesh object
       view - Mathutils Vector
+      apply - apply all modifiers to the silhouette
       
     return:
        new mesh of type Mesh (not BMesh)
@@ -2511,7 +2512,14 @@ def silouette_brute_force(context, ob, view, world = True, smooth = True, debug 
             mod2.target = ob
             mod2.use_keep_above_surface = True
             mod2.offset = .02
-    
+            
+            bme = bmesh.new()
+            bme.from_object(obj, context.scene)
+            obj.modifiers.clear()
+            
+            bme.to_mesh(obj.data)
+            obj.data.update()
+            bme.free()
     if debug:
         print("finished in %f seconds" % (time.time() - start))
     
