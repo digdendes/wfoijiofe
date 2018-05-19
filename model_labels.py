@@ -194,7 +194,7 @@ class D3SPLINT_OT_stencil_text(bpy.types.Operator):
         #bpy.ops.view3d.view_selected()
         self.crv = TextLineDrawer(context,snap_type ='OBJECT', snap_object = Model, msg = label_message)
         
-        context.space_data.use_ssao = True
+        context.space_data.fx_settings.use_ssao = True
         
         
         #TODO, tweak the modifier as needed
