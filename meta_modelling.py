@@ -1813,11 +1813,14 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
     
     b_radius = FloatProperty(default = .05 , min = .01, max = .12, description = 'Allowable Undercut, larger values results in more retention, more snap into place', name = 'Undercut')
     c_radius = FloatProperty(default = .12 , min = .05, max = .25, description = 'Compensation Gap, larger values results in less retention, less friction', name = 'Compensation Gap')
+    d_radius = FloatProperty(default = 1.0, min = 0.5, max = 2.0, description = 'Drill compensation removes small concavities to account for the size of milling tools')
     resolution = FloatProperty(default = 1.5, description = 'Mesh resolution. 1.5 seems ok?')
     scale = FloatProperty(default = 10, description = 'Only chnage if willing to crash blender.  Small chnages can make drastic differences')
     
     max_blockout = FloatProperty(default = 10.0 , min = 2, max = 10.0, description = 'Limit the depth of blockout to save processing itme', name = 'Blockout Limit')
     override_large_angle = BoolProperty(name = 'Angle Override', default = False, description = 'Large deviations between insertion asxis and world Z')
+    use_drillcomp = BoolProperty(name = 'Use Drill Compensation', default = False, description = 'Do additional calculation to overmill sharp internal angles')
+    use_drillcomp_Dev = BoolProperty(name = 'Use Drill Compensation Dev', default = False, description = 'Add an actual mesh sphere at surface')
     angle = FloatProperty(default = 0.0 , min = 0.0, max = 180.0, description = 'Angle between insertion axis and world Z', name = 'Insertion angle')
     @classmethod
     def poll(cls, context):
@@ -1837,6 +1840,12 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
         
         row = layout.row()
         row.prop(self, "max_blockout")
+        
+        row = layout.row()
+        row.prop(self, "use_drillcomp")
+        
+        row = layout.row()
+        row.prop(self, "d_radius")
         
         if self.angle > 25:
             row = layout.row()
@@ -2067,6 +2076,11 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
         context.scene.objects.link(meta_obj)
         
         
+        meta_data_d = bpy.data.metaballs.new('Dillcomp Meta')
+        meta_obj_d = bpy.data.objects.new('Drillcomp Meta', meta_data_d)
+        meta_data_d.resolution = self.resolution
+        meta_data_d.render_resolution = self.resolution
+        context.scene.objects.link(meta_obj_d)
         
         #No Longer Neded we pre-process the mesh
         #relax_loops_util(bme, [ed for ed in bme.edges if len(ed.link_faces) == 1], iterations = 10, influence = .5, override_selection = True, debug = True)
@@ -2120,7 +2134,14 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
             height = (base_plane_intersection - co).length
             co_top = base_plane_intersection
         
+            ######################################
             
+            co_d = v.co - self.d_radius * v.normal
+            mb_d = meta_data_d.elements.new(type = 'BALL')
+            mb_d.radius = self.scale * self.d_radius
+            mb_d.co = self.scale * co_d
+            
+            ######################################
             if v in perimeter_verts:
                 N = min(math.ceil(height/.125), math.ceil(self.max_blockout/.125))  #limit the blockout depth
                 if size_x < self.scale * .125 and size_y < self.scale * .125:
@@ -2225,7 +2246,8 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
         S = Matrix.Scale(.1, 4)
            
         meta_obj.matrix_world =  L * R * S
-
+        meta_obj_d.matrix_world =  L * R * S
+        
         print('transformed the meta ball object %f' % (time.time() - start))
         context.scene.update()
         total_meta_time = (time.time() - start)
@@ -2469,7 +2491,584 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
         tracking.trackUsage("D3Splint:RemoveUndercuts", (str(self.b_radius)[0:4], str(self.b_radius)[0:4], str(total_meta_time)[0:4]), background = True)
         return {'FINISHED'}
     
+class D3SPLINT_OT_drill_compensation(bpy.types.Operator):
+    '''Calculates extra gap for drill compensation'''
+    bl_idname = 'd3splint.drill_compensation'
+    bl_label = "Create Drill Compensation Model"
+    bl_options = {'REGISTER','UNDO'}
     
+    
+    b_radius = FloatProperty(default = .05 , min = .01, max = .12, description = 'Allowable Undercut, larger values results in more retention, more snap into place', name = 'Undercut')
+    c_radius = FloatProperty(default = .12 , min = .05, max = .25, description = 'Compensation Gap, larger values results in less retention, less friction', name = 'Compensation Gap')
+    d_radius = FloatProperty(default = 1.0, min = 0.5, max = 2.0, description = 'Drill compensation removes small concavities to account for the size of milling tools')
+    resolution = FloatProperty(default = 1.5, description = 'Mesh resolution. 1.5 seems ok?')
+    scale = FloatProperty(default = 10, description = 'Only chnage if willing to crash blender.  Small chnages can make drastic differences')
+    
+    max_blockout = FloatProperty(default = 10.0 , min = 2, max = 10.0, description = 'Limit the depth of blockout to save processing itme', name = 'Blockout Limit')
+    override_large_angle = BoolProperty(name = 'Angle Override', default = False, description = 'Large deviations between insertion asxis and world Z')
+    use_drillcomp = BoolProperty(name = 'Use Drill Compensation', default = False, description = 'Do additional calculation to overmill sharp internal angles')
+    use_drillcomp_Dev = BoolProperty(name = 'Use Drill Compensation Dev', default = False, description = 'Add an actual mesh sphere at surface')
+    angle = FloatProperty(default = 0.0 , min = 0.0, max = 180.0, description = 'Angle between insertion axis and world Z', name = 'Insertion angle')
+    @classmethod
+    def poll(cls, context):
+        #restoration exists and is in scene
+        return  True
+
+    
+    def draw(self,context):
+        
+        layout = self.layout
+    
+        row = layout.row()
+        row.prop(self, "b_radius")
+        
+        row = layout.row()
+        row.prop(self, "c_radius")
+        
+        row = layout.row()
+        row.prop(self, "max_blockout")
+        
+        row = layout.row()
+        row.prop(self, "use_drillcomp")
+        
+        row = layout.row()
+        row.prop(self, "d_radius")
+        
+        if self.angle > 25:
+            row = layout.row()
+            msg  = 'The angle between insertion axis and world z is: ' + str(self.angle)[0:3]
+            row.label(msg)
+            
+            row = layout.row()
+            row.label('You will need to confirm this by overriding')
+            
+            row = layout.row()
+            row.label('Consider cancelling (right click) and inspecting your insertion axis')
+            
+            row = layout.row()
+            row.prop(self, "override_large_angle")
+            
+    def invoke(self,context, evenet):
+        #gather some information
+        Axis = bpy.data.objects.get('Insertion Axis')
+        if Axis == None:
+            self.report({'ERROR'},'Need to set survey from view first, then adjust axis arrow')
+            return {'CANCELLED'}
+        
+        if len(context.scene.odc_splints) == 0:
+            self.report({'ERROR'},'Need to plan a splint first')
+            return {'CANCELLED'}
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        axis_z = Axis.matrix_world.to_quaternion() * Vector((0,0,1))
+        
+        if splint.jaw_type == 'MAXILLA':
+            Z = Vector((0,0,-1))
+        else:
+            Z = Vector((0,0,1))
+            
+        angle = axis_z.angle(Z)
+        angle_deg = 180/math.pi * angle
+        
+        if angle_deg > 35:
+            self.angle = angle_deg
+        return context.window_manager.invoke_props_dialog(self)
+    
+    def execute(self, context):
+        
+        settings = get_settings()
+        dbg = settings.debug
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+        
+        Model = bpy.data.objects.get(splint.model)
+        if Model == None:
+            self.report({'ERROR'},'Need to set the model first')
+            return {'CANCELLED'}
+        
+        Axis = bpy.data.objects.get('Insertion Axis')
+        if Axis == None:
+            self.report({'ERROR'},'Need to set survey from view first, then adjust axis arrow')
+            return {'CANCELLED'}
+        
+        if splint.jaw_type == 'MAXILLA':
+            Z = Vector((0,0,-1))
+        else:
+            Z = Vector((0,0,1))
+            
+        axis_z = Axis.matrix_world.to_quaternion() * Vector((0,0,1))    
+        angle = axis_z.angle(Z)
+        angle_deg = 180/math.pi * angle
+        
+        if angle_deg > 35 and not self.override_large_angle:
+            self.report({'ERROR'},'The insertion axis is very deviated from the world Z,\n confirm this is correct by using the override feature or \nsurvey the model from view again')
+            return {'CANCELLED'}
+            
+            
+        
+        start = time.time()
+        interval_start = start
+        
+        Trim = bpy.data.objects.get('Trimmed_Model')
+        Perim = bpy.data.objects.get('Perim Model')
+
+        if not Trim:
+            self.report({'ERROR'}, 'Must trim the upper model first')
+            return {'CANCELLED'}
+        if not Perim:
+            self.report({'ERROR'}, 'Must trim the upper model first')
+            return {'CANCELLED'}
+           
+        
+        mx = Trim.matrix_world
+        
+           
+        bme = bmesh.new()
+        bme_pp = bmesh.new() #BME Pre Processing (by modifiers)
+        
+        bme.from_mesh(Trim.data)
+        bme.verts.ensure_lookup_table()
+        bme.edges.ensure_lookup_table()
+        bme.faces.ensure_lookup_table()
+        bme.verts.index_update()
+        
+        #use this for ray_casting
+        bvh = BVHTree.FromBMesh(bme)
+        kd = kdtree.KDTree(len(bme.verts))
+        for i in range(0, len(bme.verts)-1):
+            kd.insert(bme.verts[i].co, i)
+            
+            
+        kd.balance()
+        meta_data_d = bpy.data.metaballs.new('Dillcomp Meta')
+        meta_obj_d = bpy.data.objects.new('Drillcomp Meta', meta_data_d)
+        meta_data_d.resolution = self.resolution
+        meta_data_d.render_resolution = self.resolution
+        context.scene.objects.link(meta_obj_d)
+        
+        
+        #take a first pass, and get all the points which are easily free and clear of thickness
+        #this takes care of incisal edges, point angles and cusp tips
+        #but it does not handle well thin incisors
+        milled_verts = set([i for i in range(0,len(bme.verts))])
+        cached_ray_results = {}
+        unmilled_verts = set()
+        drill_centers= []
+        
+        for v in bme.verts:
+            
+            #self ray_cast
+            
+            
+            start_co = v.co - .0001 * v.normal
+            
+            drill_center = v.co - .88 *  self.d_radius * v.normal
+            r = -1 * v.normal
+            
+            loc, no, face_ind, d = bvh.ray_cast(start_co, r)
+            cached_ray_results[v.index] = (loc, no, face_ind, d)
+            
+            if loc == None or (loc != None and d > 2 * self.d_radius):
+                #no reasonable backside collisions, add a ball and continue   
+                mb_d = meta_data_d.elements.new(type = 'BALL')
+                mb_d.radius = self.scale * self.d_radius
+                mb_d.co = self.scale * drill_center
+            
+            
+                
+                #nearby_bvh = bvh.find_nearest_range(v.co - self.d_radius * v.normal, self.d_radius + .1 )
+                nearby_kd = kd.find_range(drill_center, .5 * self.d_radius)
+            
+                
+                milled_verts.update([ele[1] for ele in nearby_kd])
+                drill_centers += [drill_center]
+                
+            else:
+                unmilled_verts.add(v.index)    
+        #take a 2nd pass over the mesh, but ignore the already compensated for verts
+        corrected_verts = 0
+        kd_drill = kdtree.KDTree(len(drill_centers))
+        for i in range(0, len(drill_centers)-1):
+            kd_drill.insert(drill_centers[i], i) 
+        kd_drill.balance()
+        
+        for ind in unmilled_verts:
+            pass
+            #if v.index in milled_verts: continue #skip already compensated verts
+            
+            v = bme.verts[ind]
+            corrected_verts += 1
+            start_co = v.co - .0001 * v.normal
+            
+            drill_center = v.co - .9 *  self.d_radius * v.normal
+            r = -1 * v.normal
+            
+            drill_loc, drill_ind, drill_d = kd_drill.find(v.co)
+            
+            if drill_d < .5 * self.d_radius: continue
+            
+            loc, no, face_ind, d = cached_ray_results[v.index]
+            
+            
+            
+            nearby_kd = kd.find_range(drill_center, self.d_radius)        
+            
+            other_side = [ele for ele in nearby_kd if bme.verts[ele[1]].normal.dot(-v.normal) > 0]
+            
+            if len(other_side):
+            #    print('found nearby verts on other side of mesh')
+                ele_max = max(other_side, key = lambda x: (x[0] - v.co).length)
+                co_d = .5 * v.co + .5 * ele_max[0]
+                mb_d = meta_data_d.elements.new(type = 'BALL')
+                mb_d.radius = self.scale * self.d_radius
+                mb_d.co = self.scale * co_d    
+            
+            
+            #attempt to form a fuzzy weighted average based on
+            #-the amount of interesction with the bur
+            #-the normal of the surface intersection withthe bur
+            #-preserving occlusal anatomy in the direction of insertion
+            
+            #iters = 0
+            #while iters < 3:
+            #    iters += 1
+                
+            #    delta = Vector((0,0,0))
+            #    weight = 0
+            #    if len(nearby_kd) == 0: continue
+            #    for (collision_co, ind, dist) in nearby_kd:
+                #spring constant going to be determinded by distance from point to center of bur
+                #and the normal of the point dotted
+                
+                    #if ind in milled_verts: continue
+                    
+            #        R = drill_center - collision_co
+            #        L = R.length
+            #        collision_depth = self.d_radius - L  #how much inside the sphere we are
+                    
+            #        r_no = R.normalized()
+            #        k = abs(bme.verts[ind].normal.dot(r_no))  #surface normal dotted with the r to center of the drill
+                
+                
+            #        factor = k * (collision_depth/self.d_radius)
+            #        dv = weight * collision_depth * r_no
+                    
+            #        weight += factor
+            #        delta += factor * dv
+                    
+            #    drill_center += delta/weight
+                    
+            #mb_d = meta_data_d.elements.new(type = 'BALL')
+            #mb_d.radius = self.scale * self.d_radius
+            #mb_d.co = self.scale * drill_center  
+            
+            
+        print('corrected %i verts' % corrected_verts)
+        print('there are %i unmilled verts' % len(unmilled_verts))
+        
+        for v in bme.verts:
+            if v.index in unmilled_verts:
+                v.select_set(True)
+                
+            else:
+                v.select_set(False)
+            #loc_avg = Vector((0,0,0))
+           
+            #for ele in nearby_bvh:
+            #    loc_avg +=ele[0] - self.d_radius * ele[1] # (ele[0] -v.co).langth/self.d_radius *  
+                #weight += (ele[0] -v.co).langth/self.d_radius
+                
+            #loc_avg *= 1/len(nearby_bvh)
+            
+            
+            #mb_d = meta_data_d.elements.new(type = 'BALL')
+            #mb_d.radius = self.scale * self.d_radius
+            #mb_d.co = self.scale * loc_avg  
+                
+                
+                
+            
+            #other_side = [ele for ele in nearby if ele[1].dot(-v.normal) > 0]
+            
+            
+            
+            #if len(other_side):
+            #    print('found nearby verts on other side of mesh')
+            #    ele_max = max(other_side, key = lambda x: (x[0] - v.co).length)
+            #    co_d = .5 * v.co + .5 * ele_max[0]
+            #    mb_d = meta_data_d.elements.new(type = 'BALL')
+            #    mb_d.radius = self.scale * self.d_radius
+            #    mb_d.co = self.scale * co_d    
+            #if (loc != None) and (d <= self.d_radius):
+            #    print(d)
+            #    co_d = v.co - .5 * d * v.normal
+            #    mb_d = meta_data_d.elements.new(type = 'BALL')
+            #    mb_d.radius = self.scale * self.d_radius
+            #    mb_d.co = self.scale * co_d
+            #else:
+            #    pass
+                #co_d = v.co - self.d_radius * v.normal
+                #mb_d = meta_data_d.elements.new(type = 'BALL')
+                #mb_d.radius = self.scale * self.d_radius
+                #mb_d.co = self.scale * co_d
+            
+            
+        bme.to_mesh(Trim.data)
+        bme.free()
+        bme_pp.free()
+        
+        R = mx.to_quaternion().to_matrix().to_4x4()
+        L = Matrix.Translation(mx.to_translation())
+        S = Matrix.Scale(.1, 4)
+        meta_obj_d.matrix_world =  L * R * S
+        
+        #print('transformed the meta ball object %f' % (time.time() - start))
+        context.scene.update()
+        #total_meta_time = (time.time() - start)
+        #print('updated the scene %f' % total_meta_time )
+        
+        '''
+
+        me = meta_obj.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+        
+        bme_final = bmesh.new()
+        bme_final.from_mesh(me)
+
+        bme_final.verts.ensure_lookup_table()
+        bme_final.edges.ensure_lookup_table()
+        bme_final.faces.ensure_lookup_table()
+        
+        
+        
+        #clean loose verts
+        to_delete = []
+        for v in bme_final.verts:
+            if len(v.link_edges) < 2:
+                to_delete.append(v)
+                
+        print('deleting %i loose verts' % len(to_delete))
+        bmesh.ops.delete(bme_final, geom = to_delete, context = 1)
+        
+        bme_final.verts.ensure_lookup_table()
+        bme_final.edges.ensure_lookup_table()
+        bme_final.faces.ensure_lookup_table()
+        
+        #delete edges without faces
+        to_delete = []
+        for ed in bme_final.edges:
+            if len(ed.link_faces) == 0:
+                for v in ed.verts:
+                    if len(v.link_faces) == 0:
+                        to_delete.append(v)
+
+        to_delete = list(set(to_delete))
+        bmesh.ops.delete(bme_final, geom = to_delete, context = 1)
+                
+        bme_final.verts.ensure_lookup_table()
+        bme_final.edges.ensure_lookup_table()
+        bme_final.faces.ensure_lookup_table()
+        
+        #we have done basic validity checks
+        Lv = len(bme_final.verts)
+        Lf = len(bme_final.faces)
+        
+        #by definition, the vert with a max coordinate in any reference
+        #will be a vertex in the outer shell
+        #we have also guaranteed that there are no crappy verts/edges which
+        #might throw us off
+        v_max = max(bme_final.verts[:], key = lambda x: x.co[0])
+        
+        f_seed = v_max.link_faces[0]
+        
+        island = flood_selection_faces(bme_final, {}, f_seed, max_iters = 10000)
+        
+        do_not_clean = False
+        if len(island) == Lf:
+            self.report({'WARNING'}, 'The Blockout Wax may have internal voids')
+            do_not_clean = True
+        
+        #get smarter    
+        #if len(island) < int(Lf/1.5):
+        #    self.report({'WARNING'}, 'The Blockout Wax may have disconnected islands')
+        
+        if not do_not_clean:
+            total_faces = set(bme_final.faces[:])
+            del_faces = total_faces - set(island)
+            
+            bmesh.ops.delete(bme_final, geom = list(del_faces), context = 3)
+            del_verts = []
+            for v in bme_final.verts:
+                if all([f in del_faces for f in v.link_faces]):
+                    del_verts += [v]        
+            bmesh.ops.delete(bme_final, geom = del_verts, context = 1)
+            
+            del_edges = []
+            for ed in bme_final.edges:
+                if len(ed.link_faces) == 0:
+                    del_edges += [ed]
+            bmesh.ops.delete(bme_final, geom = del_edges, context = 4) 
+        
+        
+        bme_final.to_mesh(me)
+    
+        if 'Refractory Model' in bpy.data.objects:
+            new_ob = bpy.data.objects.get('Refractory Model')
+            old_data = new_ob.data
+            new_ob.data = me
+            old_data.user_clear()
+            bpy.data.meshes.remove(old_data)
+        else:
+            new_ob = bpy.data.objects.new('Refractory Model', me)
+            context.scene.objects.link(new_ob)
+        
+        new_ob.matrix_world = L * R * S
+        mat = bpy.data.materials.get("Refractory Material")
+        if mat is None:
+            # create material
+            mat = bpy.data.materials.new(name="Refractory Material")
+            mat.diffuse_color = Color((0.36, .8,.36))
+            mat.use_transparency = True
+            mat.transparency_method = 'Z_TRANSPARENCY'
+            mat.alpha = .4
+            
+        if len(new_ob.material_slots) == 0:
+            new_ob.data.materials.append(mat)
+        
+        interval_start = time.time()
+        if 'Smooth' not in new_ob.modifiers:
+            mod = new_ob.modifiers.new('Smooth', type = 'SMOOTH')
+            mod.factor = 1
+            mod.iterations = 4
+        
+        else:
+            mod = new_ob.modifiers.get('Smooth')
+            
+        context.scene.objects.active = new_ob
+        new_ob.select = True
+        bpy.ops.object.modifier_apply(modifier = 'Smooth')
+        
+        
+        #apply the smoothing
+        context.scene.objects.active = new_ob
+        new_ob.select = True
+        bpy.ops.object.modifier_apply(modifier = 'Smooth')
+        
+        
+        
+        print('Took %f seconds to smooth BMesh' % (time.time() - interval_start))
+        interval_start = time.time()
+        
+                
+        mx = new_ob.matrix_world
+        imx = mx.inverted()
+        bme = bmesh.new()
+        bme.from_object(new_ob, context.scene)
+        bme.verts.ensure_lookup_table()
+        
+        mx_check = Trim.matrix_world
+        imx_check = mx_check.inverted()
+        bme_check = bmesh.new()
+        bme_check.from_mesh(Trim.data)
+        bme_check.verts.ensure_lookup_table()
+        bme_check.edges.ensure_lookup_table()
+        bme_check.faces.ensure_lookup_table()
+        bvh = BVHTree.FromBMesh(bme_check)
+        
+        
+        boundary_inds = set()
+        for ed in bme_check.edges:
+            if len(ed.link_faces) == 1:
+                for v in ed.verts:
+                    for f in v.link_faces:
+                        boundary_inds.add(f.index)
+        
+        bme_check.free()
+        
+
+        
+        print('Took %f seconds to initialize BMesh and build BVH' % (time.time() - interval_start))
+        interval_start = time.time()
+            
+        n_corrected = 0
+        n_normal = 0
+        n_loc = 0
+        n_too_far = 0
+        n_boundary = 0
+        for v in bme.verts:
+            #check the distance in trimmed model space
+            co = imx_check * mx * v.co
+            loc, no, ind, d = bvh.find_nearest(co)
+            
+            if not loc: continue
+            
+            if d < self.c_radius:  #compensation radius
+                if ind in boundary_inds:
+                    n_boundary += 1
+                    continue
+                n_corrected += 1
+                R = co - loc
+                
+                R.normalize()
+                    
+                if R.dot(no) > 0:
+                    delta = self.c_radius - d + .002
+                    co += delta * R
+                    n_loc += 1
+                else:
+                    co = loc + (self.c_radius + .002) * no
+                    n_normal += 1
+                    
+                v.co = imx * mx_check * co
+                v.select_set(True)
+            
+            elif d > self.c_radius and d < (self.c_radius + self.b_radius):
+                co = loc + (self.c_radius + .0001) * no
+                n_too_far += 1
+                
+            else:
+                v.select_set(False)        
+        print('corrected %i verts too close offset' % n_corrected)
+        print('corrected %i verts using normal method' % n_normal)
+        print('corrected %i verts using location method' % n_loc)
+        print('corrected %i verts using too far away' % n_too_far)
+        print('ignored %i verts clsoe to trim boundary' % n_boundary)
+        
+
+        if 'Child Of' not in new_ob.constraints:
+            Master = bpy.data.objects.get(splint.model)
+            cons = new_ob.constraints.new('CHILD_OF')
+            cons.target = Master
+            cons.inverse_matrix = Master.matrix_world.inverted()
+         
+        context.scene.objects.unlink(meta_obj)
+        bpy.data.objects.remove(meta_obj)
+        bpy.data.metaballs.remove(meta_data)
+        
+        context.scene.objects.unlink(ob2)
+        me = ob2.data
+        bpy.data.objects.remove(ob2)
+        bpy.data.meshes.remove(me)
+        
+        
+        for ob in context.scene.objects:
+            if "silhouette" in ob.name:
+                ob.hide = False 
+            else:
+                ob.hide = True
+        
+        
+        bme.to_mesh(new_ob.data)
+        bme.free()
+            
+        Model.hide = False
+        new_ob.hide = False
+        splint.refractory_model = True
+        tracking.trackUsage("D3Splint:DrillCompensation", (str(self.b_radius)[0:4], str(self.b_radius)[0:4], str(total_meta_time)[0:4]), background = True)
+        '''
+        
+        return {'FINISHED'}
+    
+        
 class D3SPLINT_OT_sculpt_concavities(bpy.types.Operator):
     '''Blend sharp concavties by adding mateiral or by smoothing, good for small crevices'''
     bl_idname = 'd3splint.auto_sculpt_concavities'
@@ -2653,6 +3252,7 @@ def register():
     bpy.utils.register_class(D3SPLINT_OT_blockout_trimmed_model2)
     bpy.utils.register_class(D3SPLINT_OT_refractory_model)
     bpy.utils.register_class(D3SPLINT_OT_surgical_bite_positioner)
+    bpy.utils.register_class(D3SPLINT_OT_drill_compensation)
     
 def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_draw_meta_curve)
@@ -2667,4 +3267,5 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_blockout_trimmed_model2)
     bpy.utils.unregister_class(D3SPLINT_OT_refractory_model)
     bpy.utils.unregister_class(D3SPLINT_OT_surgical_bite_positioner)
+    bpy.utils.unregister_class(D3SPLINT_OT_drill_compensation)
     
