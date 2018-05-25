@@ -1820,7 +1820,7 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
     max_blockout = FloatProperty(default = 10.0 , min = 2, max = 10.0, description = 'Limit the depth of blockout to save processing itme', name = 'Blockout Limit')
     override_large_angle = BoolProperty(name = 'Angle Override', default = False, description = 'Large deviations between insertion asxis and world Z')
     use_drillcomp = BoolProperty(name = 'Use Drill Compensation', default = False, description = 'Do additional calculation to overmill sharp internal angles')
-    use_drillcomp_Dev = BoolProperty(name = 'Use Drill Compensation Dev', default = False, description = 'Add an actual mesh sphere at surface')
+    #use_drillcomp_Dev = BoolProperty(name = 'Use Drill Compensation Dev', default = False, description = 'Add an actual mesh sphere at surface')
     angle = FloatProperty(default = 0.0 , min = 0.0, max = 180.0, description = 'Angle between insertion axis and world Z', name = 'Insertion angle')
     @classmethod
     def poll(cls, context):
@@ -1933,9 +1933,7 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
             return {'CANCELLED'}
            
         
-        mx = Trim.matrix_world
-        
-           
+        mx = Trim.matrix_world    
         bme = bmesh.new()
         bme_pp = bmesh.new() #BME Pre Processing (by modifiers)
         
@@ -2076,12 +2074,6 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
         context.scene.objects.link(meta_obj)
         
         
-        meta_data_d = bpy.data.metaballs.new('Dillcomp Meta')
-        meta_obj_d = bpy.data.objects.new('Drillcomp Meta', meta_data_d)
-        meta_data_d.resolution = self.resolution
-        meta_data_d.render_resolution = self.resolution
-        context.scene.objects.link(meta_obj_d)
-        
         #No Longer Neded we pre-process the mesh
         #relax_loops_util(bme, [ed for ed in bme.edges if len(ed.link_faces) == 1], iterations = 10, influence = .5, override_selection = True, debug = True)
         #undisplaced_locs = dict()
@@ -2091,11 +2083,113 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
         #    v.co -= pre_discplacement * v.normal
             
         #bme.normal_update()
+        mx_check = Trim.matrix_world
+        imx_check = mx_check.inverted()
+        bme_check = bmesh.new()
+        bme_check.from_mesh(Trim.data)
+        bme_check.verts.ensure_lookup_table()
+        bme_check.edges.ensure_lookup_table()
+        bme_check.faces.ensure_lookup_table()
+        bvh = BVHTree.FromBMesh(bme_check)
+        
+        
+        kd = kdtree.KDTree(len(bme_check.verts))
+        for i in range(0, len(bme_check.verts)-1):
+            kd.insert(bme_check.verts[i].co, i)
+            
+            
+        kd.balance()
         
         
         n_voids = 0 
         n_elements = 0
+        
+        
+        milled_verts = set()
+        cached_ray_results = {}
+        unmilled_verts = set()
+        drill_centers= []
+        n_filter = 0
+        
+        
+        if self.use_drillcomp:   
+            for v in bme.verts:
+                if v.index in milled_verts:
+                    n_filter += 1
+                    continue
+                start_co = v.co - .0001 * v.normal
+                
+                drill_center = v.co - .88 *  (self.d_radius - .5 * self.c_radius) * v.normal
+                r = -1 * v.normal
+                
+                loc, no, face_ind, d = bvh.ray_cast(start_co, r)
+                cached_ray_results[v.index] = (loc, no, face_ind, d)
+                
+                if loc == None or (loc != None and d > 2 * self.d_radius):
+                    #no reasonable backside collisions, add a ball and continue   
+                    mb_d = meta_data.elements.new(type = 'BALL')
+                    mb_d.radius = self.scale * self.d_radius
+                    mb_d.co = self.scale * drill_center
+                
+                    #nearby_bvh = bvh.find_nearest_range(v.co - self.d_radius * v.normal, self.d_radius + .1 )
+                    nearby_kd = kd.find_range(drill_center, .7 * self.d_radius)
+                
+                    for nearby_co, nearby_ind, nearby_d in nearby_kd:
+                        milled_verts.add(nearby_ind)
+                    
+                    #milled_verts.update([ele[1] for ele in nearby_kd])
+                    drill_centers += [drill_center]
+                    
+                else:
+                    unmilled_verts.add(v.index)
+                    
+                    
+            print('filtered %i verts on first pass' % n_filter)
+        
+        #take a 2nd pass over the mesh, but ignore the already compensated for verts
+        corrected_verts = 0
+        kd_drill = kdtree.KDTree(len(drill_centers))
+        for i in range(0, len(drill_centers)-1):
+            kd_drill.insert(drill_centers[i], i) 
+        kd_drill.balance()
+        
+        n_filter = 0
+        for ind in unmilled_verts:
+        
+            v = bme.verts[ind]
+            corrected_verts += 1
+            start_co = v.co - .0001 * v.normal
+            
+            drill_center = v.co - .9 *  (self.d_radius - .5 * self.c_radius) * v.normal
+            
+            l_find, ind_find, d_find = kd_drill.find(drill_center)
+            
+            if d_find < .25 * self.d_radius: 
+                
+                n_filter += 1
+                continue
+            
+            r = -1 * v.normal
+            
+            
+            
+            loc, no, face_ind, d = cached_ray_results[v.index]
+            
+
+            nearby_kd = kd.find_range(drill_center, self.d_radius)        
+            
+            other_side = [ele for ele in nearby_kd if bme.verts[ele[1]].normal.dot(-v.normal) > 0]
+            
+            if len(other_side):
+            #    print('found nearby verts on other side of mesh')
+                ele_max = max(other_side, key = lambda x: (x[0] - v.co).length)
+                co_d = .5 * v.co + .5 * ele_max[0]
+                mb_d = meta_data.elements.new(type = 'BALL')
+                mb_d.radius = self.scale * self.d_radius
+                mb_d.co = self.scale * co_d    
+            
         for v in bme.verts:
+                
             #VERY IMPORTANT!  GET THE PREPROCESSED COODINATE
             v_pre_p = bme_pp.verts[v.index]
             co = v_pre_p.co
@@ -2134,14 +2228,7 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
             height = (base_plane_intersection - co).length
             co_top = base_plane_intersection
         
-            ######################################
-            
-            co_d = v.co - self.d_radius * v.normal
-            mb_d = meta_data_d.elements.new(type = 'BALL')
-            mb_d.radius = self.scale * self.d_radius
-            mb_d.co = self.scale * co_d
-            
-            ######################################
+
             if v in perimeter_verts:
                 N = min(math.ceil(height/.125), math.ceil(self.max_blockout/.125))  #limit the blockout depth
                 if size_x < self.scale * .125 and size_y < self.scale * .125:
@@ -2246,7 +2333,7 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
         S = Matrix.Scale(.1, 4)
            
         meta_obj.matrix_world =  L * R * S
-        meta_obj_d.matrix_world =  L * R * S
+        #meta_obj_d.matrix_world =  L * R * S
         
         print('transformed the meta ball object %f' % (time.time() - start))
         context.scene.update()
@@ -2262,8 +2349,6 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
         bme_final.verts.ensure_lookup_table()
         bme_final.edges.ensure_lookup_table()
         bme_final.faces.ensure_lookup_table()
-        
-        
         
         #clean loose verts
         to_delete = []
@@ -2390,14 +2475,7 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
         bme.from_object(new_ob, context.scene)
         bme.verts.ensure_lookup_table()
         
-        mx_check = Trim.matrix_world
-        imx_check = mx_check.inverted()
-        bme_check = bmesh.new()
-        bme_check.from_mesh(Trim.data)
-        bme_check.verts.ensure_lookup_table()
-        bme_check.edges.ensure_lookup_table()
-        bme_check.faces.ensure_lookup_table()
-        bvh = BVHTree.FromBMesh(bme_check)
+        
         
         
         boundary_inds = set()
@@ -2447,6 +2525,8 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
                 v.select_set(True)
             
             elif d > self.c_radius and d < (self.c_radius + self.b_radius):
+                if self.use_drillcomp:
+                    continue
                 co = loc + (self.c_radius + .0001) * no
                 n_too_far += 1
                 
@@ -2650,16 +2730,18 @@ class D3SPLINT_OT_drill_compensation(bpy.types.Operator):
         #take a first pass, and get all the points which are easily free and clear of thickness
         #this takes care of incisal edges, point angles and cusp tips
         #but it does not handle well thin incisors
-        milled_verts = set([i for i in range(0,len(bme.verts))])
+        milled_verts = set()
         cached_ray_results = {}
         unmilled_verts = set()
         drill_centers= []
-        
+        n_filter = 0
         for v in bme.verts:
             
             #self ray_cast
             
-            
+            if v.index in milled_verts:
+                n_filter += 1
+                continue
             start_co = v.co - .0001 * v.normal
             
             drill_center = v.co - .88 *  self.d_radius * v.normal
@@ -2677,14 +2759,19 @@ class D3SPLINT_OT_drill_compensation(bpy.types.Operator):
             
                 
                 #nearby_bvh = bvh.find_nearest_range(v.co - self.d_radius * v.normal, self.d_radius + .1 )
-                nearby_kd = kd.find_range(drill_center, .5 * self.d_radius)
+                nearby_kd = kd.find_range(drill_center, .8 * self.d_radius)
             
+                for nearby_co, nearby_ind, nearby_d in nearby_kd:
+                    milled_verts.add(nearby_ind)
                 
-                milled_verts.update([ele[1] for ele in nearby_kd])
+                #milled_verts.update([ele[1] for ele in nearby_kd])
                 drill_centers += [drill_center]
                 
             else:
                 unmilled_verts.add(v.index)    
+        
+        print('filtered %i verts on first pass' % n_filter)
+        
         #take a 2nd pass over the mesh, but ignore the already compensated for verts
         corrected_verts = 0
         kd_drill = kdtree.KDTree(len(drill_centers))
@@ -2692,25 +2779,29 @@ class D3SPLINT_OT_drill_compensation(bpy.types.Operator):
             kd_drill.insert(drill_centers[i], i) 
         kd_drill.balance()
         
+        n_filter = 0
         for ind in unmilled_verts:
-            pass
-            #if v.index in milled_verts: continue #skip already compensated verts
-            
+        
             v = bme.verts[ind]
             corrected_verts += 1
             start_co = v.co - .0001 * v.normal
             
             drill_center = v.co - .9 *  self.d_radius * v.normal
+            
+            l_find, ind_find, d_find = kd_drill.find(drill_center)
+            
+            if d_find < .333 * self.d_radius: 
+                
+                n_filter += 1
+                continue
+            
             r = -1 * v.normal
             
-            drill_loc, drill_ind, drill_d = kd_drill.find(v.co)
             
-            if drill_d < .5 * self.d_radius: continue
             
             loc, no, face_ind, d = cached_ray_results[v.index]
             
-            
-            
+
             nearby_kd = kd.find_range(drill_center, self.d_radius)        
             
             other_side = [ele for ele in nearby_kd if bme.verts[ele[1]].normal.dot(-v.normal) > 0]
@@ -2765,6 +2856,7 @@ class D3SPLINT_OT_drill_compensation(bpy.types.Operator):
             
         print('corrected %i verts' % corrected_verts)
         print('there are %i unmilled verts' % len(unmilled_verts))
+        print('filtered %i verts' % n_filter)
         
         for v in bme.verts:
             if v.index in unmilled_verts:
