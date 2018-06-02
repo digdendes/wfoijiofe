@@ -1124,7 +1124,8 @@ class D3SPLINT_OT_splint_create_functional_surface(bpy.types.Operator):
         
         else:
             print('handler already in there')
-            
+        
+        context.space_data.show_backface_culling = False    
         bpy.ops.screen.animation_play()
         
         return {'FINISHED'}

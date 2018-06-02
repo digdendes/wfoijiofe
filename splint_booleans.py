@@ -286,6 +286,7 @@ class D3SPLINT_OT_splint_finish_booleans(bpy.types.Operator):
             tmodel.hide = False
 
         splint.finalize_splint = True
+        context.space_data.show_backface_culling = False
         return {'FINISHED'}
 
    
