@@ -18,8 +18,10 @@ from mesh_cut import flood_selection_faces, edge_loops_from_bmedges,\
     space_evenly_on_path, bound_box, contract_selection_faces, \
     face_neighbors_by_vert, flood_selection_faces_limit
 
-from bmesh_fns import join_bmesh, bme_linked_flat_faces    
+from bmesh_fns import join_bmesh, bme_linked_flat_faces    ,\
+    new_bmesh_from_bmelements
 from mathutils import Vector, Matrix
+from mathutils.kdtree import KDTree
 import odcutils
 from common_utilities import bversion, get_settings
 from common_drawing import outline_region
@@ -33,6 +35,7 @@ from bpy_extras import view3d_utils
 from mathutils.geometry import intersect_point_line, intersect_line_plane
 import random
 import blf
+from odcutils import offset_bmesh_edge_loop
 
 #TODO, put this somewhere logical and useful
 def vector_angle_between(v0, v1, vcross):
@@ -902,6 +905,9 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
     mode = bpy.props.EnumProperty(name = 'Base Mode', items = mode_items)
     
     batch_mode = bpy.props.BoolProperty(name = 'Batch Mode', default = False, description = 'Will do all selected models, may take 1 minute per model, ')
+    
+    triangulate = bpy.props.BoolProperty(name = 'Triangulate', default = True, description = 'Will triangluate the extuded base and faces (use for BSP Ortho!)')
+    detail_level = bpy.props.FloatProperty(name = 'Detail Level', default = 1.5, min = .75, max = 5.0,  description = 'Base Triangualtion detail, bigger = more triangles, bigger file')
     @classmethod
     def poll(cls, context):
         if context.mode == "OBJECT" and context.object != None and context.object.type == 'MESH':
@@ -1205,7 +1211,12 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         biggest_loop.pop()
         final_eds = [ed for ed in non_man_eds if all([v.index in biggest_loop for v in ed.verts])]
         
-        
+        mask = bme.verts.layers.paint_mask.verify()
+        for v in bme.verts:
+            if v.index not in biggest_loop:
+                v[mask] = 1.0
+            else:
+                v[mask] = 0.0
         print('took %f seconds to identify single perimeter loop' % (time.time() - start))
         start = time.time()
         
@@ -1283,7 +1294,9 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         bme.faces.ensure_lookup_table()
         relax_loops_util(bme, newer_edges, iterations = 10, influence = .5, override_selection = True, debug = True)
             
-            
+        
+        
+          
         gdict = bmesh.ops.extrude_edge_only(bme, edges = newer_edges)
         bme.edges.ensure_lookup_table()
         bme.verts.ensure_lookup_table()
@@ -1311,22 +1324,35 @@ class D3PLINT_OT_simple_model_base(bpy.types.Operator):
         
         
         bme.to_mesh(ob.data)
+        bme.free()
         ob.data.update()
         
-        if 'Smooth Base' not in ob.vertex_groups:
-            sgroup = ob.vertex_groups.new('Smooth Base')
-        else:
-            sgroup = ob.vertex_groups.get('Smooth Base')
-        sgroup.add([v.index for v in smooth_verts], 1, type = 'REPLACE')
+        if self.triangulate:
+            bpy.ops.object.mode_set(mode = 'SCULPT')
+            if not ob.use_dynamic_topology_sculpting:
+                bpy.ops.sculpt.dynamic_topology_toggle()
+            context.scene.tool_settings.sculpt.detail_type_method = 'CONSTANT'
+            context.scene.tool_settings.sculpt.constant_detail_resolution = self.detail_level
+            bpy.ops.sculpt.detail_flood_fill()
+            bpy.ops.paint.mask_flood_fill(mode = 'VALUE', value = 0)
+            bpy.ops.object.mode_set(mode = 'OBJECT')
         
-        if 'Smoooth Base' not in ob.modifiers:
-            smod = ob.modifiers.new('Smooth Base', type = 'SMOOTH')
+            
         else:
-            smod = ob.modifiers['Smooth Base']
-        smod.vertex_group = 'Smooth Base'
-        smod.iterations = self.smooth_iterations
+            if 'Smooth Base' not in ob.vertex_groups:
+                sgroup = ob.vertex_groups.new('Smooth Base')
+            else:
+                sgroup = ob.vertex_groups.get('Smooth Base')
+            sgroup.add([v.index for v in smooth_verts], 1, type = 'REPLACE')
+            
+            if 'Smoooth Base' not in ob.modifiers:
+                smod = ob.modifiers.new('Smooth Base', type = 'SMOOTH')
+            else:
+                smod = ob.modifiers['Smooth Base']
+            smod.vertex_group = 'Smooth Base'
+            smod.iterations = self.smooth_iterations
         
-        bme.free()
+        
         
         print('Took %f seconds to finish entire operator' % (time.time() - start_global))
          
@@ -2229,6 +2255,8 @@ class VerticaBasePoints(PointPicker):
         
         PointPicker.__init__(self, context, snap_type, snap_object)
         
+        self.debug = False
+        
         self.plane_ob = None
         
         mx = snap_object.matrix_world
@@ -2239,12 +2267,11 @@ class VerticaBasePoints(PointPicker):
         bme.faces.ensure_lookup_table()
         
         
-        
         self.plane_center = Vector((0,0,0))
         
-        
         self.bvh = BVHTree.FromBMesh(bme)
-        
+  
+        self.padBVH = None
         #if len(bme.verts) < 10000:
         #    local_sample = [v.co for v in bme.verts]
         #    global_sample = [mx * co for co in local_sample]
@@ -2423,13 +2450,24 @@ class VerticaBasePoints(PointPicker):
         
         Y = Z.cross(X)
         
+        
+        bbox = self.snap_ob.bound_box[:]
+        center = Vector((0,0,0))
+        for v in bbox:
+            center += .125 * Vector(v)
+        
+        w_center = self.snap_ob.matrix_world * center
         #rotation matrix from principal axes
         R = Matrix.Identity(4)  #make the columns of matrix U, V, W
         R[0][0], R[0][1], R[0][2]  = X[0] ,Y[0],  Z[0]
         R[1][0], R[1][1], R[1][2]  = X[1], Y[1],  Z[1]
         R[2][0] ,R[2][1], R[2][2]  = X[2], Y[2],  Z[2]
         
-        T = Matrix.Translation(self.b_pts[0])
+        #T = Matrix.Translation(self.b_pts[0])
+        
+        R_center = w_center - self.b_pts[0]
+        Z_correction = R_center.dot(Z)
+        T = Matrix.Translation(w_center - Z_correction * Z)
         b_plane_ob.matrix_world = T * R
         return True
         
@@ -2506,8 +2544,8 @@ class VerticaBasePoints(PointPicker):
         Z = self.b_pts[3] - pt
         Z.normalize()
         
-        self.plane_center += Z
-        self.b_pts[3] += Z
+        self.plane_center += .25 * Z
+        self.b_pts[3] += .25 * Z
         self.orient_pane_ob()
         
     def translate_down(self):
@@ -2516,8 +2554,8 @@ class VerticaBasePoints(PointPicker):
         Z = self.b_pts[3] - pt
         Z.normalize()
         
-        self.plane_center -= Z
-        self.b_pts[3] -= Z
+        self.plane_center -= .25 *Z
+        self.b_pts[3] -= .25 * Z
         
         self.orient_pane_ob()
         
@@ -2593,6 +2631,149 @@ class VerticaBasePoints(PointPicker):
         self.plane_ob = distal_ob
         
         return
+    
+    
+    
+    def create_pads(self, context):
+    
+        if self.debug == True:
+            if 'Pad Base' in bpy.data.objects:
+                pad_ob = bpy.data.objects.get('Pad Base')
+                pad_me = pad_ob.data
+            else:
+                pad_me = bpy.data.meshes.new('Pad Base')
+                pad_ob = bpy.data.objects.new('Pad Base', pad_me)
+                context.scene.objects.link(pad_ob)
+            pad_ob.hide = True
+            pad_ob.matrix_world = self.snap_ob.matrix_world
+            
+        base_no = self.normals[0]
+        
+        mx = self.snap_ob.matrix_world
+        imx = mx.inverted()
+        
+        pmx = self.plane_ob.matrix_world
+        ipmx = pmx.inverted()
+        
+        #Plane Normal represented in Model Local coordinates 
+        Zp = imx.to_3x3() * pmx.to_3x3() * Vector((0,0,1))
+        Zp.normalize()
+        
+        #Base Normal represented in Model Local Coordinates
+        Zb = imx.to_3x3() * base_no
+        Zb.normalize()
+        
+        #Plane normal perpendicular to the base normal in Model Local Coordinates
+        Zpb = Zp - Zp.dot(Zb) * Zb
+        Zpb.normalize()
+        
+        #points in the Model local space
+        p0 = imx * self.b_pts[1] 
+        p1 = imx * self.b_pts[2]
+        
+        #base_pads
+        pad_bme = bmesh.new()
+        
+        Vy = Vector((random.random(), random.random(), random.random()))
+        Vy = Vy - Vy.dot(Zpb) * Zpb
+        Vy.normalize()
+        Vx = Vy.cross(Zpb)
+        
+        R = Matrix.Identity(3)  #make the columns of matrix U, V, W
+        R[0][0], R[0][1], R[0][2]  = Vx[0] ,Vy[0],  Zp[0]
+        R[1][0], R[1][1], R[1][2]  = Vx[1], Vy[1],  Zp[1]
+        R[2][0] ,R[2][1], R[2][2]  = Vx[2], Vy[2],  Zp[2]
+        R = R.to_4x4()
+        
+        T0 = Matrix.Translation(p0 + .25 * Zpb)
+        T1 = Matrix.Translation(p1 + .25 * Zpb)
+        
+        bmesh.ops.create_circle(pad_bme,
+                                cap_ends = True,
+                                cap_tris = True, 
+                                segments = 15,
+                                diameter = .45 * (p0-p1).length,
+                                matrix = T0 * R)
+        
+        bmesh.ops.create_circle(pad_bme,
+                                cap_ends = True,
+                                cap_tris = True, 
+                                segments = 15,
+                                diameter =  .45 * (p0-p1).length,
+                                matrix = T1 * R)
+        
+        
+        pad_bme.verts.ensure_lookup_table()
+        pad_bme.edges.ensure_lookup_table()
+        pad_bme.faces.ensure_lookup_table()
+        
+        self.padBVH = BVHTree.FromBMesh(pad_bme)
+        print(self.padBVH)
+        if self.debug:
+            pad_bme.to_mesh(pad_me)
+        pad_bme.free()
+            
+    
+    def make_mesh_raft(self, context, final_inds):
+        
+        ##Create a nice solid base instead of a blobby base    
+        bme_base_mesh = bmesh.new()
+        bme_base_mesh.from_mesh(self.plane_ob.data)
+        bme_base_mesh.verts.ensure_lookup_table()
+        bme_base_mesh.edges.ensure_lookup_table()
+        bme_base_mesh.faces.ensure_lookup_table()
+        
+        base_verts = [bme_base_mesh.verts[i] for i in final_inds]
+        
+        base_faces = set()
+        for f in bme_base_mesh.faces:
+            if all([v in base_verts for v in f.verts]):
+                base_faces.add(f)
+        
+        raft_bme = new_bmesh_from_bmelements(base_verts + list(base_faces))
+        
+        for v in raft_bme.verts:
+            v.co -= Vector((0,0,2))  #TODO Base Thickness
+            
+            
+        perim_eds = [ed for ed in raft_bme.edges if len(ed.link_faces) == 1]
+        relax_loops_util(raft_bme, perim_eds, iterations = 5, influence = .5, override_selection= True)
+        
+        
+        
+        
+        gdict = bmesh.ops.extrude_face_region(raft_bme, geom = raft_bme.faces[:])
+        
+        new_verts = [ele for ele in gdict['geom'] if isinstance(ele, bmesh.types.BMVert)]
+        top_faces = set([f for f in raft_bme.faces if all([v in new_verts for v in f.verts])])
+        top_loop = []
+        for ed in raft_bme.edges:
+            if len([f for f in ed.link_faces if f in top_faces]) == 1:
+                top_loop.append(ed)
+        
+        
+        for i in range(0, 4):
+            offset_bmesh_edge_loop(raft_bme, [ed.index for ed in top_loop], axis = Vector((0,0,1)), res = -.15)
+            relax_loops_util(raft_bme, top_loop, iterations = 10, influence = .5, override_selection= True)
+        
+        relax_loops_util(raft_bme, perim_eds, iterations = 10, influence = .5, override_selection= True)        
+        offset_bmesh_edge_loop(raft_bme, [ed.index for ed in top_loop], axis = Vector((0,0,1)), res = -.5)
+        relax_loops_util(raft_bme, top_loop, iterations = 35, influence = .5, override_selection= True)
+        
+        for v in new_verts:
+            v.co += Vector((0,0,2))
+            
+        bmesh.ops.recalc_face_normals(raft_bme, faces = raft_bme.faces[:])
+        bmesh.ops.connect_verts_concave(raft_bme, faces = raft_bme.faces[:])
+        raft_mesh = bpy.data.meshes.new('Raft')
+        raft_object = bpy.data.objects.new('Raft', raft_mesh)
+        context.scene.objects.link(raft_object)
+        raft_object.matrix_world = self.plane_ob.matrix_world
+        raft_bme.to_mesh(raft_mesh)
+        raft_bme.free()
+        bme_base_mesh.free()     
+    
+    
     def make_base(self, context):
         
         
@@ -2602,24 +2783,15 @@ class VerticaBasePoints(PointPicker):
         else:
             meta_data = bpy.data.metaballs.new('Meta Base')
             meta_obj = bpy.data.objects.new('Meta Base', meta_data)
-            meta_data.resolution = 1
+            meta_data.resolution = .5
             meta_data.render_resolution = 1
             context.scene.objects.link(meta_obj)
         
-        if 'Pad Base' in bpy.data.objects:
-            pad_ob = bpy.data.objects.get('Pad Base')
-            pad_me = pad_ob.data
-        else:
-            pad_me = bpy.data.meshes.new('Pad Base')
-            pad_ob = bpy.data.objects.new('Pad Base', pad_me)
-            context.scene.objects.link(pad_ob)
-        pad_ob.hide = True
-        #pad_ob.hide = False
-        
+        if self.padBVH == None:
+            self.create_pads(context)
+            print('created pad PVH')
         meta_obj.hide = False    
         meta_obj.matrix_world = self.plane_ob.matrix_world
-        pad_ob.matrix_world = self.snap_ob.matrix_world
-        
         
         base_no = self.normals[0]
         
@@ -2649,52 +2821,10 @@ class VerticaBasePoints(PointPicker):
         Z_base_in_plane.normalize()
         Zbpc = Vector((0,0,1)) - Z_base_in_plane.dot(Vector((0,0,1))) * Z_base_in_plane
         
-        #points in the Model local space
-        p0 = imx * self.b_pts[1] 
-        p1 = imx * self.b_pts[2]
         
-        #base_pads
-        pad_bme = bmesh.new()
-        
-        Vy = Vector((random.random(), random.random(), random.random()))
-        Vy = Vy - Vy.dot(Zpb) * Zpb
-        Vy.normalize()
-        Vx = Vy.cross(Zpb)
-        
-        R = Matrix.Identity(3)  #make the columns of matrix U, V, W
-        R[0][0], R[0][1], R[0][2]  = Vx[0] ,Vy[0],  Zp[0]
-        R[1][0], R[1][1], R[1][2]  = Vx[1], Vy[1],  Zp[1]
-        R[2][0] ,R[2][1], R[2][2]  = Vx[2], Vy[2],  Zp[2]
-        R = R.to_4x4()
-        
-        T0 = Matrix.Translation(p0 + .5 * Zpb)
-        T1 = Matrix.Translation(p1 + .5 * Zpb)
-        
-        bmesh.ops.create_circle(pad_bme,
-                                cap_ends = True,
-                                cap_tris = True, 
-                                segments = 15,
-                                diameter = .45 * (p0-p1).length,
-                                matrix = T0 * R)
-        
-        bmesh.ops.create_circle(pad_bme,
-                                cap_ends = True,
-                                cap_tris = True, 
-                                segments = 15,
-                                diameter =  .45 * (p0-p1).length,
-                                matrix = T1 * R)
-        
-        
-        pad_bme.verts.ensure_lookup_table()
-        pad_bme.edges.ensure_lookup_table()
-        pad_bme.faces.ensure_lookup_table()
-        
-        padBVH = BVHTree.FromBMesh(pad_bme)
-        
-        pad_bme.to_mesh(pad_me)
-        pad_bme.free()
-        
-        overlap_pairs = self.bvh.overlap(padBVH)
+        print(self.padBVH)
+        #overlap the pads with the model
+        overlap_pairs = self.bvh.overlap(self.padBVH)
         
         eds = set()
         for i, n in overlap_pairs:
@@ -2706,11 +2836,13 @@ class VerticaBasePoints(PointPicker):
         #closest_grid_poitns:
         grid_inds = set()
         pad_loc_dict = {}
+        
+        #calculate the intersection of the model with the "pads"
         for ed in list(eds):
             v = ed.verts[1].co - ed.verts[0].co
             v.normalize()
             r = ed.calc_length()
-            loc, no, ind, d = padBVH.ray_cast(ed.verts[0].co, v, r)
+            loc, no, ind, d = self.padBVH.ray_cast(ed.verts[0].co, v, r)
             if loc:
                 p_loc = ipmx * mx * loc
                 
@@ -2785,18 +2917,42 @@ class VerticaBasePoints(PointPicker):
         check_set_rows(200, 200, extrude_inds, extrude_inds)
         check_set_columns(200, 200, extrude_inds, extrude_inds)
         check_set_rows(200, 200, extrude_inds, extrude_inds)
-           
+        
+        mask = self.bme.verts.layers.paint_mask.verify()
+        self.bme.verts.ensure_lookup_table()
+        
+        mask_faces = set()
+        mask_locs = []
+        for v in self.bme.verts:
+            if v[mask] > 0:
+                mask_faces.update([f.index for f in v.link_faces])
+                mask_locs += [v.co + i * .5 * Vector((0,1,0)) for i in range(0, 5)]
+        
+        kd_mask = KDTree(len(mask_locs))
+        for i, loc in enumerate(mask_locs):
+            kd_mask.insert(loc, i)
+        kd_mask.balance()
+        
         #project the base grid up to the extrusion pads
+        #This handles cases where the heels of the cast are mismatched
         for i in list(extrude_inds):
             self.plane_ob.data.vertices[i].select = True
             co = imx * pmx * self.plane_ob.data.vertices[i].co
+            
+            #ray cast up to 30mm
             loc, no, ind, d = self.bvh.ray_cast(co, Zpb, 30)
             if d == None: continue
+            if ind in mask_faces: continue
             
+            #points in the Model local space
+            p0 = imx * self.b_pts[1] 
+            p1 = imx * self.b_pts[2]
+        
+            #test whether we are cloer to the right or left pad
             rA = loc - p0
             rB = loc - p1
             D = .45 * (p0 - p1).length
-            if rA.length > D and rB.length > D: continue
+            if rA.length > D and rB.length > D: continue  #ignore points in the middle
             
             rAz = rA.dot(Zpb)
             rBz = rB.dot(Zpb)
@@ -2813,25 +2969,26 @@ class VerticaBasePoints(PointPicker):
             co = v.co
             loc, no, ind, d =  self.bvh.find_nearest(imx * pmx * co)
             if loc:
-                if d < 3:
+                if d < 3 and (ind not in mask_faces):
                     extrude_inds.add(v.index)
                     
-                    loc, no, ind, d = self.bvh.ray_cast(imx * pmx * co, Zp, 4)
+                    loc, no, ind, d = self.bvh.ray_cast(imx * pmx * co, Zp, 3)
                     if d == None: continue
-                    for i in range(1,math.floor(d/.25)):
+                    if ind in mask_faces: 
+                        print('face mask saved the day')
+                        continue
+                    for i in range(1,max(1,math.floor((d-.45)/.25))):
                         vertical_locations2 += [co + i * .25 * Vector((0,0,1))]
                     continue
             
-            #only allows 8 mm of extension up to model base    
-            loc, no, ind, d = self.bvh.ray_cast(imx * pmx * co, Zp, 6)
+            #only allows 3 mm of extension up to model base    
+            loc, no, ind, d = self.bvh.ray_cast(imx * pmx * co, Zp, 3)
             if loc:
                 extrude_inds.add(v.index)
                 
-                for i in range(1,math.floor(d/.25)):
-                    vertical_locations2 += [co + i * .25 * Vector((0,0,1))]
+                #for i in range(1,math.floor(d/.25)-1):
+                    #vertical_locations2 += [co + i * .25 * Vector((0,0,1))]
                 
-        
-        
         
         check_set_rows(200, 200, extrude_inds, extrude_inds)
         check_set_columns(200, 200, extrude_inds, extrude_inds)
@@ -2852,25 +3009,41 @@ class VerticaBasePoints(PointPicker):
 
         base_locations = []
         for ind in final_inds:
-            base_locations += [self.plane_ob.data.vertices[ind].co]    
+            base_locations += [self.plane_ob.data.vertices[ind].co]  
+            
+ 
         #Now add metaballs into Metaball coordinate space which
         #is oriented in the same way was the Clipping plane
-        
-        
-        total_locations = base_locations + vertical_locations + pad_locs
+
+        total_locations = base_locations + vertical_locations + pad_locs + vertical_locations2
         #total_locations = vertical_locations
         
         N = len(meta_data.elements)
         J = len(total_locations)
         
+        n_b = len(base_locations)
+        n_v = len(vertical_locations)
+        n_p = len(pad_locs)
+        n_v2 = len(vertical_locations2)
+        
+        
         to_delete = []
+        
         for i in range(0, max([N,J])):
-            
+             
             if i <= (J-1) and i <= (N-1):
                 mb = meta_data.elements[i]
-                mb.co = total_locations[i]
+                if i < n_b -1:
+                    mb.co = total_locations[i] - 1.5 * Z
+                   
+                else:
+                    mb.co = total_locations[i]
+                    
                 mb.radius = 2
-                
+                mb.use_negative = False
+            
+                if i > n_b + n_v + n_p:
+                    mb.radius = 1.5
             elif i > (J-1) and i <= (N-1):
                 mb = meta_data.elements[i]
                 to_delete += [mb]
@@ -2878,16 +3051,44 @@ class VerticaBasePoints(PointPicker):
             elif i <= (J-1) and i > (N-1):
                 mb = meta_data.elements.new(type = 'BALL')
                 mb.radius = 2
-                mb.co = total_locations[i]
+                if i < n_b -1:
+                    mb.co = total_locations[i] - 1.5 * Z
+                    
+                else:
+                    mb.co = total_locations[i]
+                
+                
+                if i > n_b + n_v + n_p:
+                    mb.radius = 1.5    
+                mb.use_negative = False
             else:
                 print('Situation Im not prepared for')
         
         for mb in to_delete:
             meta_data.elements.remove(mb)        
         
+        #for v in self.bme.verts:
+        #    if v[mask] > 0:
+        #        
+        #        co_start = ipmx * mx * ( v.co - 1.2 * v.normal)
+        #        
+        #        for i in range(0,10):
+        #            mb = meta_data.elements.new(type = 'BALL')
+        #            mb.co = ipmx * mx * ( v.co - 1.2 * v.normal) + i * .25 * Vector((0,1,0))
+        #            mb.use_negative = True
+        #            mb.radius = 1.5
+        to_remove = []
+        for mb in meta_data.elements:
+            if len(kd_mask.find_range(imx * pmx * mb.co, 2)):
+                to_remove += [mb]
+        
+        for mb in to_remove:
+            meta_data.elements.remove(mb)
+               
         self.base_preview = True
         self.plane_ob.hide = True
         
+        #self.bme.free()
         return
     
     def delete_recent(self):
@@ -2933,13 +3134,13 @@ class VerticaBasePoints(PointPicker):
         no = ibmx.to_3x3().transposed() * Vector((0,0,1))
         
         
-        local_pt = imx * (pt - .1 * no)
+        local_pt = imx * (pt - .025 * no)
         local_no = imx.to_3x3() * no
         
         gdict = bmesh.ops.bisect_plane(bme, geom = bme.faces[:]+bme.edges[:]+bme.verts[:], 
                                plane_co = local_pt, 
-                               plane_no = local_no,
-                               clear_outer = True)
+                               plane_no = -local_no,
+                               clear_inner = True)
         
         
         bme.verts.ensure_lookup_table()
@@ -3029,14 +3230,14 @@ class VerticaBasePoints(PointPicker):
         
         return
     
-def landmarks_draw_callback(self, context):  
+def landmarks_draw_callback(self, context): 
+    self.help_box.draw() 
     self.crv.draw(context)
     self.crv.draw_extra(context)
-    self.help_box.draw()
     prefs = get_settings()
     r,g,b = prefs.active_region_color
     outline_region(context.region,(r,g,b,1))  
-     
+    
     
 class D3Tool_OT_model_vertical_base(bpy.types.Operator):
     """Click Landmarks to Add Base on Back Side of Object"""
@@ -3072,7 +3273,7 @@ class D3Tool_OT_model_vertical_base(bpy.types.Operator):
         elif event.type == 'DOWN_ARROW' and event.value == 'PRESS':
             self.crv.translate_down()
             return 'main'
-        elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+        elif event.type == 'LEFTMOUSE' and event.value == 'PRESS' and event.shift == False:
             
             
             x, y = event.mouse_region_x, event.mouse_region_y
@@ -3117,9 +3318,12 @@ class D3Tool_OT_model_vertical_base(bpy.types.Operator):
             elif len(self.crv.b_pts) == 3:
                 txt = "Vertical Orientation"
                 self.crv.add_vertical_point(context, x,y, label = txt)
-                help_txt = "Change view and click to place vertical orientation \n Use Up and Dn Arrows to translate plane \n Press B to preview the base \n Press enter to finalize"
+                help_txt = "MODIFY DISTAL CUT AND ORIENTATION\n\n-  Left click to place vertical orientation, the plane will rotate to match mouse click\n-  Press the Up and Downn Arrows to translate plane, each step moves the plane 0.25mm\n\n-  Press B to preview the base\n-  SHIFT + RIGHT Mouse to remove vitual wax \n-  SHIFT + LEFTMOUSE to add virtual wax   \n\n-  Press enter to finalize"
+        
                 self.help_box.raw_text = help_txt
                 self.help_box.format_and_wrap_text()
+                self.help_box.collapse()
+                self.help_box.uncollapse()
                 self.help_box.fit_box_height_to_text_lines()
                 
                 return 'main'
@@ -3129,6 +3333,69 @@ class D3Tool_OT_model_vertical_base(bpy.types.Operator):
                 return 'main'
                     
             return 'main'
+        
+        elif (event.type == 'RIGHTMOUSE' and event.value == 'PRESS' and event.shift) or (event.type == 'LEFTMOUSE' and event.shift and event.value == 'PRESS'):
+            if 'Meta Base' not in bpy.data.objects:
+                return 'main'
+            
+            x, y = event.mouse_region_x, event.mouse_region_y
+            metabase = bpy.data.objects.get('Meta Base')
+            
+            
+           # resolution = metabase.data.resolution
+            
+            #metabase.data.resolution = 1.5
+            temp_me = metabase.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
+            temp_bme = bmesh.new()
+            temp_bme.from_mesh(temp_me)
+            tbvh = BVHTree.FromBMesh(temp_bme)
+            
+            region = context.region
+            rv3d = context.region_data
+            coord = x, y
+            view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
+            ray_origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, coord)
+            ray_target = ray_origin + (view_vector * 1000)
+        
+            #res, loc, no, ind, obj, omx = context.scene.ray_cast(ray_origin, ray_target - ray_origin)
+            mx = metabase.matrix_world
+            imx = mx.inverted()
+            loc, no, ind, d = tbvh.ray_cast(imx * ray_origin, imx * ray_target - imx * ray_origin)
+            
+            
+            
+            
+            if loc:
+                
+                if event.type == 'RIGHTMOUSE':
+                    to_remove = []
+                    for mb in metabase.data.elements:
+                        if (mb.co - loc).length < 1.8:
+                            to_remove.append(mb)
+                    #closest_mb = min(metabase.data.elements, key = lambda x: (x.co - loc).length)
+                    #metabase.data.elements.remove(closest_mb)
+                    for mb in to_remove:
+                        metabase.data.elements.remove(mb)
+                    
+                else:
+                    mb = metabase.data.elements.new(type = 'BALL')
+                    mb.co = loc
+                    mb.radius = 2
+            
+            else:
+                res, loc, no, ind, obj, omx = context.scene.ray_cast(ray_origin, ray_target - ray_origin)    
+                mb = metabase.data.elements.new(type = 'BALL')
+                mb.co = imx * loc
+                mb.radius = 2
+                
+                if event.type == 'RIGHTMOUSE':
+                    mb.radius = 4
+                    mb.use_negative = True
+            #metabase.data.resolution = resolution
+                
+            bpy.data.meshes.remove(temp_me)
+            temp_bme.free()
+            del tbvh
         
         if event.type == 'DEL' and event.value == 'PRESS':
             self.crv.delete_recent()
@@ -3229,9 +3496,9 @@ class D3Tool_OT_model_vertical_base(bpy.types.Operator):
                 
         self.crv = VerticaBasePoints(context,snap_type ='OBJECT', snap_object = model)
         
-        
         #TODO, tweak the modifier as needed
         help_txt = "Distal Plane Cut and Print Base \n \n First, Left click on a flat part of the model base"
+        #help_txt = "MODIFY DISTAL CUT AND ORIENTATION\n\n-  Left click to place vertical orientation, the plane will rotate to match mouse click\n-  Press the Up and Downn Arrows to translate plane, each step moves the plane 0.25mm\n-  Press B to preview the base\n-  Press enter to finalize"
         self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
         self.help_box.snap_to_corner(context, corner = [1,1])
         self.mode = 'main'

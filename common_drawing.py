@@ -55,7 +55,7 @@ def outline_region(region, color):
     bgl.glEnd()
     bgl.glDisable(bgl.GL_BLEND)
     bgl.glDisable(bgl.GL_LINE_SMOOTH)
-
+    bgl.glLineWidth(1)
 def bgl_col(rgb, alpha):
     '''
     takes a Vector of len 3 (eg, a color setting)

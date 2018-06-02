@@ -338,7 +338,7 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
             ico = 'CHECKBOX_DEHLT'
         col.operator("d3splint.splint_offset_shell", text = "Splint Shell", icon = ico)
         
-        
+        col.operator("d3splint.splint_minimum_thickness", text = "Minimum Thickness Shell")
         
         if splint.workflow_type == 'FREEFORM':
             row = layout.row()

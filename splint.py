@@ -4412,10 +4412,15 @@ class D3SPLINT_OT_splint_go_sculpt(bpy.types.Operator):
         Shell.select = True
         context.scene.objects.active = Shell
         
+        #TODO, use faster method
         for mod in Shell.modifiers:
             bpy.ops.object.modifier_apply(modifier = mod.name)
 
-                    
+        if 'Minimum Thickness' in bpy.data.objects:
+            min_ob = bpy.data.objects.get('Minimum Thickness')
+            min_ob.hide = False
+            
+             
         bpy.ops.object.mode_set(mode = 'SCULPT')
         if not Shell.use_dynamic_topology_sculpting:
             bpy.ops.sculpt.dynamic_topology_toggle()

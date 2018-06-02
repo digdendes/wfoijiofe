@@ -253,7 +253,7 @@ class PointPicker(object):
     def draw(self,context):
         region = context.region  
         rv3d = context.space_data.region_3d  
-      
+        dpi = bpy.context.user_preferences.system.dpi
         if len(self.b_pts) == 0: return
         bgl_utils.draw_3d_points(context,self.b_pts, 3)
         
@@ -263,7 +263,7 @@ class PointPicker(object):
         if self.hovered[0] == 'POINT':
             bgl_utils.draw_3d_points(context,[self.b_pts[self.hovered[1]]], 8, color = (0,1,0,1))
      
-        blf.size(0, 20, 72) #fond_id = 0 
+        blf.size(0, 20, dpi) #fond_id = 0 
         for txt, vect in zip(self.labels, self.b_pts):
             if txt:
                 vector2d = view3d_utils.location_3d_to_region_2d(region, rv3d, vect)

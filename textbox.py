@@ -147,6 +147,9 @@ class TextBox(object):
     def format_and_wrap_text(self):
         '''
         '''
+        dpi = bpy.context.user_preferences.system.dpi
+        blf.size(0, self.text_size, dpi)
+        
         self.text_lines = []
         #TODO text size settings?
         useful_width = self.def_width - 2 * self.border
@@ -222,7 +225,6 @@ class TextBox(object):
 
                 if i == len(words) - 1 and len(current_line):
                     new_lines.append(' '.join(current_line))
-                         
             return new_lines          
         
         lines = self.raw_text.split('\n')
