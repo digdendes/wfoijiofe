@@ -152,9 +152,11 @@ class D3SPLINT_OT_batch_process_plane_cuts(bpy.types.Operator):
             bpy.data.meshes.remove(old_mesh)
         
             
-            print('Object cuts processed in %s seconds' % str(time.time() - interval_time)[:4])
-            print('Total time elapsed so far: %s seconds' % str(time.time() - start)[:4])
+            print('Object %s cuts processed in %s seconds' % (ob.name, str(time.time() - interval_time)[:4]))
+            
             interval_time = time.time()
+            
+        print('Total time elapsed so far: %s seconds' % str(time.time() - start)[:4])
             
         return {'FINISHED'}
 
@@ -692,13 +694,150 @@ class D3SPLINT_OT_plane_cut_mesh_rough(bpy.types.Operator):
         context.window.cursor_modal_restore()
         tracking.trackUsage("D3Splint:PlaneCutRaw",None)
         
+class D3SPLINT_OT_plane_cut_batch(bpy.types.Operator):
+    """Cut all selected objects by all plane cuts"""
+    bl_idname = "d3model.batch_plane_cut"
+    bl_label = "Plane Cut All Selected"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    
+    do_bool = bpy.prosps.BoolProperty(defualt = True)
+    @classmethod
+    def poll(cls,context):
+        if context.object == None: return False
+        if context.object.type != 'MESH': return False
         
+        return True
+   
+    def invoke(self,context):
+        self.obs_to_cut = [ob for ob in bpy.data.objects if (ob.select and ob.type == 'MESH' and ('Plane Cut' not in ob.name))]
+        self.cut_planes = [ob for ob in bpy.data.objects if 'Plane Cut' in ob.name]
+        
+        return context.window_manager.invoke_props_dialog()
+    
+    def draw(self,context):
+        
+        layout = self.layout
+        
+        row = layout.row()
+        row.label('Objects to Cut')
+        
+        layout.separator()
+        
+        for ob in self.obs_to_cut:
+            row = layout.row()
+            row.label(ob.name)
+        
+        layout.separator()
+        
+        row = layout.row()
+        row.label('Cut Objects')
+        for ob in self.cut_planes:
+            row = layout.row()
+            row.label(ob.name)
+        layout.separator()
+        
+    def execute(self,context):
+        
+        print(self.obs_to_cut)
+        return {'FINISHED'}
+    
+    def boolean_bisect_object(self, context, mesh_filter = True):
+        
+        mx_ob = self.ob.matrix_world
+        imx_ob = mx_ob.inverted()
+        imx_ob_no = imx_ob.to_3x3()  #assumes no  scaling
+        
+        mx_cut = self.crv.calc_matrix(context, depth = 'BOUNDS')
+        imx_cut = mx_cut.inverted()
+        
+        #need the local direction of the normal
+        #first, get the world direction
+        mx_no_cut = imx_cut.transposed().to_3x3()
+        #then transform it to the local space
+        no_cut = imx_ob_no * mx_no_cut.to_3x3() * Vector((0,0,1))
+        
+        
+        bbox = self.ob.bound_box[:]
+        bbox_vs = []
+        for v in bbox:
+            a = Vector(v)
+            bbox_vs += [self.ob.matrix_world * a]
+        
+        v_max_x= max(bbox_vs, key = lambda x: x[0])
+        v_min_x = min(bbox_vs, key = lambda x: x[0])
+        v_max_y= max(bbox_vs, key = lambda x: x[1])
+        v_min_y = min(bbox_vs, key = lambda x: x[1])
+        v_max_z= max(bbox_vs, key = lambda x: x[2])
+        v_min_z = min(bbox_vs, key = lambda x: x[2])
+        
+        diag_xyz = (((v_max_x - v_min_x)[0])**2 + ((v_max_y - v_min_y)[1])**2+((v_max_z - v_min_z)[1])**2)**.5
+        
+        cut_plane = bpy.data.meshes.new('Plane Cut')
+        cut_ob = bpy.data.objects.new('Plane Cut', cut_plane)
+        context.scene.objects.link(cut_ob)
+        cut_ob.draw_type = 'WIRE'
+        
+        if mesh_filter:
+            
+            print('filtering verts')
+            
+            local_x = imx_ob_no * mx_no_cut.to_3x3() * Vector((1,0,0))
+            local_x.normalize()
+            
+            w0, w1, world_y = self.crv.calc_line_limits(context)
+            
+            L = w1 - w0
+            print(L.length)
+            
+            Lz = world_y.length
+            
+            cube_bme = bmesh.new()
+            bmesh.ops.create_cube(cube_bme, size = 1, matrix = Matrix.Identity(4))
+            bmesh.ops.subdivide_edges(cube_bme, edges = cube_bme.edges[:], cuts = 50, use_grid_fill = True)
+            cube_bme.to_mesh(cut_plane)
+            
+            T = Matrix.Translation(.5 * world_y)
+            cut_ob.matrix_world = T * mx_cut
+            cut_ob.scale[1] = diag_xyz
+            cut_ob.scale[0] = L.length
+            cut_ob.scale[2] = Lz
+            cut_ob.hide = True
+            
+        else:    
+            
+            
+            grid_bme = bmesh.new()
+            bmesh.ops.create_grid(grid_bme, x_segments = 150, y_segments = 150, size = diag_xyz)
+            for f in grid_bme.faces:
+                f.normal_flip()
+            
+            grid_bme.to_mesh(cut_plane)
+            
+            mx_cut = self.crv.calc_matrix(context)
+            cut_ob.matrix_world = mx_cut
+            
+            cut_ob.hide = True
+        
+        mod = self.ob.modifiers.new('Plane Cut', type = 'BOOLEAN')
+        mod.operation = 'DIFFERENCE'
+        mod.object = cut_ob
+        
+        self.crv.screen_pts = [] #reset
+        self.crv.selected = -1
+        return None
+    
+        
+
+        
+          
 def register():
     bpy.utils.register_class(D3SPLINT_OT_plane_cut_mesh_rough)
     bpy.utils.register_class(D3SPLINT_OT_activate_all_cuts)
     bpy.utils.register_class(D3SPLINT_OT_finalize_all_cuts)
     bpy.utils.register_class(D3SPLINT_OT_pause_all_cuts)
     bpy.utils.register_class(D3SPLINT_OT_batch_process_plane_cuts)
+    bpy.utils.register_class(D3SPLINT_OT_plane_cut_batch)
      
 def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_plane_cut_mesh_rough)
@@ -706,3 +845,4 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_finalize_all_cuts)
     bpy.utils.unregister_class(D3SPLINT_OT_pause_all_cuts)
     bpy.utils.register_class(D3SPLINT_OT_batch_process_plane_cuts)
+    bpy.utils.unregister_class(D3SPLINT_OT_plane_cut_batch)

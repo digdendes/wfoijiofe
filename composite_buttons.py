@@ -171,9 +171,10 @@ class D3Tool_OT_composite_attachment_element(bpy.types.Operator):
             
         ob.select = True
         context.scene.objects.active = ob
-        context.space_data.show_manipulator = True
-        context.space_data.transform_manipulators = {'TRANSLATE','ROTATE'}
-        context.space_data.transform_orientation = 'LOCAL'
+        if context.space_data.type == 'VIEW_3D':
+            context.space_data.show_manipulator = True
+            context.space_data.transform_manipulators = {'TRANSLATE','ROTATE'}
+            context.space_data.transform_orientation = 'LOCAL'
                  
         return {'FINISHED'}
     
