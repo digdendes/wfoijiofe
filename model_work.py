@@ -3113,7 +3113,7 @@ class VerticaBasePoints(PointPicker):
         
         
         distal_cut = bpy.data.objects.get('Distal Cut')
-        bplane = bpy.data.objects.get('Base Plane')
+       
                                       
                                       
                                          
@@ -3188,12 +3188,16 @@ class VerticaBasePoints(PointPicker):
         context.scene.update()
         final_me = self.snap_ob.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
         
-        for mod in self.snap_ob.modifiers:
-            self.snap_ob.modifiers.remove(mod)
+        self.snap_ob.modifiers.clear()
+        
+        #for mod in self.snap_ob.modifiers:
+        #    self.snap_ob.modifiers.remove(mod)
             
         self.snap_ob.data = final_me
         
-        #
+        #does this leave old data?
+        
+        
     def draw_extra(self, context):
 
         if len(self.b_pts) != 4: return

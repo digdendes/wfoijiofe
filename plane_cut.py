@@ -701,7 +701,7 @@ class D3SPLINT_OT_plane_cut_batch(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     
-    do_bool = bpy.prosps.BoolProperty(defualt = True)
+    do_bool = bpy.props.BoolProperty(defualt = True)
     @classmethod
     def poll(cls,context):
         if context.object == None: return False
@@ -837,7 +837,7 @@ def register():
     bpy.utils.register_class(D3SPLINT_OT_finalize_all_cuts)
     bpy.utils.register_class(D3SPLINT_OT_pause_all_cuts)
     bpy.utils.register_class(D3SPLINT_OT_batch_process_plane_cuts)
-    bpy.utils.register_class(D3SPLINT_OT_plane_cut_batch)
+    #bpy.utils.register_class(D3SPLINT_OT_plane_cut_batch)
      
 def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_plane_cut_mesh_rough)
@@ -845,4 +845,4 @@ def unregister():
     bpy.utils.unregister_class(D3SPLINT_OT_finalize_all_cuts)
     bpy.utils.unregister_class(D3SPLINT_OT_pause_all_cuts)
     bpy.utils.register_class(D3SPLINT_OT_batch_process_plane_cuts)
-    bpy.utils.unregister_class(D3SPLINT_OT_plane_cut_batch)
+    #bpy.utils.unregister_class(D3SPLINT_OT_plane_cut_batch)
