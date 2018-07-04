@@ -3698,7 +3698,7 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
             if r and r < .8 * R_prime:
                 
                 mb = meta_data.elements.new(type = 'BALL')
-                mb.co = v.co
+                mb.co = v.co #+ #(R_prime - r) * v.normal
                 mb.radius = .5 * r
                 #mb = meta_data.elements.new(type = 'ELLIPSOID')
                 #mb.size_z = .45 * r
@@ -3865,10 +3865,13 @@ class D3SPLINT_OT_meta_splint_minimum_thickness(bpy.types.Operator):
             
             loc, ind, r = kd.find(v.co)
             
-            if r and r < .8 * R_prime:
+            if r and r < 0.2 * R_prime:
+                continue
+            
+            elif r and r < .8 * R_prime:
                 
                 mb = meta_data.elements.new(type = 'BALL')
-                mb.co = v.co
+                mb.co = v.co #+ (R_prime - r) * v.normal
                 mb.radius = .5 * r
                 #mb = meta_data.elements.new(type = 'ELLIPSOID')
                 #mb.size_z = .45 * r
@@ -3890,8 +3893,7 @@ class D3SPLINT_OT_meta_splint_minimum_thickness(bpy.types.Operator):
     
                 #mb.rotation = Rotation_Matrix.to_quaternion()
                 
-            elif r and r < 0.2 * R_prime:
-                continue
+            
             else:
                 mb = meta_data.elements.new(type = 'BALL')
                 mb.radius = R_prime
