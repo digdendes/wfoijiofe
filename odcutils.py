@@ -2483,7 +2483,6 @@ def silouette_brute_force(context, ob, view, world = True, smooth = True, apply 
     
     
     if ob.name + '_silhouette' in bpy.data.meshes:
-        
         new_me = bpy.data.meshes.get(ob.name + '_silhouette')
         bme.to_mesh(new_me)
         bme.free()
@@ -2500,7 +2499,7 @@ def silouette_brute_force(context, ob, view, world = True, smooth = True, apply 
     
         obj.select = True
         context.scene.objects.active = obj
-    
+        obj.hide = False
         if world:
             obj.matrix_world = mx
         

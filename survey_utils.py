@@ -115,7 +115,28 @@ def undercut_faces(context, ob, view, threshold = .01, world = True):
         if f.normal.dot(view) < -threshold:
             undercut_locations += [f.calc_center_median()]
             undercut_radii += [2 * f.calc_area()**.5]
+            
+    bme.free()
+    
     return undercut_locations, undercut_radii
     
-    
+
+def bme_undercut_faces(bme, view, threshold = .01):
+    '''
+    Find all faces that point away from the view direction
+    args:
+      bme - BMesh object
+      view - Mathutils Vector
+      
+    return:
+       set of faces that point away from view direction
+    '''
+        
+    #careful, this can get expensive with multires       
+    undercut_faces = set()
+    for f in bme.faces:
+        if f.normal.dot(view) < -threshold:
+            undercut_faces.add(f)
+            
+    return undercut_faces
     
