@@ -4,6 +4,7 @@ Created on Jul 7, 2018
 @author: Patrick
 '''
 import time
+import math
 
 import bpy
 import bmesh
@@ -49,6 +50,12 @@ class D3SPLINT_OT_live_insertion_axis(bpy.types.Operator):
         if nmode != '':
             return nmode  #stop here and tell parent modal to 'PASS_THROUGH'
 
+        if event.type in {'NUMPAD_1', 'NUMPAD_3', "NUMPAD_7"} and event.value == 'PRESS':
+            return 'nav'
+              
+        if "ARROW" in event.type and event.value == 'PRESS':
+            self.rotate_arrow(context, event)
+            return 'main'
         if event.type == 'LEFTMOUSE'  and event.value == 'PRESS':
             x, y = event.mouse_region_x, event.mouse_region_y
             res = self.click_model(context, x, y)
@@ -83,12 +90,12 @@ class D3SPLINT_OT_live_insertion_axis(bpy.types.Operator):
             return {'PASS_THROUGH'}
         
         if nmode in {'finish','cancel'}:
-            context.space_data.show_manipulator = True
+            #context.space_data.show_manipulator = True
             
-            if nmode == 'finish':
-                context.space_data.transform_manipulators = {'TRANSLATE', 'ROTATE'}
-            else:
-                context.space_data.transform_manipulators = {'TRANSLATE'}
+            #if nmode == 'finish':
+            #    context.space_data.transform_manipulators = {'TRANSLATE', 'ROTATE'}
+            #else:
+            #    context.space_data.transform_manipulators = {'TRANSLATE'}
             #clean up callbacks
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
             return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
@@ -166,7 +173,7 @@ class D3SPLINT_OT_live_insertion_axis(bpy.types.Operator):
         context.space_data.show_textured_solid = True
         
         #TODO, tweak the modifier as needed
-        help_txt = "Pick Insertion Axis\n\n-  Position your viewing direction looking onto the model\n-  LEFT CLIK on the model\n-  You can then rotate and pan your view to assess the undercuts.  This process can be repeated until the desired insertion axis is chosen.\n\nPress ENTER when finished"
+        help_txt = "Pick Insertion Axis\n\n-  Position your viewing direction looking onto the model\n-  LEFT CLICK on the model\n-  You can then rotate and pan your view to assess the undercuts.  This process can be repeated until the desired insertion axis is chosen.\n\nADVANCED USE\n\n-  Use LEFT_ARROW, RIGHT_ARROW, UP_ARROW and DOWN_ARROW to accurately alter the axis.  Holding SHIFT while pressing the ARROW keys will alter the axis by 0.5 degrees.\nPress ENTER when finished"
         self.help_box = TextBox(context,500,500,300,200,10,20,help_txt)
         self.help_box.snap_to_corner(context, corner = [1,1])
         self.mode = 'main'
@@ -174,6 +181,39 @@ class D3SPLINT_OT_live_insertion_axis(bpy.types.Operator):
         context.window_manager.modal_handler_add(self) 
         return {'RUNNING_MODAL'}
 
+    def rotate_arrow(self, context, event):
+        loc = Matrix.Translation(self.ins_ob.matrix_world.to_translation())
+        rot_base = self.ins_ob.matrix_world.to_3x3()
+        
+        r_model = self.model.matrix_world.to_quaternion()
+        
+        
+        if event.type == "UP_ARROW":
+            axis = r_model * Vector((0,1,0))
+        if event.type == "DOWN_ARROW":
+            axis = r_model * Vector((0,-1,0))
+        if event.type == "LEFT_ARROW":
+            axis = r_model * Vector((1,0,0))
+        if event.type == "RIGHT_ARROW":        
+            axis = r_model * Vector((-1,0,0))
+            
+        
+        if event.shift:
+            ang = .5 * math.pi/180
+        else:
+            ang = 2.5*math.pi/180
+        
+        rot = Matrix.Rotation(ang, 3, axis)
+        self.ins_ob.matrix_world = loc * (rot * rot_base).to_4x4()
+        
+        view = self.ins_ob.matrix_world.to_quaternion() * Vector((0,0,1))
+        view_local = self.model.matrix_world.inverted().to_quaternion() * view
+        fs_undercut = bme_undercut_faces(self.bme, view_local)
+        vcolor_data = self.bme.loops.layers.color['Undercut']
+        bmesh_color_bmfaces(self.bme.faces[:], vcolor_data, Color((1,1,1)))
+        bmesh_color_bmfaces(fs_undercut, vcolor_data, Color((.8,.2,.5)))
+        self.bme.to_mesh(self.model.data)
+        return
     
     def click_model(self,context,x, y):
         region = context.region
@@ -241,13 +281,18 @@ class D3SPLINT_OT_live_insertion_axis(bpy.types.Operator):
         #context.scene.objects.active = ob
         #ob.select = True
         
-        context.scene.cursor_location = loc
-        bpy.ops.view3d.view_center_cursor()
-        bpy.ops.view3d.viewnumpad(type = 'FRONT')
-        bpy.ops.view3d.view_selected()
+        #context.scene.cursor_location = loc
+        #bpy.ops.view3d.view_center_cursor()
+        #bpy.ops.view3d.viewnumpad(type = 'FRONT')
+        #bpy.ops.view3d.view_selected()
         
-        context.space_data.transform_manipulators = {'ROTATE'}
+        #context.space_data.transform_manipulators = {'ROTATE'}
         
+        for i, mat in enumerate(self.model.data.materials):
+            if mat.name == 'Undercut':
+                break
+        self.model.data.materials.pop(i, update_data = True)
+        context.space_data.show_textured_solid = False
         self.splint.insertion_path = True
         self.model.lock_location[0], self.model.lock_location[1], self.model.lock_location[2] = True, True, True
         

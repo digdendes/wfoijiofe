@@ -2484,6 +2484,8 @@ def silouette_brute_force(context, ob, view, world = True, smooth = True, apply 
     
     if ob.name + '_silhouette' in bpy.data.meshes:
         new_me = bpy.data.meshes.get(ob.name + '_silhouette')
+        obj = bpy.data.objects.get(ob.name + '_silhouette')
+        obj.hide = False
         bme.to_mesh(new_me)
         bme.free()
         new_me.update()

@@ -28,7 +28,11 @@ def add_volcolor_material_to_obj(ob, color_name):
          
     if color_name not in ob.data.materials:
         ob.data.materials.append(mat)
-        ob.material_slots[0].material = mat
+        if len(ob.data.materials) > 1:
+            if ob.material_slots[0] != mat:
+                mat1 = ob.material_slots[0].material
+                ob.material_slots[0].material = mat
+                ob.material_slots[1].material = mat1
         
     return vcol, mat
 
