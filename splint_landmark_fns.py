@@ -281,7 +281,7 @@ class D3SPLINT_OT_splint_occlusal_arch_max(bpy.types.Operator):
         context.window_manager.modal_handler_add(self) 
         
         tracking.trackUsage("D3Splint:MaxBuccalCusps",None)
-
+        self.splint.ops_string += ['Mark Maxillary Curve:']
         return {'RUNNING_MODAL'}
 
 
@@ -448,6 +448,7 @@ class D3SPLINT_OT_splint_occlusal_curve_mand(bpy.types.Operator):
                 self.convert_curve_to_plane(context)
             
             self.finish_up(context)
+            self.splint.ops_string += ['Mark Mandibular Curve:']
             tracking.trackUsage("D3Splint:SplintMandibularCurve",None)
             return 'finish'
             
@@ -936,6 +937,7 @@ class D3SPLINT_OT_splint_land_marks(bpy.types.Operator):
         Model.select = True
         Model.hide = False
         tracking.trackUsage("D3Splint:SplintLandmarks",None)
+        self.splint.ops_string += ['Set Landmarks:']
 
 class D3SPLINT_OT_splint_paint_margin(bpy.types.Operator):
     '''Use dyntopo sculpt to add/remove detail at margin'''
@@ -1334,6 +1336,8 @@ class D3SPLINT_OT_pick_model(bpy.types.Operator):
         #self.ob.lock_location[0], self.ob.lock_location[1], self.ob.lock_location[2] = True, True, True
         tracking.trackUsage("D3Splint:PickModel")
         return 'finish'
+    
+        odc_splint.ops_string += ['PickModel:']
             
     def invoke(self,context, event):
         
@@ -1509,6 +1513,7 @@ class D3SPLINT_OT_pick_opposing(bpy.types.Operator):
         self.ob.matrix_world *= T
         #self.ob.lock_location[0], self.ob.lock_location[1], self.ob.lock_location[2] = True, True, True    
         tracking.trackUsage("D3Splint:SetOpposing")
+        odc_splint.ops_string += ['PickOpposing:']
         return 'finish'
             
     def invoke(self,context, event):
@@ -1681,7 +1686,8 @@ class D3SPLINT_OT_pick_external_shell(bpy.types.Operator):
             # no slots
             self.ob.data.materials.append(mat) 
             
-        tracking.trackUsage("D3Splint:SetOpposing")
+        tracking.trackUsage("D3Splint:SetExternalShell")
+        odc_splint.ops_string += ['Pick 3rd Party Shell:']
         return 'finish'
             
     def invoke(self,context, event):

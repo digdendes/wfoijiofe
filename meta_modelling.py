@@ -2474,10 +2474,7 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
         bme = bmesh.new()
         bme.from_object(new_ob, context.scene)
         bme.verts.ensure_lookup_table()
-        
-        
-        
-        
+
         boundary_inds = set()
         for ed in bme_check.edges:
             if len(ed.link_faces) == 1:
@@ -2486,9 +2483,7 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
                         boundary_inds.add(f.index)
         
         bme_check.free()
-        
 
-        
         print('Took %f seconds to initialize BMesh and build BVH' % (time.time() - interval_start))
         interval_start = time.time()
             
@@ -2568,6 +2563,8 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
         Model.hide = False
         new_ob.hide = False
         splint.refractory_model = True
+        splint.passive_value = self.c_radius
+        splint.undercut_value = self.b_radius
         tracking.trackUsage("D3Splint:RemoveUndercuts", (str(self.b_radius)[0:4], str(self.b_radius)[0:4], str(total_meta_time)[0:4]), background = True)
         return {'FINISHED'}
     

@@ -275,11 +275,11 @@ class D3SPLINT_OT_live_insertion_axis(bpy.types.Operator):
         #    ob.empty_draw_size = 20
         #    context.scene.objects.link(ob)
         
-        #bpy.ops.object.select_all(action = 'DESELECT')
+        bpy.ops.object.select_all(action = 'DESELECT')
         #ob.parent = self.model
         #ob.matrix_world = mxT * mxR
-        #context.scene.objects.active = ob
-        #ob.select = True
+        context.scene.objects.active = self.model
+        self.model.select = True
         
         #context.scene.cursor_location = loc
         #bpy.ops.view3d.view_center_cursor()

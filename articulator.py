@@ -253,6 +253,8 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
                                                          self.bennet_angle,
                                                          self.canine_guidance,
                                                          self.incisal_guidance)))
+        
+        self.splint.ops_string += ['Generate Articulator:']
         context.scene.frame_start = 0
         context.scene.frame_end = 3 * self.resolution
         context.scene.frame_set(0)

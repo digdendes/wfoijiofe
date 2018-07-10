@@ -277,9 +277,9 @@ class VIEW3D_PT_D3Splints(bpy.types.Panel):
         else:
             ico = 'CHECKBOX_DEHLT'
             
-        col.operator("d3splint.view_silhouette_survey", text = "Survey Model (View)", icon = ico)
-        col.operator("d3splint.arrow_silhouette_survey", text = "Survey Model (Arrow)")
-        
+        #col.operator("d3splint.view_silhouette_survey", text = "Survey Model (View)", icon = ico)
+        #col.operator("d3splint.arrow_silhouette_survey", text = "Survey Model (Arrow)")
+        col.operator("d3splint.live_insertion_axis", text = "Survey Model")
         row = layout.row()
         row.label('Splint Boundaries')
         

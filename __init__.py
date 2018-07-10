@@ -488,7 +488,7 @@ def register():
     import d3classes, odcutils, crown, margin, bridge, splint, implant, panel, help, flexible_tooth, bracket_placement, denture_base, occlusion, ortho, curve_partition, articulator, splint_landmark_fns # , odcmenus, bgl_utils
     import healing_abutment, model_work, tracking, import_export, splint_booleans, splint_face_bow
     import meta_modelling, model_labels, splint_occlusal_surfaces, incremental_save, articulator_handlers, plane_cut, d3splint_view_presets
-    import composite_buttons, vertical_base, insertion_axis
+    import composite_buttons, vertical_base, insertion_axis, reports
     
     from .cut_mesh.op_hole_filler import hole_filler_modal
     from .cut_mesh.op_splint_outline import splint_outline_modal
@@ -514,6 +514,7 @@ def register():
     splint_occlusal_surfaces.register()
     incremental_save.register()
     insertion_axis.register()
+    reports.register()
     articulator_handlers.register()
     d3splint_view_presets.register()
     composite_buttons.register()

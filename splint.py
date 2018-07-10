@@ -4402,13 +4402,19 @@ class D3SPLINT_OT_splint_go_sculpt(bpy.types.Operator):
             
     def execute(self, context):
         
-            
+        if not len(context.scene.odc_splints):
+            self.report({'ERROR'},'You need to plan a splint')
+            return {'CANCELLED'}
+        n = context.scene.odc_splint_index
+        splint = context.scene.odc_splints[n]
+           
         Shell = bpy.data.objects.get('Splint Shell')
         if Shell == None:
             self.report({'ERROR'},"Need a splint shell first")
             return {'CANCELLED'}
         
         tracking.trackUsage("D3Splint:GoSculpt",None)
+        splint.ops_string += ["Go to Sculpt:"]
         
         Shell.hide = False
         Shell.select = True

@@ -76,7 +76,17 @@ def get_settings():
         assert False, 'could not find non-"lib" folder'
     settings = addons[foldername].preferences
     return settings
-
+def get_addon():
+    addons = bpy.context.user_preferences.addons
+    stack = inspect.stack()
+    for entry in stack:
+        folderpath = os.path.dirname(entry[1])
+        foldername = os.path.basename(folderpath)
+        if foldername not in {'lib','addons'} and foldername in addons: break
+    else:
+        assert False, 'could not find non-"lib" folder'
+    addon = addons[foldername]
+    return addon
 def dprint(s, l=2):
     settings = get_settings()
     if settings.debug >= l:
