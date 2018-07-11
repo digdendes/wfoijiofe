@@ -890,6 +890,8 @@ class D3SPLINT_OT_splint_manual_auto_surface(bpy.types.Operator):
         smod = Plane.modifiers.new('Smooth', type = 'SMOOTH')
         smod.iterations = 5
         smod.factor = 1
+        
+        self.splint.ops_string += 'Mark Posterior Cusps:'
         #tracking.trackUsage("D3Splint:SplintManualSurface",None)
 
 class D3SPLINT_OT_splint_subtract_posterior_surface(bpy.types.Operator):

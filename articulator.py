@@ -254,7 +254,7 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
                                                          self.canine_guidance,
                                                          self.incisal_guidance)))
         
-        self.splint.ops_string += ['Generate Articulator:']
+        
         context.scene.frame_start = 0
         context.scene.frame_end = 3 * self.resolution
         context.scene.frame_set(0)
@@ -574,7 +574,7 @@ class D3SPLINT_OT_generate_articulator(bpy.types.Operator):
         
         n = context.scene.odc_splint_index
         splint = context.scene.odc_splints[n]
-        
+        splint.ops_string += 'Generate Articulator:'
         mandible = splint.get_mandible()
         Mandible = bpy.data.objects.get(mandible)
         

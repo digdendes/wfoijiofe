@@ -577,6 +577,7 @@ class D3SPLINT_OT_splint_finish_booleans3(bpy.types.Operator):
         completion_time = time.time() - start
         print('competed the boolean subtraction in %f seconds' % completion_time)   
         splint.finalize_splint = True
+        splint.ops_string += 'Finalize Splint:'
         tracking.trackUsage("D3Splint:FinishBoolean3",(self.solver, str(completion_time)[0:4]))
         
         tmodel = bpy.data.objects.get('Trimmed_Model')

@@ -93,7 +93,7 @@ class VIEW3D_PT_D3SplintAssitant(bpy.types.Panel):
         col = row.column()
         col.operator("wm.save_as_mainfile", text = "Save").copy = False
         col.operator("wm.splint_saveincremental", text = "Save Checkpoint")
-        
+        col.operator("d3splint.splint_report", text = "Generate Report")
         
    
 class VIEW3D_PT_D3Splints(bpy.types.Panel):

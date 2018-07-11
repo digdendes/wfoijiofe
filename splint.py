@@ -611,6 +611,7 @@ class D3SPLINT_OT_splint_mark_margin(bpy.types.Operator):
                 showErrorMessage('You have not closed the loop, please click the first (YELLOW or BLUE) point to close the loop')
                 return 'main'
             self.splint.splint_outline = True
+            self.splint.ops_string += 'Draw Splint Margin:'
             return 'finish'
             
         elif event.type == 'ESC' and event.value == 'PRESS':
@@ -1909,7 +1910,7 @@ class D3SPLINT_OT_splint_margin_trim(bpy.types.Operator):
         #trimmed_bme.free()
         #todo remove/delete to_mesh mesh
         splint.trim_upper = True
-        
+        splint.ops_string += 'Trim Model:'
         print('took %f finish up hiding and free bmeshes' % (time.time() - interval_start))
         interval_start = time.time()
         print('took %f seconds for entire operation' % (time.time() - start))
@@ -3778,7 +3779,7 @@ class D3SPLINT_OT_meta_splint_surface(bpy.types.Operator):
         n = context.scene.odc_splint_index
         splint = context.scene.odc_splints[n]
         splint.splint_shell = True
-        
+        splint.ops_string += 'Splint Shell:'
         return {'FINISHED'}
     
     def invoke(self, context, event):
@@ -4414,7 +4415,7 @@ class D3SPLINT_OT_splint_go_sculpt(bpy.types.Operator):
             return {'CANCELLED'}
         
         tracking.trackUsage("D3Splint:GoSculpt",None)
-        splint.ops_string += ["Go to Sculpt:"]
+        splint.ops_string += "Go to Sculpt:"
         
         Shell.hide = False
         Shell.select = True

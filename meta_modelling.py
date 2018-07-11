@@ -628,6 +628,7 @@ class D3SPLINT_OT_anterior_deprogrammer_element(bpy.types.Operator):
         if len(context.scene.odc_splints):
             n = context.scene.odc_splint_index
             splint = context.scene.odc_splints[n]
+            splint.ops_string += 'Anterior Deprogrammer:'
             if splint.jaw_type == 'MANDIBLE':
                 R = Matrix.Rotation(math.pi, 4, 'X')
             else:
@@ -775,7 +776,9 @@ class D3SPLINT_OT_anterior_deprogrammer_edit(bpy.types.Operator):
             Shell = bpy.data.objects.get('Splint Shell')
             if Shell:
                 Shell.show_transparent = True
-        
+            n = context.scene.odc_splint_index
+            splint = context.scene.odc_splints[n]
+            splint.ops_string += 'Edit Anterior Deprogrammer:'
         context.space_data.show_backface_culling = True        
         #make the shell and other objects opaque again
         
@@ -849,7 +852,7 @@ class D3SPLINT_OT_splint_join_depro_to_shell(bpy.types.Operator):
         
         n = context.scene.odc_splint_index
         splint = context.scene.odc_splints[n]
-        splint.ops_string += 'JoinDeprogrammer: ' 
+        splint.ops_string += 'Fuse Deprogrammer: ' 
         return {'FINISHED'}
     
     
@@ -927,12 +930,17 @@ class D3SPLINT_OT_blockout_splint_shell(bpy.types.Operator):
     def execute(self, context):
         tracking.trackUsage("D3Splint:BlockoutSplintConcavities",None)
         
+            
         Shell = bpy.data.objects.get('Splint Shell')
         if Shell == None:
             self.report({'ERROR'},'Need to have a splint shell created')
             return {'CANCELLED'}
                 
-
+        if len(context.scene.odc_splints):
+            n = context.scene.odc_splint_index
+            splint = context.scene.odc_splints[n]
+            splint.ops_string += "Blockout Large Undercuts:"
+            
         if len(Shell.modifiers):
             old_data = Shell.data
             new_data = Shell.to_mesh(context.scene, apply_modifiers = True, settings = 'PREVIEW')
@@ -2565,6 +2573,7 @@ class D3SPLINT_OT_refractory_model(bpy.types.Operator):
         splint.refractory_model = True
         splint.passive_value = self.c_radius
         splint.undercut_value = self.b_radius
+        splint.ops_string += 'Refractory Model:'
         tracking.trackUsage("D3Splint:RemoveUndercuts", (str(self.b_radius)[0:4], str(self.b_radius)[0:4], str(total_meta_time)[0:4]), background = True)
         return {'FINISHED'}
     

@@ -112,21 +112,30 @@ class D3SPLINT_OT_splint_report(bpy.types.Operator):
         
         screen = context.window.screen
         areas = [area for area in screen.areas]
-        for area in screen.areas:
-            if area.type == 'VIEW_3D':
-                break 
+        types = [area.type for area in screen.areas]
         
-        #bpy.ops.view3d.toolshelf() #close the first toolshelf               
-        override = context.copy()
-        override['area'] = area
-        bpy.ops.screen.area_split(override, direction='VERTICAL', factor=0.5, mouse_x=-100, mouse_y=-100)
+        if 'TEXT_EDITOR' not in types:
+            
+            for area in screen.areas:
+                if area.type == 'VIEW_3D':
+                    break 
+            
+            #bpy.ops.view3d.toolshelf() #close the first toolshelf               
+            override = context.copy()
+            override['area'] = area
+            bpy.ops.screen.area_split(override, direction='VERTICAL', factor=0.5, mouse_x=-100, mouse_y=-100)
+            
+            for area in screen.areas:
+                if area not in areas:
+                    break
+            area.type = 'TEXT_EDITOR'
         
-        for area in screen.areas:
-            if area not in areas:
-                break
-        area.type = 'TEXT_EDITOR'
+        else:
+            for area in screen.areas:
+                if area.type == 'TEXT_EDITOR':
+                    break 
+                
         area.spaces[0].text = Report
-        
         override = context.copy()
         override['area'] = area
         bpy.ops.text.jump(override, line=1)
