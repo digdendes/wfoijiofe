@@ -13,8 +13,8 @@ from common_utilities import get_addon
 class D3SPLINT_OT_splint_report(bpy.types.Operator):
     '''
     Will add a text object to the .blend file which tells
-    the information about a surgical guide and it's various
-    details.
+    the information about a splint, articulator and the
+    steps the operator has used.
     '''
     bl_idname='d3splint.splint_report'
     bl_label="Splint Report"
