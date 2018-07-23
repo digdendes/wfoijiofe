@@ -51,7 +51,7 @@ except Exception as e:
 # Must declare this before classes are loaded
 # otherwise the bl_idname's will not match and have errors.
 # Must be all lowercase and no spaces
-updater.addon = "addon_updater_demo"
+updater.addon = "dthreesplint"
 
 
 # -----------------------------------------------------------------------------
@@ -871,7 +871,8 @@ def update_settings_ui(self, context, element=None):
 
 	elif updater.update_ready == None and updater.async_checking == False:
 		col.scale_y = 2
-		col.operator(addon_updater_check_now.bl_idname)
+		col.operator(addon_updater_check_now.bl_idname,
+					 "Check for D3Splint Update")
 	elif updater.update_ready == None: # async is running
 		subcol = col.row(align=True)
 		subcol.scale_y = 1
