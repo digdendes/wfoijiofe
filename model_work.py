@@ -451,7 +451,7 @@ class D3SPLINT_OT_mask_to_convex_hull(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        
+        if not context.object: return False
         c1 = context.object.type == 'MESH'
         c2 = context.mode != 'EDIT'
         return c1 & c2
@@ -562,7 +562,7 @@ class D3SPLINT_OT_remesh_decimate(bpy.types.Operator):
     method = bpy.props.EnumProperty(items = (('BMESH','BMESH','BMESH'),('MESH','MESH','MESH')),default = 'BMESH')
     @classmethod
     def poll(cls, context):
-        
+        if not context.object: return False
         c1 = context.object.type == 'MESH'
         c2 = context.mode != 'EDIT'
         return c1 & c2
