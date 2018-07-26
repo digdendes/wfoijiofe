@@ -1003,7 +1003,7 @@ class D3SPLINT_OT_splint_trim_model_paint(bpy.types.Operator):
     invert = bpy.props.BoolProperty(default = False, name = 'Invert')
     @classmethod
     def poll(cls, context):
-        
+        if not context.object: return False
         c1 = context.object.type == 'MESH'
         c2 = context.mode == 'SCULPT'
         return c1 & c2
