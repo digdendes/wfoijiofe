@@ -20,13 +20,14 @@ from bpy_extras import view3d_utils
 from bpy.props import BoolProperty, FloatProperty, IntProperty
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d, region_2d_to_origin_3d
 
-from common_drawing import draw_3d_points, draw_polyline_from_3dpoints
+from common_drawing import draw_3d_points, draw_polyline_from_3dpoints, outline_region
+from common_utilities import get_settings
 from points_picker import PointPicker
 from textbox import TextBox
 from bmesh_curvature import points_within_radius, CuspWaterDroplet, vector_average,\
     curvature_on_mesh, calculate_plane
 import tracking
-from errno import EOPNOTSUPP
+
 
 
 class D3Splint_automatic_opposing_surface(bpy.types.Operator):
