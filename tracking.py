@@ -1,7 +1,7 @@
 '''
 Created on Jul 14, 2017
 
-adapted from MCPrep credit to Patrick Crawford
+adapted from MCPrep credit to Patrick Crawford, Google LLC
 https://raw.githubusercontent.com/TheDuckCow/MCprep/master/MCprep_addon/tracking.py
 '''
 # ##### BEGIN GPL LICENSE BLOCK #####
@@ -181,6 +181,7 @@ def quick_lic_check():
     else:
         res = checkLicense(raw_key)
     return res  
+
 # -----------------------------------------------------------------------------
 # primary class implementation
 # -----------------------------------------------------------------------------
@@ -205,6 +206,7 @@ class Singleton_tracking(object):
         
         self._hardware_id = hardware_key()
         self.json = {}
+        self._ip_location_info = {"city":None, "country":None, "loc":None}
 
         
     # -------------------------------------------------------------------------
@@ -276,12 +278,6 @@ class Singleton_tracking(object):
         self._version = value
 
 
-
-
-    # number/settings for frequency use before ask for enable tracking
-
-    # 
-
     # -------------------------------------------------------------------------
     # Public functions
     # -------------------------------------------------------------------------
@@ -297,15 +293,104 @@ class Singleton_tracking(object):
         self.json["enable_tracking"] = self._tracking_enabled
         self.save_tracker_json()    
 
-    def initialize(self, appurl, version):
+    def initialize_bg_and_track_install(self, appurl, version, track_install):
+        """Ran as module registers, does internet calls in background.
+
+        Will check for internet, grab IP location if any, and save for reuse
+        on subsequent usage calls, and finally check if already/register new
+        install.
+        """
 
         self._appurl = appurl
         self._version = version
-        # load the enable_tracking-preference (ie in or out)
+        args = (track_install,)
+        bg_thread = threading.Thread(
+            target=self.initialize,
+            args=args)
+        bg_thread.start()
+        return bg_thread
+    
+    def initialize(self, track_install):
+        """Initialization function to be ran fully in background thread.
 
-        # load or create the tracker data
+        Gets location via IP address, and afterwards registers install.
+        """
+        if not internet():
+            print('no internet')
+            return  # don't do rest of installing steps, since no connection
+        
+        city, country, loc = request_to_ipinfo()
+        new_loc = lat_long_error(loc)  # replace loc with new_loc?
+        self._ip_location_info = {
+            "city":city, "country":country, "loc":str(loc)
+        }
+
+        # run register-install related code; if previously installed, skip
         self.set_tracker_json()
+        if not self.json["status"] and self.json["install_id"]:
+            if self.json["hardware"] == self._hardware_id:
+                print('already installed...')
+                return
+        
+        if not track_install:
+            print("Skipping track install")
+            return
+        elif self.verbose:
+            print("Tracking install")
+        
+        if self.dev==True:
+            location = "/1/track/install_dev.json/"
+        else:
+            location = "/1/track/install.json"
 
+        # for compatibility to prior blender (2.75?)
+        try:
+            bversion = str(bpy.app.version)
+        except:
+            bversion = "unknown"
+
+        # capture re-installs/other status events
+        if self.json["status"]==None:
+            status = "New install"
+        else:
+            status = self.json["status"]
+            self.json["status"]=None
+            self.save_tracker_json()
+
+        self.json["install_date"] = str(datetime.now())
+        
+        payload = json.dumps({
+                "blender":bversion,
+                "coord": self._ip_location_info["loc"],
+                "city": self._ip_location_info["city"],
+                "country": self._ip_location_info["country"],
+                "hardware":self._hardware_id,
+                "platform":platform.system()+":"+platform.release(),
+                "status":status,
+                "timestamp": {".sv": "timestamp"},
+                "usertime":self.json["install_date"],
+                "version":self.version,
+            })
+
+        # run request in this thread, which should already be background
+        resp = self.request('POST', location, payload)
+        
+        print('This is the installed tracking response from server')
+        print(resp)
+
+        # assumes input is the server response (dictionary format)
+        if type(resp) != type({'name':'ID'}):
+            print('some kind of failure')
+            print(resp)
+            return
+        elif "name" not in resp:
+            print('some kind of failure')
+            print(resp)
+            return
+
+        self.json["install_id"] = resp["name"]
+        self.save_tracker_json()
+        self.save_tracker_idbackup()
         return
 
         # create the local file
@@ -381,9 +466,11 @@ class Singleton_tracking(object):
         if os.path.isfile(self._tracker_json)==True:
             with open(self._tracker_json) as data_file:
                 self.json = json.load(data_file)
-                if self._verbose:print("Read in json settings from optimization file")
-        else:
+            if self._verbose:print("Read in json settings from optimization file")
+        
+        if not os.path.isfile(self._tracker_json) or "status" not in self.json:
             # set data structure
+            if self._verbose: print("Resetting json data")
             self.json = {
                 "install_date":None,
                 "install_id":None,
@@ -534,96 +621,7 @@ class popup_feedback(bpy.types.Operator):
 
 
 def trackInstalled(background=None):
-    # if already installed, skip
-    if Tracker.json["status"] == None and \
-            Tracker.json["install_id"] != None:
-        
-        if Tracker.json["hardware"] == hardware_key():
-            print('already installed...')
-            return
-
-    if Tracker.verbose: print("Tracking install")
-
-    # if no override set, use default
-    if background == None:
-        background = Tracker.background
-
-    def runInstall(background):
-
-
-        if Tracker.dev==True:
-            #location = "/1/track/install_dev/" + Tracker._hardware_id + ".json"
-            location = "/1/track/install_dev.json/"
-        else:
-            location = "/1/track/install.json" #TODO... create a folder per unique computer install
-
-        # for compatibility to prior blender (2.75?)
-        try:
-            bversion = str(bpy.app.version)
-        except:
-            bversion = "unknown"
-
-        # capture re-installs/other status events
-        if Tracker.json["status"]==None:
-            status = "New install"
-        else:
-            status = Tracker.json["status"]
-            Tracker.json["status"]=None
-            Tracker.save_tracker_json()
-
-        Tracker.json["install_date"] = str(datetime.now())
-        
-        city, country, loc = request_to_ipinfo()
-        
-        #print('original loc')
-        #print(loc)
-        err_loc = lat_long_error(loc)
-        #print(err_loc)
-        
-        payload = json.dumps({
-                "blender":bversion,
-                "coord": loc,
-                "city": city,
-                "country": country,
-                "hardware":Tracker._hardware_id,
-                "platform":platform.system()+":"+platform.release(),
-                "status":status,
-                "timestamp": {".sv": "timestamp"},
-                "usertime":Tracker.json["install_date"],
-                "version":Tracker.version,
-            })
-
-
-        #resp = Tracker.request('PUT', location, payload, background, callback = None)
-        resp = Tracker.request('POST', location, payload, background, callback)
-        
-        print('This is the installed tracking response from server')
-        print(resp)
-    def callback(arg):
-        # assumes input is the server response (dictionary format)
-        if type(arg) != type({'name':'ID'}):
-            print('some kind of failure')
-            print(arg)
-            return
-        elif "name" not in arg:
-            print('some kind of failure')
-            print(arg)
-            return
-
-        print(arg)
-        Tracker.json["install_id"] = arg["name"]
-        Tracker.save_tracker_json()
-        Tracker.save_tracker_idbackup()
-
-
-    if Tracker.failsafe == True:
-        try:
-            runInstall(background)
-        except:
-            pass
-    else:
-        runInstall(background)
-
+    return "Install tracked separately."
 
 def trackUsage(function, param=None, background=None):
     
@@ -649,22 +647,14 @@ def trackUsage(function, param=None, background=None):
             bversion = str(bpy.app.version)
         except:
             bversion = "unknown"
-
-        city, country, loc = request_to_ipinfo()
-        #print('original loc')
-        #print(loc)
-        #print('errored location')
-        
-        new_loc = lat_long_error(loc)
-        #print(new_loc)
         
         payload = json.dumps({
                 "blender":bversion,
-                "coord": str(loc),
-                "country": country,
-                "city":city,
+                "coord": Tracker._ip_location_info["loc"],
+                "city": Tracker._ip_location_info["city"],
+                "country": Tracker._ip_location_info["country"],
+                "hardware":Tracker._hardware_id,
                 "function":function,
-                "hardware":hardware_key(),
                 "param":str(param),
                 "timestamp":{".sv": "timestamp"},
                 "usertime":str(datetime.now()),
@@ -710,7 +700,7 @@ def checkLicense(lkey, background=None):
         location = "/1/track/auth.json"
 
     payload = json.dumps({
-            "hardware":hardware_key(),
+            "hardware":Tracker._hardware_id,
             "license":lkey
             })
 
@@ -738,12 +728,15 @@ def checkLicense(lkey, background=None):
 
 def register(bl_info):
     
-    Tracker.initialize(
+    # will launch backgorund thread which tracks install
+    Tracker.initialize_bg_and_track_install(
         appurl = "https://occlusal-guard-beta.firebaseio.com",
-        version = str(bl_info["version"])
+        version = str(bl_info["version"]),
+        track_install = True
         )
 
     prefs = get_settings()
+    
     if prefs.dev == True:
         Tracker.dev = True
     else:
@@ -760,11 +753,7 @@ def register(bl_info):
         Tracker.failsafe = True
         Tracker.tracking_enabled = True # User accepted on download
 
-    if not internet():
-        print('no internet')
-        return
-    # try running install
-    trackInstalled()
+    # trackInstalled()  # ran through the initialize function above
 
 def unregister():
     pass
